@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The four operating modes for the Arqivon agent.
+/// The four operating modes for the Arqivo agent.
 enum AgentMode {
   general,
   translator,
@@ -49,7 +49,7 @@ enum AgentMode {
   Color get color {
     switch (this) {
       case AgentMode.general:
-        return const Color(0xFF7C3AED);
+        return const Color(0xFF3E1F0D);
       case AgentMode.translator:
         return const Color(0xFFF59E0B);
       case AgentMode.tutor:

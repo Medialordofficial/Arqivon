@@ -1,20 +1,20 @@
-# Arqivon Demo Video Storyboard (< 4 Minutes)
+# Arqivo Demo Video Storyboard (< 4 Minutes)
 
 **Scene 1: The Hook (0:00 - 0:30)**
-- **Visual:** Fast-paced montage. User opens Arqivon, points camera at a messy desk.
-- **Audio (User):** "Arqivon, what am I looking at?"
-- **Audio (Arqivon - Aoede Voice):** "I see a laptop, a coffee mug, and a business card for John Doe."
+- **Visual:** Fast-paced montage. User opens Arqivo, points camera at a messy desk.
+- **Audio (User):** "Arqivo, what am I looking at?"
+- **Audio (Arqivo - Aoede Voice):** "I see a laptop, a coffee mug, and a business card for John Doe."
 - **Visual:** A "Smart Action Card" instantly pops up on the camera feed: *[Save Contact: John Doe]*. User taps 'Check'.
-- **Narration:** "Meet Arqivon. The multimodal Live Agent that sees, hears, and acts in real-time."
+- **Narration:** "Meet Arqivo. The multimodal Live Agent that sees, hears, and acts in real-time."
 
 **Scene 2: Zero-Latency Interruptibility (0:30 - 1:15)**
 - **Visual:** User is walking outside, camera pointing at a street sign in Spanish.
 - **Audio (User):** "Can you translate that sign for me? It says..."
-- **Audio (Arqivon):** "It translates to 'No Parking between—'"
+- **Audio (Arqivo):** "It translates to 'No Parking between—'"
 - **Audio (User - Interrupting):** "Wait, what about the smaller text below it?"
-- **Visual:** UI shows Arqivon instantly muting and listening.
-- **Audio (Arqivon):** "Ah, the smaller text says 'Tow Away Zone'."
-- **Narration:** "Powered by Gemini 3.1 Pro Preview, Arqivon supports native Voice Activity Detection for seamless, natural conversations."
+- **Visual:** UI shows Arqivo instantly muting and listening.
+- **Audio (Arqivo):** "Ah, the smaller text says 'Tow Away Zone'."
+- **Narration:** "Powered by Gemini 3.1 Pro Preview, Arqivo supports native Voice Activity Detection for seamless, natural conversations."
 
 **Scene 3: Agentic Tool Registry & UI Actions (1:15 - 2:15)**
 - **Visual:** Split screen. Left: Flutter App. Right: Backend logs showing Function Calling.
@@ -32,4 +32,4 @@
 **Scene 5: Architecture & Outro (3:00 - 3:45)**
 - **Visual:** The Mermaid.js architecture diagram animates on screen, highlighting the WebSocket flow through Cloud Run to the Gemini Live API.
 - **Narration:** "Built for production. Containerized on Cloud Run with zero cold starts, bidirectional WebSockets, and Riverpod state management."
-- **Visual:** Final logo splash: "Arqivon: The Living Lens. Vote for us in the Gemini Live Agent Challenge."
+- **Visual:** Final logo splash: "Arqivo: The Living Lens. Vote for us in the Gemini Live Agent Challenge."

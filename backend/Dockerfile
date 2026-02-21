@@ -6,7 +6,7 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.11-slim
-LABEL maintainer="Arqivon <team@arqivon.dev>"
+LABEL maintainer="Arqivo <team@arqivo.dev>"
 
 # Security: run as non-root
 RUN adduser --disabled-password --gecos '' appuser

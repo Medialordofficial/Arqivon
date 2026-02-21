@@ -160,7 +160,7 @@ class HomeScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.lock_outline_rounded,
-                  size: 48, color: Color(0xFF7C3AED)),
+                  size: 48, color: Color(0xFF6F4E37)),
               const SizedBox(height: 16),
               const Text(
                 'Sign in to view your archive',
@@ -185,7 +185,7 @@ class HomeScreen extends ConsumerWidget {
                 icon: const Icon(Icons.login),
                 label: const Text('Sign in with Google'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF7C3AED),
+                  backgroundColor: const Color(0xFF3E1F0D),
                 ),
               ),
             ],
@@ -256,7 +256,7 @@ class _ModeFilterBar extends StatelessWidget {
             label: 'All',
             icon: Icons.grid_view_rounded,
             count: totalCount,
-            color: const Color(0xFF7C3AED),
+            color: const Color(0xFF6F4E37),
             isSelected: selected == null,
             onTap: () => onSelected(null),
           ),

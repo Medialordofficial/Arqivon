@@ -3,7 +3,7 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: arqivon-backend
+  name: arqivo-backend
   labels:
     cloud.googleapis.com/location: us-central1
 spec:
@@ -18,7 +18,7 @@ spec:
       containerConcurrency: 100
       timeoutSeconds: 3600   # 1 hour max for WebSocket sessions
       containers:
-        - image: gcr.io/PROJECT_ID/arqivon-backend:latest
+        - image: gcr.io/PROJECT_ID/arqivo-backend:latest
           ports:
             - containerPort: 8080
           env:

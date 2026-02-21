@@ -1,5 +1,5 @@
 """
-Arqivon Backend – FastAPI + Gemini Live API relay.
+Arqivo Backend – FastAPI + Gemini Live API relay.
 
 Production-grade WebSocket relay between Flutter clients and the Gemini
 multimodal Live API with function-calling, mode-aware system prompts,
@@ -46,7 +46,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("arqivon")
+logger = logging.getLogger("arqivo")
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ genai_client: genai.Client | None = None
 
 SYSTEM_PROMPTS: dict[str, str] = {
     AgentMode.GENERAL: (
-        "You are Arqivon, a helpful real-time multimodal AI assistant. "
+        "You are Arqivo, a helpful real-time multimodal AI assistant. "
         "You can see through the user's camera and hear their voice simultaneously. "
         "When you detect actionable items (phone numbers, addresses, calendar events, "
         "text to translate, QR codes, business cards), proactively call create_ui_action. "
@@ -67,7 +67,7 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Be concise, friendly, and proactive. Speak naturally."
     ),
     AgentMode.TRANSLATOR: (
-        "You are Arqivon Translator, a real-time multilingual translation assistant. "
+        "You are Arqivo Translator, a real-time multilingual translation assistant. "
         "Your PRIMARY job is to listen to the user speaking in one language and provide "
         "live translations using the live_translate tool so subtitles appear on screen. "
         "ALWAYS call live_translate with the source_text, detected source_language, and "
@@ -79,7 +79,7 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Support formal/informal registers. Be natural and conversational."
     ),
     AgentMode.TUTOR: (
-        "You are Arqivon Tutor, a vision-enabled smart tutoring assistant. "
+        "You are Arqivo Tutor, a vision-enabled smart tutoring assistant. "
         "The student shows you homework, diagrams, equations, or problems via camera. "
         "NEVER give the full answer immediately. Instead: "
         "1) Call analyze_homework to identify the subject and problem. "
@@ -93,7 +93,7 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Related concepts should be woven into explanations naturally."
     ),
     AgentMode.SUPPORT: (
-        "You are Arqivon Support, a voice-driven intelligent customer support agent. "
+        "You are Arqivo Support, a voice-driven intelligent customer support agent. "
         "Maintain a natural, call-like conversation. "
         "Track topic changes using switch_topic when the customer shifts subjects. "
         "When you resolve an issue, call log_resolution with the outcome. "
@@ -134,7 +134,7 @@ async def lifespan(application: FastAPI):
     logger.info("Shutting down")
 
 
-app = FastAPI(title="Arqivon API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Arqivo API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

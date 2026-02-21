@@ -1,16 +1,16 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
-/// A glassmorphism-styled card with blur, gradient border, and translucency.
+import '../config/theme.dart';
+
+/// Clean card — coffee brown × white theme. Replaces old glassmorphism card.
 class GlassmorphicCard extends StatelessWidget {
   const GlassmorphicCard({
     super.key,
     required this.child,
-    this.borderRadius = 20,
-    this.blur = 15,
-    this.opacity = 0.15,
-    this.borderOpacity = 0.2,
+    this.borderRadius = 16,
+    this.blur = 0, // kept for signature compat, unused
+    this.opacity = 1.0, // kept for signature compat
+    this.borderOpacity = 1.0,
     this.padding = const EdgeInsets.all(16),
     this.margin = EdgeInsets.zero,
   });
@@ -30,33 +30,24 @@ class GlassmorphicCard extends StatelessWidget {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
+        color: isDark ? ArqivoTheme.darkCard : ArqivoTheme.white,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: Colors.white.withOpacity(borderOpacity),
+          color: isDark ? const Color(0xFF3A2010) : const Color(0xFFE8D9CF),
         ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  Colors.white.withOpacity(opacity),
-                  Colors.white.withOpacity(opacity * 0.5),
-                ]
-              : [
-                  Colors.white.withOpacity(0.7),
-                  Colors.white.withOpacity(0.4),
-                ],
-        ),
+        boxShadow: isDark
+            ? const []
+            : const [
+                BoxShadow(
+                  color: Color(0x083E1F0D),
+                  blurRadius: 16,
+                  offset: Offset(0, 2),
+                ),
+              ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Padding(
-            padding: padding,
-            child: child,
-          ),
-        ),
+      child: Padding(
+        padding: padding,
+        child: child,
       ),
     );
   }

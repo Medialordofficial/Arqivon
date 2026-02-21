@@ -1,5 +1,5 @@
-name: arqivon
-description: "Arqivon – The Living Lens. A real-time multimodal Live Agent."
+name: arqivo
+description: "Arqivo – The Living Lens. A real-time multimodal Live Agent."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -63,6 +63,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/images/
 
 flutter_launcher_icons:
   android: "launcher_icon"

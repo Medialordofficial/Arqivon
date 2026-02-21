@@ -5,6 +5,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+
+# Load .env from the same directory as this file (works whether run from the
+# project root or the backend/ dir).
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:

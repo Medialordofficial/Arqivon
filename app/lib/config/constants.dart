@@ -2,9 +2,10 @@
 class AppConstants {
   AppConstants._();
 
-  // Backend
+  // Backend — set to your Mac's LAN IP when running locally
+  // Change this if your IP changes or you deploy to a server.
   static const String wsScheme = 'ws';
-  static const String wsHost = 'localhost';
+  static const String wsHost = '192.168.2.104';
   static const int wsPort = 8080;
   static String wsUrl(String userId) =>
       '$wsScheme://$wsHost:$wsPort/ws/$userId';

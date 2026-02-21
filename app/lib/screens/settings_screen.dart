@@ -30,13 +30,13 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: const Color(0xFF7C3AED).withOpacity(0.3),
+                    backgroundColor: const Color(0xFF3E1F0D).withOpacity(0.3),
                     backgroundImage: user?.photoURL != null
                         ? NetworkImage(user!.photoURL!)
                         : null,
                     child: user?.photoURL == null
                         ? const Icon(Icons.person_rounded,
-                            color: Color(0xFF7C3AED), size: 28)
+                            color: Color(0xFF3E1F0D), size: 28)
                         : null,
                   ),
                   const SizedBox(width: 16),
@@ -157,12 +157,12 @@ class SettingsScreen extends ConsumerWidget {
                       settings.isDarkMode
                           ? Icons.dark_mode_rounded
                           : Icons.light_mode_rounded,
-                      color: const Color(0xFF7C3AED),
+                      color: const Color(0xFF3E1F0D),
                     ),
                     value: settings.isDarkMode,
                     onChanged: (_) =>
                         ref.read(settingsProvider.notifier).toggleTheme(),
-                    activeThumbColor: const Color(0xFF7C3AED),
+                    activeThumbColor: const Color(0xFF3E1F0D),
                     contentPadding: EdgeInsets.zero,
                   ),
                 ],
@@ -182,7 +182,7 @@ class SettingsScreen extends ConsumerWidget {
                     leading: Icon(
                       Icons.record_voice_over_rounded,
                       color: isSelected
-                          ? const Color(0xFF7C3AED)
+                          ? const Color(0xFF3E1F0D)
                           : Theme.of(context)
                               .colorScheme
                               .onSurface
@@ -191,7 +191,7 @@ class SettingsScreen extends ConsumerWidget {
                     title: Text(voice),
                     trailing: isSelected
                         ? const Icon(Icons.check_circle_rounded,
-                            color: Color(0xFF7C3AED))
+                            color: Color(0xFF3E1F0D))
                         : null,
                     onTap: () =>
                         ref.read(settingsProvider.notifier).setVoice(voice),
@@ -227,7 +227,7 @@ class SettingsScreen extends ConsumerWidget {
                   : ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.login_rounded,
-                          color: Color(0xFF7C3AED)),
+                          color: Color(0xFF3E1F0D)),
                       title: const Text('Sign in with Google'),
                       onTap: () async {
                         await ref.read(authServiceProvider).signInWithGoogle();
@@ -258,7 +258,7 @@ class SettingsScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Arqivon',
+                            'Arqivo',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,

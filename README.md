@@ -1,4 +1,4 @@
-# <img src="app/assets/images/logo.png" width="48" height="48" align="center"> Arqivon – The Living Lens
+# <img src="app/assets/images/logo.png" width="48" height="48" align="center"> Arqivo – The Living Lens
 
 > **A real-time, multimodal Live Agent that sees what you see, hears what you hear, and acts before you ask.**
 
@@ -6,7 +6,7 @@
 
 ## What It Does
 
-Arqivon transforms your phone into an intelligent "Living Lens." Point your camera at anything — a business card, a menu in another language, a math problem on a whiteboard — and Arqivon **simultaneously** processes your **live video feed** and **continuous voice** through the Gemini Live API. It doesn't just describe what it sees; it **takes action**.
+Arqivo transforms your phone into an intelligent "Living Lens." Point your camera at anything — a business card, a menu in another language, a math problem on a whiteboard — and Arqivo **simultaneously** processes your **live video feed** and **continuous voice** through the Gemini Live API. It doesn't just describe what it sees; it **takes action**.
 
 ### Four Specialized Modes
 
@@ -195,14 +195,14 @@ flutter run
 
 ```bash
 cd backend
-gcloud builds submit --tag gcr.io/$PROJECT_ID/arqivon-backend
+gcloud builds submit --tag gcr.io/$PROJECT_ID/arqivo-backend
 ```
 
 ### 2. Deploy to Cloud Run
 
 ```bash
-gcloud run deploy arqivon-backend \
-  --image gcr.io/$PROJECT_ID/arqivon-backend \
+gcloud run deploy arqivo-backend \
+  --image gcr.io/$PROJECT_ID/arqivo-backend \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
