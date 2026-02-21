@@ -109,8 +109,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   void setMode(AgentMode newMode) {
     final current = state.valueOrNull ?? const LiveSessionState();
     state = AsyncData(current.copyWith(mode: newMode));
-    // If connected, tell backend to switch mode
-    _ws?.send(WsInbound(type: 'set_mode', mode: newMode.wsValue));
+    // Only tell the backend if the user is actively streaming; changing modes
+    // while idle should not trigger a Gemini reconnect on the backend.
+    if (current.isStreaming) {
+      _ws?.send(WsInbound(type: 'set_mode', mode: newMode.wsValue));
+    }
   }
 
   void setLanguages({String? sourceLang, String? targetLang}) {
@@ -145,10 +148,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     });
     _msgSub = _ws!.messageStream.listen(_handleServerMessage);
     await _ws!.connect();
-    // Create player eagerly so AI audio works even before mic is started.
+    // Create player eagerly so AI audio plays even before mic is started.
     _audio ??= AudioService();
-    final cur = state.valueOrNull ?? const LiveSessionState();
-    _ws!.send(WsInbound(type: 'set_mode', mode: cur.mode.wsValue));
+    // NOTE: do NOT send set_mode here — that forces a Gemini reconnect before
+    // the user has started speaking and causes the second set_mode from
+    // startSession() to race against it, resulting in silence.
   }
 
   Future<void> startSession() async {
@@ -183,6 +187,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       ));
     }
 
+    // Cancel any live audio subscription first to avoid duplicate sends
+    await _audioSub?.cancel();
+    _audioSub = null;
+
     // Start audio capture and pipe to WebSocket
     await _audio!.start();
     _audioSub = _audio!.audioStream.listen((b64) {
@@ -196,6 +204,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   }
 
   Future<void> stopSession() async {
+    // Cancel the audio subscription before stopping capture to prevent stale
+    // chunks being sent over a half-closed socket.
+    await _audioSub?.cancel();
+    _audioSub = null;
     await _audio?.stop();
     await _audio?.stopPlayback();
     state = AsyncData(
@@ -203,8 +215,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         isStreaming: false,
       ),
     );
-    // Re-establish the WS so the connection indicator stays green and the
-    // user can start a new session without leaving the screen.
+    // Re-establish the WS so the green indicator stays on.
     unawaited(connectOnly());
   }
 

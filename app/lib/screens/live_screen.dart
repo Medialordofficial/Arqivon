@@ -9,7 +9,7 @@ import '../config/constants.dart';
 import '../models/agent_mode.dart';
 import '../providers/live_session_provider.dart';
 import '../services/websocket_service.dart';
-import '../widgets/audio_visualizer.dart';
+import '../widgets/live_wave.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/glassmorphic_card.dart';
 import '../widgets/mode_selector.dart';
@@ -368,16 +368,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               ),
             ),
 
-          // ── Audio visualizer ────────────────────────────────────────
+          // ── Live wave animation ─────────────────────────────────────
           if (isStreaming)
             Positioned(
               bottom: 140,
-              left: 40,
-              right: 40,
-              child: AudioVisualizer(
-                isActive: isStreaming,
-                color: mode.color,
-                height: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: LiveWave(
+                  isListening: isStreaming,
+                  isResponding: false,
+                  color: mode.color,
+                  size: 200,
+                ),
               ),
             ),
 

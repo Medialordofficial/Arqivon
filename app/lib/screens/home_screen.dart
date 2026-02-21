@@ -1,3 +1,4 @@
+// Dark Indigo design — production grade.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +6,6 @@ import '../config/theme.dart';
 import '../models/agent_mode.dart';
 import '../providers/auth_provider.dart';
 
-/// Callback-based so MainNavigator can jump to the Live tab.
 class HomeScreen extends ConsumerWidget {
   final VoidCallback? onGoLive;
   const HomeScreen({super.key, this.onGoLive});
@@ -13,248 +13,208 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).valueOrNull;
+    final topPad = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: ArqivonTheme.background,
+      backgroundColor: ArqivonTheme.darkBg,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── Hero app bar ──────────────────────────────────────────
+          // ── Compact sticky header ────────────────────────────────
           SliverAppBar(
-            expandedHeight: 220,
             pinned: true,
-            stretch: true,
-            backgroundColor: ArqivonTheme.primary,
+            expandedHeight: 0,
+            toolbarHeight: 64 + topPad,
+            elevation: 0,
+            backgroundColor: ArqivonTheme.darkSurface,
             surfaceTintColor: Colors.transparent,
-            flexibleSpace: FlexibleSpaceBar(
-              stretchModes: const [
-                StretchMode.zoomBackground,
-                StretchMode.fadeTitle,
-              ],
-              background: Stack(
-                fit: StackFit.expand,
+            automaticallyImplyLeading: false,
+            flexibleSpace: Padding(
+              padding:
+                  EdgeInsets.only(top: topPad, left: 20, right: 16, bottom: 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Gradient background
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF4338CA),
-                          Color(0xFF5B5FEF),
-                          Color(0xFF0EA5E9),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Decorative circles
-                  Positioned(
-                    top: -40,
-                    right: -40,
-                    child: Container(
-                      width: 180,
-                      height: 180,
-                      decoration: BoxDecoration(
+                  if (user != null)
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: user.photoURL != null
+                          ? NetworkImage(user.photoURL!)
+                          : null,
+                      backgroundColor: ArqivonTheme.darkCard,
+                      child: user.photoURL == null
+                          ? Text(
+                              (user.displayName?.isNotEmpty == true)
+                                  ? user.displayName![0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: ArqivonTheme.darkText,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                    )
+                  else
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: ArqivonTheme.darkCard,
                         shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.07),
                       ),
+                      child: const Icon(Icons.person_rounded,
+                          color: ArqivonTheme.darkSubtext, size: 22),
                     ),
-                  ),
-                  Positioned(
-                    bottom: 20,
-                    left: -30,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
-                      ),
-                    ),
-                  ),
-                  // Content
-                  Positioned(
-                    bottom: 28,
-                    left: 20,
-                    right: 20,
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (user != null)
-                          Text(
-                            'Welcome back,',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white.withOpacity(0.75),
-                              letterSpacing: 0.3,
-                            ),
+                        Text(
+                          user != null ? 'Welcome back,' : 'Hello,',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: ArqivonTheme.darkSubtext,
+                            letterSpacing: 0.2,
                           ),
+                        ),
                         Text(
                           user != null
                               ? (user.displayName?.split(' ').first ?? 'there')
                               : 'Arqivon',
                           style: const TextStyle(
-                            fontSize: 30,
+                            fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Your real-time multimodal AI — see, hear, understand.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.8),
-                            height: 1.4,
+                            color: ArqivonTheme.darkText,
+                            letterSpacing: -0.4,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.notifications_none_rounded,
+                        color: ArqivonTheme.darkSubtext, size: 24),
+                  ),
                 ],
               ),
             ),
-            actions: [
-              if (user != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundImage: user.photoURL != null
-                        ? NetworkImage(user.photoURL!)
-                        : null,
-                    backgroundColor: Colors.white24,
-                    child: user.photoURL == null
-                        ? Text(
-                            (user.displayName?.isNotEmpty == true)
-                                ? user.displayName![0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700),
-                          )
-                        : null,
-                  ),
-                ),
-            ],
           ),
 
           SliverPadding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── Start CTA ───────────────────────────────────────
-                _StartLiveCard(onGoLive: onGoLive),
+                // ── Hero Go Live button ──────────────────────────────
+                _GoLiveButton(onTap: onGoLive),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
-                // ── Features heading ─────────────────────────────────
+                // ── Section heading ──────────────────────────────────
                 const Text(
-                  'What Arqivon can do',
+                  'Choose your mode',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: ArqivonTheme.textPrimary,
+                    color: ArqivonTheme.darkText,
                     letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Four intelligent modes — all running live.',
+                  'All four run live — audio and video, no uploads.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: ArqivonTheme.textSecondary,
+                    color: ArqivonTheme.darkSubtext,
+                    height: 1.4,
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // ── 2-column mode cards ──────────────────────────────
-                GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.88,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: const [
-                    _ModeCard(
-                      mode: AgentMode.general,
-                      color: ArqivonTheme.modeGeneral,
-                      icon: Icons.auto_awesome_rounded,
-                      description:
-                          'Ask anything — point your camera, speak your question, get instant answers.',
-                    ),
-                    _ModeCard(
-                      mode: AgentMode.translator,
-                      color: ArqivonTheme.modeTranslator,
-                      icon: Icons.translate_rounded,
-                      description:
-                          'Live bilingual captions translated in real time as you speak.',
-                    ),
-                    _ModeCard(
-                      mode: AgentMode.tutor,
-                      color: ArqivonTheme.modeTutor,
-                      icon: Icons.school_rounded,
-                      description:
-                          'Point at a textbook, whiteboard, or diagram — get step-by-step guidance.',
-                    ),
-                    _ModeCard(
-                      mode: AgentMode.support,
-                      color: ArqivonTheme.modeSupport,
-                      icon: Icons.headset_mic_rounded,
-                      description:
-                          'Voice-driven support scripts with topic tracking and smart suggestions.',
-                    ),
-                  ],
+                // ── Mode cards — full-width vertical list ─────────────
+                _ModeCard(
+                  icon: Icons.auto_awesome_rounded,
+                  label: AgentMode.general.label,
+                  description:
+                      'Ask anything. Point your camera, speak your question, get instant answers.',
+                  accentColor: ArqivonTheme.modeGeneral,
+                  onTap: onGoLive,
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.translate_rounded,
+                  label: AgentMode.translator.label,
+                  description:
+                      'Live bilingual captions — translated in real time as you speak.',
+                  accentColor: ArqivonTheme.modeTranslator,
+                  onTap: onGoLive,
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.school_rounded,
+                  label: AgentMode.tutor.label,
+                  description:
+                      'Point at a textbook or whiteboard — get step-by-step guided explanations.',
+                  accentColor: ArqivonTheme.modeTutor,
+                  onTap: onGoLive,
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.headset_mic_rounded,
+                  label: AgentMode.support.label,
+                  description:
+                      'Voice-driven support flows with topic tracking and smart suggestions.',
+                  accentColor: ArqivonTheme.modeSupport,
+                  onTap: onGoLive,
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
                 // ── How it works ─────────────────────────────────────
                 const Text(
                   'How it works',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: ArqivonTheme.textPrimary,
+                    color: ArqivonTheme.darkText,
                     letterSpacing: -0.3,
                   ),
                 ),
-                const SizedBox(height: 12),
-                _HowItWorksStep(
-                  step: 1,
-                  title: 'Go Live',
+                const SizedBox(height: 16),
+                const _Step(
+                  number: '1',
+                  title: 'Open the Live tab',
                   body:
-                      'Tap the Live tab and choose Audio‑only or Audio + Video.',
+                      'Tap "Live" at the bottom — your session connects automatically.',
                   color: ArqivonTheme.primary,
                 ),
-                _HowItWorksStep(
-                  step: 2,
+                const _Step(
+                  number: '2',
                   title: 'Pick a mode',
                   body:
-                      'Select General, Translator, Tutor, or Support at the top of the screen.',
+                      'Select General, Translator, Tutor, or Support from the chips at the top.',
                   color: ArqivonTheme.accent,
                 ),
-                _HowItWorksStep(
-                  step: 3,
-                  title: 'Talk & point',
+                const _Step(
+                  number: '3',
+                  title: 'Speak or show',
                   body:
-                      'Speak naturally. Arqivon listens and sees in real time — no uploads needed.',
+                      'Talk naturally or point your camera — Arqivon responds in real time.',
                   color: ArqivonTheme.teal,
                 ),
-                _HowItWorksStep(
-                  step: 4,
+                const _Step(
+                  number: '4',
                   title: 'Review later',
                   body:
-                      'Every session is saved to your Archive for later review.',
+                      'Every session is saved to your Archive for replay and reference.',
                   color: ArqivonTheme.modeSupport,
                   isLast: true,
                 ),
 
-                const SizedBox(height: 100), // nav bar clearance
+                const SizedBox(height: 120),
               ]),
             ),
           ),
@@ -264,156 +224,71 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Start Live CTA card ──────────────────────────────────────────────────────
-class _StartLiveCard extends StatelessWidget {
-  final VoidCallback? onGoLive;
-  const _StartLiveCard({this.onGoLive});
+// ── Go Live hero button ───────────────────────────────────────────────────────
+class _GoLiveButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  const _GoLiveButton({this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5B5FEF), Color(0xFF0EA5E9)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 70,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4338CA), Color(0xFF5B5FEF), Color(0xFF0EA5E9)],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: ArqivonTheme.primary.withValues(alpha: 0.45),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: ArqivonTheme.primary.withOpacity(0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ready when you are',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Start a live session now — audio or video, your choice.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.8),
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: onGoLive,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                  label: const Text('Start Live'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: ArqivonTheme.primary,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    textStyle: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700),
-                    elevation: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.18),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 30),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Mode card ────────────────────────────────────────────────────────────────
-class _ModeCard extends StatelessWidget {
-  final AgentMode mode;
-  final Color color;
-  final IconData icon;
-  final String description;
-
-  const _ModeCard({
-    required this.mode,
-    required this.color,
-    required this.icon,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 22),
+              child:
+                  const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
             ),
-            const SizedBox(height: 12),
-            Text(
-              mode.label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: -0.2,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: Text(
-                description,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: ArqivonTheme.textSecondary,
-                  height: 1.45,
+            const SizedBox(width: 14),
+            const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Go Live',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
                 ),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
+                Text(
+                  'Tap to start your session',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(width: 20),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                color: Colors.white54, size: 16),
           ],
         ),
       ),
@@ -421,16 +296,97 @@ class _ModeCard extends StatelessWidget {
   }
 }
 
+// ── Mode card ────────────────────────────────────────────────────────────────
+class _ModeCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String description;
+  final Color accentColor;
+  final VoidCallback? onTap;
+
+  const _ModeCard({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.accentColor,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: ArqivonTheme.darkCard,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(
+            left: BorderSide(color: accentColor, width: 3),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accentColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: accentColor,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: ArqivonTheme.darkSubtext,
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded,
+                  color: ArqivonTheme.darkSubtext.withValues(alpha: 0.5),
+                  size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── How it works step ────────────────────────────────────────────────────────
-class _HowItWorksStep extends StatelessWidget {
-  final int step;
+class _Step extends StatelessWidget {
+  final String number;
   final String title;
   final String body;
   final Color color;
   final bool isLast;
 
-  const _HowItWorksStep({
-    required this.step,
+  const _Step({
+    required this.number,
     required this.title,
     required this.body,
     required this.color,
@@ -445,15 +401,17 @@ class _HowItWorksStep extends StatelessWidget {
         Column(
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
+                border:
+                    Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
               ),
               child: Center(
                 child: Text(
-                  '$step',
+                  number,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
@@ -463,13 +421,14 @@ class _HowItWorksStep extends StatelessWidget {
               ),
             ),
             if (!isLast)
-              Container(width: 2, height: 40, color: color.withOpacity(0.15)),
+              Container(
+                  width: 2, height: 44, color: color.withValues(alpha: 0.18)),
           ],
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 12),
+            padding: const EdgeInsets.only(top: 6, bottom: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -478,15 +437,15 @@ class _HowItWorksStep extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: ArqivonTheme.textPrimary,
+                    color: ArqivonTheme.darkText,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   body,
                   style: const TextStyle(
                     fontSize: 12.5,
-                    color: ArqivonTheme.textSecondary,
+                    color: ArqivonTheme.darkSubtext,
                     height: 1.45,
                   ),
                 ),
