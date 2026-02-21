@@ -128,24 +128,45 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   // ── Start / Stop ──────────────────────────────────────────────────────
 
-  Future<void> startSession() async {
-    final userId = ref.read(userIdProvider);
+  /// Pre-establish the WebSocket without starting audio.
+  /// Call this from the Live screen's [initState] so the connection indicator
+  /// turns green immediately when the tab opens.
+  Future<void> connectOnly() async {
     final current = state.valueOrNull ?? const LiveSessionState();
-
+    if (current.connectionState == WsConnectionState.connected ||
+        current.connectionState == WsConnectionState.connecting) return;
+    final userId = ref.read(userIdProvider);
     _ws = WebSocketService(userId: userId);
-    _audio = AudioCaptureService();
-
-    // Listen to connection state
+    _stateSub?.cancel();
+    _msgSub?.cancel();
     _stateSub = _ws!.stateStream.listen((s) {
       final cur = state.valueOrNull ?? const LiveSessionState();
       state = AsyncData(cur.copyWith(connectionState: s));
     });
-
-    // Listen to messages from server
     _msgSub = _ws!.messageStream.listen(_handleServerMessage);
-
-    // Connect
     await _ws!.connect();
+    final cur = state.valueOrNull ?? const LiveSessionState();
+    _ws!.send(WsInbound(type: 'set_mode', mode: cur.mode.wsValue));
+  }
+
+  Future<void> startSession() async {
+    final userId = ref.read(userIdProvider);
+    final current = state.valueOrNull ?? const LiveSessionState();
+
+    // Reuse existing WS if already connected via connectOnly()
+    if (_ws == null || current.connectionState != WsConnectionState.connected) {
+      _ws = WebSocketService(userId: userId);
+      _stateSub?.cancel();
+      _msgSub?.cancel();
+      _stateSub = _ws!.stateStream.listen((s) {
+        final cur = state.valueOrNull ?? const LiveSessionState();
+        state = AsyncData(cur.copyWith(connectionState: s));
+      });
+      _msgSub = _ws!.messageStream.listen(_handleServerMessage);
+      await _ws!.connect();
+    }
+
+    _audio = AudioCaptureService();
 
     // Send mode immediately
     _ws!.send(WsInbound(type: 'set_mode', mode: current.mode.wsValue));

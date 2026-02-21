@@ -18,6 +18,8 @@ import '../widgets/support_topic_tracker.dart';
 import '../widgets/translation_overlay.dart';
 import '../widgets/tutor_guidance_card.dart';
 
+enum _LiveInputMode { audioOnly, audioVideo }
+
 class LiveScreen extends ConsumerStatefulWidget {
   const LiveScreen({super.key});
 
@@ -32,12 +34,17 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   bool _cameraReady = false;
   final TextEditingController _textController = TextEditingController();
   bool _showTextInput = false;
+  _LiveInputMode _inputMode = _LiveInputMode.audioOnly;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initCamera();
+    // Pre-connect WebSocket so the indicator is green when user opens tab
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(liveSessionProvider.notifier).connectOnly();
+    });
   }
 
   @override
@@ -107,7 +114,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       await notifier.stopSession();
     } else {
       await notifier.startSession();
-      _startFrameCapture();
+      // Only stream video frames in A/V mode
+      if (_inputMode == _LiveInputMode.audioVideo) {
+        _startFrameCapture();
+      }
     }
   }
 
@@ -148,23 +158,54 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Camera preview ─────────────────────────────────────────
-          if (_cameraReady && _cameraController != null)
+          // ── Background: camera in A/V mode, dark gradient in audio-only ──
+          if (_inputMode == _LiveInputMode.audioVideo &&
+              _cameraReady &&
+              _cameraController != null)
             ClipRRect(
               child: CameraPreview(_cameraController!),
             )
           else
             Container(
-              color: const Color(0xFF0F0F1A),
-              child: const Center(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF131929), Color(0xFF0B0F1A)],
+                ),
+              ),
+              child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.camera_alt_outlined,
-                        size: 64, color: Colors.white24),
-                    SizedBox(height: 16),
-                    Text('Initializing camera…',
-                        style: TextStyle(color: Colors.white38)),
+                    Container(
+                      width: 110,
+                      height: 110,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF5B5FEF).withOpacity(0.12),
+                        border: Border.all(
+                          color: const Color(0xFF5B5FEF).withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(Icons.mic_rounded,
+                          size: 50, color: Color(0xFF818CF8)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Audio Mode',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Camera is off — saving battery.',
+                      style: TextStyle(fontSize: 12, color: Colors.white30),
+                    ),
                   ],
                 ),
               ),
@@ -377,61 +418,103 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
             bottom: 30,
             left: 0,
             right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Text input toggle
-                _controlButton(
-                  icon: Icons.keyboard_rounded,
-                  onPressed: () =>
-                      setState(() => _showTextInput = !_showTextInput),
-                ),
-                // Main record button
-                GestureDetector(
-                  onTap: _toggleSession,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    width: 72,
-                    height: 72,
+                // Input mode toggle
+                if (!isStreaming)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isStreaming ? Colors.red : mode.color,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isStreaming ? Colors.red : mode.color)
-                              .withOpacity(0.4),
-                          blurRadius: 20,
-                          spreadRadius: 4,
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.12), width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _InputModeChip(
+                          label: 'Audio',
+                          icon: Icons.mic_rounded,
+                          selected: _inputMode == _LiveInputMode.audioOnly,
+                          onTap: () => setState(
+                              () => _inputMode = _LiveInputMode.audioOnly),
+                        ),
+                        const SizedBox(width: 4),
+                        _InputModeChip(
+                          label: 'Audio + Video',
+                          icon: Icons.videocam_rounded,
+                          selected: _inputMode == _LiveInputMode.audioVideo,
+                          onTap: () => setState(
+                              () => _inputMode = _LiveInputMode.audioVideo),
                         ),
                       ],
                     ),
-                    child: Icon(
-                      isStreaming ? Icons.stop_rounded : Icons.mic_rounded,
-                      size: 32,
-                      color: Colors.white,
-                    ),
                   ),
-                ),
-                // Camera flip
-                _controlButton(
-                  icon: Icons.flip_camera_ios_rounded,
-                  onPressed: () async {
-                    final cameras = await availableCameras();
-                    if (cameras.length < 2) return;
-                    final current = _cameraController?.description;
-                    final next = cameras.firstWhere(
-                      (c) => c.lensDirection != current?.lensDirection,
-                      orElse: () => cameras.first,
-                    );
-                    await _cameraController?.dispose();
-                    _cameraController = CameraController(
-                      next,
-                      ResolutionPreset.medium,
-                      enableAudio: false,
-                    );
-                    await _cameraController!.initialize();
-                    if (mounted) setState(() {});
-                  },
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Text input toggle
+                    _controlButton(
+                      icon: Icons.keyboard_rounded,
+                      onPressed: () =>
+                          setState(() => _showTextInput = !_showTextInput),
+                    ),
+                    // Main record button
+                    GestureDetector(
+                      onTap: _toggleSession,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isStreaming ? Colors.red : mode.color,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isStreaming ? Colors.red : mode.color)
+                                  .withOpacity(0.4),
+                              blurRadius: 20,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isStreaming ? Icons.stop_rounded : Icons.mic_rounded,
+                          size: 32,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    // Camera flip — only relevant in A/V mode
+                    _controlButton(
+                      icon: Icons.flip_camera_ios_rounded,
+                      onPressed: _inputMode == _LiveInputMode.audioVideo
+                          ? () async {
+                              final cameras = await availableCameras();
+                              if (cameras.length < 2) return;
+                              final current = _cameraController?.description;
+                              final next = cameras.firstWhere(
+                                (c) =>
+                                    c.lensDirection != current?.lensDirection,
+                                orElse: () => cameras.first,
+                              );
+                              await _cameraController?.dispose();
+                              _cameraController = CameraController(
+                                next,
+                                ResolutionPreset.medium,
+                                enableAudio: false,
+                              );
+                              await _cameraController!.initialize();
+                              if (mounted) setState(() {});
+                            }
+                          : null,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -456,17 +539,66 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   Widget _controlButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    VoidCallback? onPressed,
   }) {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withOpacity(0.15),
+        color: onPressed != null
+            ? Colors.white.withOpacity(0.15)
+            : Colors.white.withOpacity(0.06),
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: Icon(icon, color: Colors.white),
+        icon: Icon(icon,
+            color: onPressed != null ? Colors.white : Colors.white30),
         iconSize: 28,
+      ),
+    );
+  }
+}
+
+// ── Input mode chip ──────────────────────────────────────────────────────────
+class _InputModeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _InputModeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF5B5FEF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16, color: selected ? Colors.white : Colors.white54),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : Colors.white54,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

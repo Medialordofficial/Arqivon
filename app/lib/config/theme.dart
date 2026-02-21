@@ -1,86 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Arqivo — Coffee Brown + Pure White design system.
+/// Arqivon — Vivid Indigo × White design system.
 class ArqivonTheme {
   ArqivonTheme._();
 
-  // ── Palette ───────────────────────────────────────────────────────────
+  // ── Core brand palette ────────────────────────────────────────────────
 
-  /// Rich espresso — primary brand colour.
-  static const Color espresso = Color(0xFF3E1F0D);
+  /// Primary: vivid indigo.
+  static const Color primary = Color(0xFF5B5FEF);
+  static const Color primaryDark = Color(0xFF4338CA);
+  static const Color primaryLight = Color(0xFFEEF2FF);
 
-  /// Classic coffee brown — secondary.
-  static const Color coffeeBrown = Color(0xFF6F4E37);
+  /// Accent: bright sky blue.
+  static const Color accent = Color(0xFF0EA5E9);
+  static const Color accentLight = Color(0xFFE0F2FE);
 
-  /// Warm caramel — interactive accent (buttons, links, focus).
-  static const Color caramel = Color(0xFFB07840);
+  /// Fresh teal.
+  static const Color teal = Color(0xFF14B8A6);
 
-  /// Latte — light warm surface tint.
-  static const Color latte = Color(0xFFF5EDE3);
+  /// Success green.
+  static const Color successGreen = Color(0xFF10B981);
 
-  /// Cream — card / input background.
-  static const Color cream = Color(0xFFFAF7F4);
+  /// Error red.
+  static const Color errorRed = Color(0xFFEF4444);
 
-  /// Pure white background.
+  /// Warning amber.
+  static const Color warning = Color(0xFFF59E0B);
+
+  // ── Light surfaces ───────────────────────────────────────────────────
+
   static const Color white = Color(0xFFFFFFFF);
+  static const Color background = Color(0xFFF8FAFC);
+  static const Color cardBg = Color(0xFFFFFFFF);
+  static const Color borderColor = Color(0xFFE2E8F0);
+  static const Color divider = Color(0xFFF1F5F9);
 
-  /// Near-black warm text.
-  static const Color inkBrown = Color(0xFF1C0A00);
+  // ── Text ──────────────────────────────────────────────────────────────
 
-  /// Secondary muted text.
-  static const Color warmGrey = Color(0xFF8A6E5E);
-
-  /// Error.
-  static const Color errorRed = Color(0xFFD94040);
-
-  /// Success.
-  static const Color successGreen = Color(0xFF3A8A5C);
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xFF64748B);
 
   // ── Dark palette ─────────────────────────────────────────────────────
 
-  static const Color darkBg = Color(0xFF140B06);
-  static const Color darkSurface = Color(0xFF1F1109);
-  static const Color darkCard = Color(0xFF2C160B);
-  static const Color darkText = Color(0xFFF5EDE3);
-  static const Color darkSubtext = Color(0xFFB09080);
+  static const Color darkBg = Color(0xFF0B0F1A);
+  static const Color darkSurface = Color(0xFF131929);
+  static const Color darkCard = Color(0xFF1E2640);
+  static const Color darkText = Color(0xFFF1F5F9);
+  static const Color darkSubtext = Color(0xFF94A3B8);
 
-  // ── Light theme (default — pure white + coffee brown) ─────────────────
+  // ── Backwards-compat aliases (keep old names compiling) ──────────────
+  static const Color espresso = primary;
+  static const Color coffeeBrown = primaryDark;
+  static const Color caramel = accent;
+  static const Color latte = primaryLight;
+  static const Color cream = background;
+  static const Color inkBrown = textPrimary;
+  static const Color warmGrey = textSecondary;
+
+  // ── Mode colors ───────────────────────────────────────────────────────
+  static const Color modeGeneral = Color(0xFF5B5FEF);
+  static const Color modeTranslator = Color(0xFF0EA5E9);
+  static const Color modeTutor = Color(0xFF10B981);
+  static const Color modeSupport = Color(0xFFF59E0B);
+
+  // ── Light theme ───────────────────────────────────────────────────────
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     useMaterial3: true,
     colorScheme: ColorScheme.light(
-      primary: espresso,
+      primary: primary,
       onPrimary: Colors.white,
-      primaryContainer: latte,
-      onPrimaryContainer: espresso,
-      secondary: coffeeBrown,
+      primaryContainer: primaryLight,
+      onPrimaryContainer: primaryDark,
+      secondary: accent,
       onSecondary: Colors.white,
-      tertiary: caramel,
+      tertiary: teal,
       surface: white,
-      onSurface: inkBrown,
-      surfaceContainerHighest: cream,
-      outline: const Color(0xFFD9C8BC),
-      outlineVariant: const Color(0xFFEDE0D6),
+      onSurface: textPrimary,
+      surfaceContainerHighest: background,
+      outline: borderColor,
+      outlineVariant: divider,
       error: errorRed,
       onError: Colors.white,
     ),
-    scaffoldBackgroundColor: white,
+    scaffoldBackgroundColor: background,
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: white,
       elevation: 0,
       scrolledUnderElevation: 1,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Color(0x14000000),
+      shadowColor: Color(0x10000000),
       centerTitle: false,
-      iconTheme: IconThemeData(color: espresso),
+      iconTheme: IconThemeData(color: textPrimary),
       titleTextStyle: TextStyle(
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: FontWeight.w700,
-        color: inkBrown,
-        letterSpacing: 0.1,
+        color: textPrimary,
+        letterSpacing: -0.2,
       ),
       systemOverlayStyle: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -91,25 +110,25 @@ class ArqivonTheme {
       color: white,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Color(0xFFE8D9CF), width: 1),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: borderColor),
       ),
       margin: EdgeInsets.zero,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: cream,
+      fillColor: white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFDDD0C8)),
+        borderSide: const BorderSide(color: borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFDDD0C8)),
+        borderSide: const BorderSide(color: borderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: caramel, width: 1.5),
+        borderSide: const BorderSide(color: primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -117,102 +136,91 @@ class ArqivonTheme {
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: errorRed, width: 1.5),
+        borderSide: const BorderSide(color: errorRed, width: 2),
       ),
+      labelStyle: const TextStyle(color: textSecondary),
+      hintStyle: const TextStyle(color: textSecondary),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      labelStyle: const TextStyle(color: warmGrey, fontSize: 14),
-      floatingLabelStyle: const TextStyle(color: caramel, fontSize: 12),
-      prefixIconColor: warmGrey,
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: espresso,
-        foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: espresso,
+        backgroundColor: primary,
         foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        minimumSize: const Size.fromHeight(50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.1,
+        ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: espresso,
-        minimumSize: const Size(double.infinity, 50),
-        side: const BorderSide(color: Color(0xFFD9C8BC), width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        foregroundColor: primary,
+        side: const BorderSide(color: primary),
+        minimumSize: const Size.fromHeight(50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: caramel,
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        foregroundColor: primary,
+        textStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: cream,
-      selectedColor: latte,
-      labelStyle: const TextStyle(fontSize: 12, color: inkBrown),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      side: const BorderSide(color: Color(0xFFDDD0C8)),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    ),
-    dividerTheme: const DividerThemeData(
-      color: Color(0xFFEDE0D6),
-      thickness: 1,
-      space: 1,
+      backgroundColor: primaryLight,
+      selectedColor: primary,
+      labelStyle: const TextStyle(color: primaryDark, fontSize: 13),
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: white,
-      indicatorColor: latte,
+      indicatorColor: primaryLight,
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const IconThemeData(color: espresso);
+          return const IconThemeData(color: primary);
         }
-        return const IconThemeData(color: warmGrey);
+        return const IconThemeData(color: textSecondary);
       }),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
           return const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: espresso,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: primary,
           );
         }
-        return const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: warmGrey,
-        );
+        return const TextStyle(fontSize: 12, color: textSecondary);
       }),
-      surfaceTintColor: Colors.transparent,
-      shadowColor: const Color(0x14000000),
-      elevation: 2,
+      elevation: 0,
     ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: espresso,
-      foregroundColor: Colors.white,
-      elevation: 2,
-      shape: CircleBorder(),
+    dividerTheme: const DividerThemeData(
+      color: divider,
+      space: 1,
+      thickness: 1,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: primary,
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: inkBrown,
-      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+      backgroundColor: textPrimary,
+      contentTextStyle: const TextStyle(color: Colors.white),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       behavior: SnackBarBehavior.floating,
-    ),
-    listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      iconColor: coffeeBrown,
     ),
   );
 
@@ -221,34 +229,32 @@ class ArqivonTheme {
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
     useMaterial3: true,
-    colorScheme: const ColorScheme.dark(
-      primary: caramel,
-      onPrimary: Colors.white,
-      primaryContainer: darkCard,
-      onPrimaryContainer: latte,
-      secondary: coffeeBrown,
-      onSecondary: Colors.white,
-      surface: darkBg,
+    colorScheme: ColorScheme.dark(
+      primary: const Color(0xFF818CF8),
+      onPrimary: darkBg,
+      primaryContainer: const Color(0xFF312E81),
+      onPrimaryContainer: const Color(0xFFC7D2FE),
+      secondary: const Color(0xFF38BDF8),
+      onSecondary: darkBg,
+      tertiary: const Color(0xFF2DD4BF),
+      surface: darkCard,
       onSurface: darkText,
       surfaceContainerHighest: darkSurface,
-      outline: Color(0xFF4A3020),
-      outlineVariant: Color(0xFF2D1A10),
-      error: errorRed,
-      onError: Colors.white,
+      outline: const Color(0xFF334155),
+      error: const Color(0xFFFCA5A5),
+      onError: darkBg,
     ),
     scaffoldBackgroundColor: darkBg,
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
-      backgroundColor: darkBg,
+      backgroundColor: darkSurface,
       elevation: 0,
-      scrolledUnderElevation: 1,
-      surfaceTintColor: Colors.transparent,
-      iconTheme: IconThemeData(color: latte),
+      iconTheme: IconThemeData(color: darkText),
       titleTextStyle: TextStyle(
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: FontWeight.w700,
         color: darkText,
-        letterSpacing: 0.1,
+        letterSpacing: -0.2,
       ),
       systemOverlayStyle: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -259,99 +265,20 @@ class ArqivonTheme {
       color: darkCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFF3A2010), width: 1),
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF1E293B)),
       ),
       margin: EdgeInsets.zero,
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: darkSurface,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF4A3020)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF4A3020)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: caramel, width: 1.5),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      labelStyle: const TextStyle(color: darkSubtext, fontSize: 14),
-      floatingLabelStyle: const TextStyle(color: caramel, fontSize: 12),
-      prefixIconColor: darkSubtext,
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        backgroundColor: caramel,
-        foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: latte,
-        minimumSize: const Size(double.infinity, 50),
-        side: const BorderSide(color: Color(0xFF4A3020), width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: caramel,
-        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-    ),
-    dividerTheme: const DividerThemeData(
-      color: Color(0xFF3A2010),
-      thickness: 1,
-      space: 1,
-    ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: darkSurface,
-      indicatorColor: darkCard,
+      indicatorColor: const Color(0xFF312E81),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const IconThemeData(color: caramel);
+          return const IconThemeData(color: Color(0xFF818CF8));
         }
-        return const IconThemeData(color: darkSubtext);
+        return IconThemeData(color: darkSubtext);
       }),
-      labelTextStyle: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) {
-          return const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: caramel,
-          );
-        }
-        return const TextStyle(
-          fontSize: 11,
-          color: darkSubtext,
-        );
-      }),
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-    ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: caramel,
-      foregroundColor: Colors.white,
-      elevation: 2,
-      shape: CircleBorder(),
-    ),
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: darkCard,
-      contentTextStyle: const TextStyle(color: darkText, fontSize: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      behavior: SnackBarBehavior.floating,
-    ),
-    listTileTheme: const ListTileThemeData(
-      iconColor: caramel,
     ),
   );
 }

@@ -6,6 +6,7 @@ import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/firebase_provider.dart';
 import 'providers/settings_provider.dart';
+import 'screens/archive_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
 import 'screens/login_screen.dart';
@@ -151,16 +152,19 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   int _currentIndex = 0;
 
-  static const _screens = <Widget>[
-    LiveScreen(),
-    HomeScreen(),
-    SettingsScreen(),
-  ];
+  void _goLive() => setState(() => _currentIndex = 1);
 
   @override
   Widget build(BuildContext context) {
+    final screens = <Widget>[
+      HomeScreen(onGoLive: _goLive),
+      const LiveScreen(),
+      const ArchiveScreen(),
+      const SettingsScreen(),
+    ];
+
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
+      body: IndexedStack(index: _currentIndex, children: screens),
       extendBody: true,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -176,6 +180,11 @@ class _MainNavigatorState extends State<MainNavigator> {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           animationDuration: const Duration(milliseconds: 400),
           destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
             NavigationDestination(
               icon: Icon(Icons.camera_alt_outlined),
               selectedIcon: Icon(Icons.camera_alt_rounded),
