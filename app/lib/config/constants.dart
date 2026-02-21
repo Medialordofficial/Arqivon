@@ -2,14 +2,14 @@
 class AppConstants {
   AppConstants._();
 
-  // Backend — set to your Mac's LAN IP when running locally
-  // Change this if your IP changes or you deploy to a server.
-  static const String wsScheme = 'ws';
-  static const String wsHost = '192.168.2.104';
-  static const int wsPort = 8080;
-  static String wsUrl(String userId) =>
-      '$wsScheme://$wsHost:$wsPort/ws/$userId';
-  static String httpBase = 'http://$wsHost:$wsPort';
+  // ── Backend (Cloud Run production) ───────────────────────────────
+  static const String _host =
+      'arqivon-backend-653546103163.us-central1.run.app';
+  static const String wsScheme = 'wss';
+  static const String wsHost = _host;
+  static const int wsPort = 443;
+  static String wsUrl(String userId) => '$wsScheme://$_host/ws/$userId';
+  static String httpBase = 'https://$_host';
 
   // Audio
   static const int audioSampleRate = 16000;

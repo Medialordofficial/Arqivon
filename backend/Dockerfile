@@ -1,21 +1,17 @@
-# ── Build stage ────────────────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
-WORKDIR /build
-COPY requirements.txt .
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
-
-# ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.11-slim
-LABEL maintainer="Arqivo <team@arqivo.dev>"
+LABEL maintainer="Arqivon <team@arqivon.dev>"
 
 # Security: run as non-root
 RUN adduser --disabled-password --gecos '' appuser
 
 WORKDIR /app
-COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements.txt .
-RUN pip install --no-cache /wheels/* && rm -rf /wheels
 
+# Install dependencies first for better layer caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy app code
 COPY . .
 
 # Cloud Run uses PORT env var

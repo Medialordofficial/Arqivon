@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 import 'config/theme.dart';
-import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
+import 'providers/firebase_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
@@ -14,12 +13,15 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  // Run orientation + overlay style before Firebase so the splash looks right
+  // immediately — Firebase init happens in the background via a FutureProvider.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
   runApp(const ProviderScope(child: ArqivonApp()));
@@ -44,22 +46,97 @@ class ArqivonApp extends ConsumerWidget {
 }
 
 /// Shows [LoginScreen] when not authenticated, [MainNavigator] otherwise.
+/// Waits for Firebase to finish initialising before rendering auth state.
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    // Wait for Firebase to init — shows branded splash until ready.
+    final firebaseAsync = ref.watch(firebaseInitProvider);
 
-    return authState.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+    return firebaseAsync.when(
+      loading: () => const _SplashScreen(),
+      error: (e, _) => Scaffold(
+        body: Center(child: Text('Startup error: $e')),
       ),
-      error: (_, __) => const LoginScreen(),
-      data: (user) {
-        if (user == null) return const LoginScreen();
-        return const MainNavigator();
+      data: (_) {
+        final authState = ref.watch(authStateProvider);
+        return authState.when(
+          loading: () => const _SplashScreen(),
+          error: (_, __) => const LoginScreen(),
+          data: (user) {
+            if (user == null) return const LoginScreen();
+            return const MainNavigator();
+          },
+        );
       },
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: ArqivonTheme.espresso,
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [
+                  BoxShadow(
+                    color: ArqivonTheme.espresso.withValues(alpha: 0.25),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.camera_alt_rounded,
+                color: Colors.white,
+                size: 38,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Arqivon',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: ArqivonTheme.espresso,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The Living Lens',
+              style: TextStyle(
+                fontSize: 13,
+                color: ArqivonTheme.warmGrey,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: ArqivonTheme.caramel,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
