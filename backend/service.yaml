@@ -1,0 +1,33 @@
+# Cloud Run deployment configuration
+# Deploy with: gcloud run services replace service.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: arqivon-backend
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"       # Prevent cold starts
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "false"   # Keep CPU for WebSockets
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 3600   # 1 hour max for WebSocket sessions
+      containers:
+        - image: gcr.io/PROJECT_ID/arqivon-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: GEMINI_API_KEY
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: "1"

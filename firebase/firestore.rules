@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Per-user data isolation ──────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+
+      // Persistent AI memories
+      match /memories/{memoryId} {
+        allow read, write: if request.auth != null
+                           && request.auth.uid == userId;
+      }
+
+      // Archived live sessions
+      match /sessions/{sessionId} {
+        allow read: if request.auth != null
+                    && request.auth.uid == userId;
+        // Only the backend (admin SDK) writes sessions; users can delete
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+        allow create, update: if false; // server-only via Admin SDK
+      }
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,38 @@
+graph TD
+    subgraph Flutter App
+        UI[UI / Smart Action Cards]
+        Cam[Camera Plugin 2fps]
+        Mic[Audio VAD]
+        Spk[Audio Player]
+        WS_Client[WebSocket Channel]
+    end
+
+    subgraph Google Cloud Run
+        FastAPI[FastAPI WebSocket Relay]
+        ToolReg[Agentic Tool Registry]
+    end
+
+    subgraph Google AI
+        Gemini[gemini-3.1-pro-preview Live API]
+    end
+
+    subgraph Firebase
+        Auth[Firebase Auth]
+        FS[Firestore Memories/Archive]
+    end
+
+    Cam -->|Base64 JPEG| WS_Client
+    Mic -->|PCM Audio| WS_Client
+    WS_Client <-->|Bidirectional WS| FastAPI
+    
+    FastAPI <-->|GenAI SDK LiveConnect| Gemini
+    Gemini -->|Function Call| ToolReg
+    ToolReg -->|create_ui_action| FastAPI
+    FastAPI -->|ui_action JSON| WS_Client
+    WS_Client --> UI
+    
+    FastAPI -->|Audio Response| WS_Client
+    WS_Client --> Spk
+    
+    ToolReg -->|upsert_firestore_memory| FS
+    Flutter App -->|Auth & Archive Fetch| Auth & FS
