@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
@@ -14,6 +15,9 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Pre-warm SharedPreferences so SettingsNotifier returns real values
+  // on first build — prevents the brief dark→light theme flash.
+  await SharedPreferences.getInstance();
   // Run orientation + overlay style before Firebase so the splash looks right
   // immediately — Firebase init happens in the background via a FutureProvider.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);

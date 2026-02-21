@@ -47,8 +47,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _friendlyError(e.code));
-    } catch (e) {
-      setState(() => _errorMessage = e.toString());
+    } catch (_) {
+      setState(() => _errorMessage = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

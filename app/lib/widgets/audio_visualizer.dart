@@ -56,7 +56,7 @@ class _AudioVisualizerState extends State<AudioVisualizer>
     final color = widget.color ?? Theme.of(context).colorScheme.primary;
 
     return AnimatedBuilder(
-      listenable: _controller,
+      animation: _controller,
       builder: (context, _) {
         return CustomPaint(
           size: Size(double.infinity, widget.height),
@@ -117,21 +117,4 @@ class _WavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WavePainter old) => progress != old.progress;
-}
-
-/// Alias for AnimatedBuilder to fix the name
-class AnimatedBuilder extends AnimatedWidget {
-  const AnimatedBuilder({
-    super.key,
-    required super.listenable,
-    required this.builder,
-  });
-
-  final Widget Function(BuildContext, Widget?) builder;
-
-  @override
-  Widget build(BuildContext context) => builder(context, null);
-
-  // Override listenable getter to use 'animation' name
-  Animation get animation => super.listenable as Animation;
 }

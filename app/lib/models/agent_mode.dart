@@ -49,7 +49,7 @@ enum AgentMode {
   Color get color {
     switch (this) {
       case AgentMode.general:
-        return const Color(0xFF3E1F0D);
+        return const Color(0xFF5B5FEF);
       case AgentMode.translator:
         return const Color(0xFFF59E0B);
       case AgentMode.tutor:
@@ -118,6 +118,7 @@ class TutorStep {
 /// Translation overlay model from the backend's translator tools.
 class TranslationOverlay {
   final String sourceText;
+  final String translatedText;
   final String sourceLanguage;
   final String targetLanguage;
   final String formality;
@@ -125,6 +126,7 @@ class TranslationOverlay {
 
   const TranslationOverlay({
     required this.sourceText,
+    this.translatedText = '',
     this.sourceLanguage = 'auto',
     this.targetLanguage = 'en',
     this.formality = 'neutral',
@@ -134,6 +136,7 @@ class TranslationOverlay {
   factory TranslationOverlay.fromPayload(Map<String, dynamic> p) =>
       TranslationOverlay(
         sourceText: p['source_text'] as String? ?? '',
+        translatedText: p['translated_text'] as String? ?? '',
         sourceLanguage: p['source_language'] as String? ?? 'auto',
         targetLanguage: p['target_language'] as String? ?? 'en',
         formality: p['formality'] as String? ?? 'neutral',

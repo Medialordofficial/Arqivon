@@ -120,14 +120,27 @@ class TranslationOverlayWidget extends StatelessWidget {
           Text(
             overlay.sourceText,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+              fontSize: 14,
+              color: Colors.white70,
               height: 1.3,
             ),
-            maxLines: 4,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          if (overlay.translatedText.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              overlay.translatedText,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                height: 1.3,
+              ),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );

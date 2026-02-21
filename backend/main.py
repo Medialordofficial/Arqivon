@@ -138,7 +138,11 @@ app = FastAPI(title="Arqivon API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://arqivon-backend-653546103163.us-central1.run.app",
+        "http://localhost",
+        "http://localhost:8080",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -423,6 +427,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         type=OutboundType.TRANSLATION,
                                         payload={
                                             "source_text": fc.args.get("source_text", ""),
+                                            "translated_text": fc.args.get("translated_text", ""),
                                             "source_language": fc.args.get("source_language", "auto"),
                                             "target_language": fc.args.get("target_language", "en"),
                                             "formality": fc.args.get("formality", "neutral"),

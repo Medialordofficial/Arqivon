@@ -288,11 +288,12 @@ _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
             "type": "OBJECT",
             "properties": {
                 "source_text": {"type": "STRING", "description": "The original text in the source language."},
+                "translated_text": {"type": "STRING", "description": "The translated text in the target language."},
                 "source_language": {"type": "STRING", "description": "ISO 639-1 code of detected source language (e.g. 'es', 'fr')."},
                 "target_language": {"type": "STRING", "description": "ISO 639-1 code of the target language."},
                 "formality": {"type": "STRING", "description": "One of: formal, informal, neutral."},
             },
-            "required": ["source_text", "target_language"],
+            "required": ["source_text", "translated_text", "target_language"],
         },
     ),
     types.FunctionDeclaration(

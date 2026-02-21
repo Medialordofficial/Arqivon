@@ -145,6 +145,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     });
     _msgSub = _ws!.messageStream.listen(_handleServerMessage);
     await _ws!.connect();
+    // Create player eagerly so AI audio works even before mic is started.
+    _audio ??= AudioService();
     final cur = state.valueOrNull ?? const LiveSessionState();
     _ws!.send(WsInbound(type: 'set_mode', mode: cur.mode.wsValue));
   }
@@ -166,7 +168,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       await _ws!.connect();
     }
 
-    _audio = AudioCaptureService();
+    // Reuse or create AudioService (player + recorder in one)
+    _audio ??= AudioService();
 
     // Send mode immediately
     _ws!.send(WsInbound(type: 'set_mode', mode: current.mode.wsValue));
@@ -194,13 +197,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   Future<void> stopSession() async {
     await _audio?.stop();
-    await _ws?.disconnect();
+    await _audio?.stopPlayback();
     state = AsyncData(
       (state.valueOrNull ?? const LiveSessionState()).copyWith(
         isStreaming: false,
-        connectionState: WsConnectionState.disconnected,
       ),
     );
+    // Re-establish the WS so the connection indicator stays green and the
+    // user can start a new session without leaving the screen.
+    unawaited(connectOnly());
   }
 
   /// Send a video frame.
@@ -232,7 +237,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     switch (msg.type) {
       case 'audio':
-        if (msg.data != null) _audio?.enqueuePlayback(msg.data!);
+        if (msg.data != null) _audio?.queueChunk(msg.data!);
         break;
 
       case 'transcript':
@@ -290,9 +295,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'turn_complete':
+        _audio?.flushAndPlay();
         break;
 
       case 'interrupted':
+        _audio?.stopPlayback();
         // Clear stale overlays on interruption for smoother UX
         state = AsyncData(current.copyWith(clearTranslation: true));
         break;
