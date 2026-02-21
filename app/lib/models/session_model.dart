@@ -55,5 +55,5 @@ class SessionModel {
   }
 
   Duration? get duration =>
-      endedAt != null ? endedAt!.difference(startedAt) : null;
+      endedAt?.difference(startedAt);
 }

@@ -1,229 +1,663 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arqivon - The Living Lens</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Arqivon — Your AI-Powered Living Lens</title>
+    <meta name="description" content="Arqivon is a real-time multimodal AI agent that sees, hears, speaks and understands. Translate, tutor, support — all through one living lens.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    colors: {
-                        primary: '#7C3AED',
-                        secondary: '#F59E0B',
-                        tutor: '#10B981',
-                        support: '#3B82F6',
-                        dark: '#0F0F1A',
-                        surface: '#1A1A2E',
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
 </head>
-<body class="bg-dark text-white font-sans antialiased overflow-x-hidden selection:bg-primary selection:text-white">
-    
-    <!-- Background Effects -->
-    <div class="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
-        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px]"></div>
-        <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-support/20 blur-[120px]"></div>
-    </div>
+<body>
 
-    <!-- Navigation -->
-    <nav class="fixed w-full z-50 glass-nav transition-all duration-300" id="navbar">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="flex items-center justify-between h-20">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg shadow-primary/30">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold tracking-tight">Arqivon</span>
-                </div>
-                <div class="hidden md:flex items-center gap-8">
-                    <a href="#features" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Features</a>
-                    <a href="#modes" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Modes</a>
-                    <a href="#architecture" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Architecture</a>
-                    <a href="https://github.com" target="_blank" class="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-medium transition-all backdrop-blur-md">View Source</a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
-            <div class="text-center max-w-4xl mx-auto">
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary mb-8 animate-fade-in-up">
-                    <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                    </span>
-                    <span class="text-xs font-semibold tracking-wide uppercase">Powered by Gemini 2.0 Flash Live</span>
-                </div>
-                <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 animate-fade-in-up" style="animation-delay: 0.1s;">
-                    The <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-400">Living Lens</span>
-                </h1>
-                <p class="text-xl md:text-2xl text-gray-400 mb-12 leading-relaxed animate-fade-in-up" style="animation-delay: 0.2s;">
-                    A real-time, multimodal Live Agent that sees what you see, hears what you hear, and acts before you ask.
-                </p>
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up" style="animation-delay: 0.3s;">
-                    <a href="#modes" class="w-full sm:w-auto px-8 py-4 rounded-full bg-primary hover:bg-purple-600 text-white font-semibold transition-all shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:-translate-y-1">
-                        Explore Modes
-                    </a>
-                    <a href="#architecture" class="w-full sm:w-auto px-8 py-4 rounded-full bg-surface border border-white/10 hover:bg-white/5 text-white font-semibold transition-all backdrop-blur-md hover:-translate-y-1">
-                        How it Works
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Grid -->
-    <section id="features" class="py-24 relative">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl md:text-4xl font-bold mb-4">Beyond Conversation</h2>
-                <p class="text-gray-400 max-w-2xl mx-auto">Arqivon doesn't just describe the world—it interacts with it through native Smart Action Cards and persistent memory.</p>
-            </div>
-            
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Feature 1 -->
-                <div class="glass-card p-8 rounded-3xl hover-lift">
-                    <div class="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center mb-6 text-primary">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Simultaneous Vision + Voice</h3>
-                    <p class="text-gray-400 text-sm leading-relaxed">Streams 2fps JPEG frames and 16kHz PCM audio concurrently over a single WebSocket for true multimodal understanding.</p>
-                </div>
-
-                <!-- Feature 2 -->
-                <div class="glass-card p-8 rounded-3xl hover-lift">
-                    <div class="w-12 h-12 rounded-2xl bg-secondary/20 flex items-center justify-center mb-6 text-secondary">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Zero-latency Interruptibility</h3>
-                    <p class="text-gray-400 text-sm leading-relaxed">Native Voice Activity Detection (VAD) means you can interrupt mid-sentence and the agent instantly re-focuses.</p>
-                </div>
-
-                <!-- Feature 3 -->
-                <div class="glass-card p-8 rounded-3xl hover-lift">
-                    <div class="w-12 h-12 rounded-2xl bg-tutor/20 flex items-center justify-center mb-6 text-tutor">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Agentic Tool Calling</h3>
-                    <p class="text-gray-400 text-sm leading-relaxed">13 registered tools bridge AI reasoning to native Flutter UI, rendering Smart Action Cards directly on your camera feed.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Modes Section -->
-    <section id="modes" class="py-24 relative bg-surface/30 border-y border-white/5">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl md:text-4xl font-bold mb-4">Four Specialized Modes</h2>
-                <p class="text-gray-400 max-w-2xl mx-auto">Switch contexts instantly. Each mode features dedicated system prompts, specialized tools, and custom UI overlays.</p>
-            </div>
-
-            <div class="grid md:grid-cols-2 gap-8">
-                <!-- Assistant -->
-                <div class="glass-card p-8 rounded-3xl border-l-4 border-primary hover-lift">
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
-                        </div>
-                        <h3 class="text-2xl font-bold">Assistant</h3>
-                    </div>
-                    <p class="text-gray-400 mb-4">Proactive multimodal assistant that detects actionable items in your camera feed and creates Smart Action Cards.</p>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li class="flex items-center gap-2"><span class="text-primary">•</span> Persistent memory across sessions</li>
-                        <li class="flex items-center gap-2"><span class="text-primary">•</span> Context-aware UI actions</li>
-                    </ul>
-                </div>
-
-                <!-- Translator -->
-                <div class="glass-card p-8 rounded-3xl border-l-4 border-secondary hover-lift">
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="w-12 h-12 rounded-full bg-secondary/20 flex items-center justify-center text-secondary">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>
-                        </div>
-                        <h3 class="text-2xl font-bold">Translator</h3>
-                    </div>
-                    <p class="text-gray-400 mb-4">Real-time multilingual translator. Speak in one language, hear and see the translation on the fly with graceful interruptions.</p>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li class="flex items-center gap-2"><span class="text-secondary">•</span> Live translation subtitle overlay</li>
-                        <li class="flex items-center gap-2"><span class="text-secondary">•</span> 19 supported languages</li>
-                    </ul>
-                </div>
-
-                <!-- Tutor -->
-                <div class="glass-card p-8 rounded-3xl border-l-4 border-tutor hover-lift">
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="w-12 h-12 rounded-full bg-tutor/20 flex items-center justify-center text-tutor">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14v6.5"></path></svg>
-                        </div>
-                        <h3 class="text-2xl font-bold">Tutor</h3>
-                    </div>
-                    <p class="text-gray-400 mb-4">Vision-enabled smart tutor. Show homework or diagrams via camera, get step-by-step guidance with progress tracking.</p>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li class="flex items-center gap-2"><span class="text-tutor">•</span> Step-by-step grading & hints</li>
-                        <li class="flex items-center gap-2"><span class="text-tutor">•</span> Concept tagging for future reference</li>
-                    </ul>
-                </div>
-
-                <!-- Support -->
-                <div class="glass-card p-8 rounded-3xl border-l-4 border-support hover-lift">
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="w-12 h-12 rounded-full bg-support/20 flex items-center justify-center text-support">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                        </div>
-                        <h3 class="text-2xl font-bold">Support</h3>
-                    </div>
-                    <p class="text-gray-400 mb-4">Voice-driven customer support agent. Natural call-like interaction with mid-conversation topic switching.</p>
-                    <ul class="space-y-2 text-sm text-gray-300">
-                        <li class="flex items-center gap-2"><span class="text-support">•</span> Real-time topic trail tracking</li>
-                        <li class="flex items-center gap-2"><span class="text-support">•</span> Case escalation & resolution logging</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="py-12 border-t border-white/10">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+    <!-- ========== NAVBAR ========== -->
+    <header class="navbar" id="navbar">
+        <div class="container navbar__inner">
+            <a href="#" class="navbar__brand">
+                <div class="navbar__logo">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <circle cx="14" cy="14" r="12" stroke="url(#logo-grad)" stroke-width="2.5"/>
+                        <circle cx="14" cy="14" r="5" fill="url(#logo-grad)"/>
+                        <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0" y1="0" x2="28" y2="28">
+                                <stop stop-color="#7C5CFC"/>
+                                <stop offset="1" stop-color="#00D4AA"/>
+                            </linearGradient>
+                        </defs>
                     </svg>
                 </div>
-                <span class="font-bold">Arqivon</span>
+                <span class="navbar__name">Arqivon</span>
+            </a>
+            <nav class="navbar__links" id="navLinks">
+                <a href="#features" class="navbar__link">Features</a>
+                <a href="#modes" class="navbar__link">Modes</a>
+                <a href="#how-it-works" class="navbar__link">How it Works</a>
+                <a href="#demo" class="navbar__link">Try Demo</a>
+            </nav>
+            <div class="navbar__actions">
+                <a href="#demo" class="btn btn--ghost">Sign In</a>
+                <a href="#demo" class="btn btn--primary">Try Free <span class="btn__arrow">&rarr;</span></a>
             </div>
-            <p class="text-sm text-gray-500">Built for the Google Gemini Live Agent Challenge.</p>
+            <button class="navbar__hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ========== MOBILE MENU ========== -->
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#features" class="mobile-menu__link">Features</a>
+        <a href="#modes" class="mobile-menu__link">Modes</a>
+        <a href="#how-it-works" class="mobile-menu__link">How it Works</a>
+        <a href="#demo" class="mobile-menu__link">Try Demo</a>
+        <div class="mobile-menu__actions">
+            <a href="#demo" class="btn btn--primary btn--full">Try Free &rarr;</a>
+        </div>
+    </div>
+
+    <!-- ========== HERO ========== -->
+    <section class="hero">
+        <div class="hero__bg">
+            <div class="hero__orb hero__orb--1"></div>
+            <div class="hero__orb hero__orb--2"></div>
+            <div class="hero__orb hero__orb--3"></div>
+            <div class="hero__grid"></div>
+        </div>
+        <div class="container hero__inner">
+            <div class="hero__badge" data-animate="fade-up">
+                <span class="hero__badge-dot"></span>
+                Built for the Google Gemini Live Agent Challenge
+            </div>
+            <h1 class="hero__title" data-animate="fade-up" data-delay="100">
+                Your AI doesn't just<br>
+                <span class="hero__gradient-text">listen — it sees.</span>
+            </h1>
+            <p class="hero__subtitle" data-animate="fade-up" data-delay="200">
+                Arqivon is a real-time multimodal AI agent that sees your world through the camera,
+                hears your voice, and responds instantly — translating, tutoring, supporting, and exploring.
+            </p>
+            <div class="hero__cta" data-animate="fade-up" data-delay="300">
+                <a href="#demo" class="btn btn--primary btn--lg">
+                    Try the Live Demo
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+                <a href="#how-it-works" class="btn btn--outline btn--lg">See How It Works</a>
+            </div>
+            <div class="hero__stats" data-animate="fade-up" data-delay="400">
+                <div class="hero__stat">
+                    <span class="hero__stat-number">4</span>
+                    <span class="hero__stat-label">Agent Modes</span>
+                </div>
+                <div class="hero__stat-divider"></div>
+                <div class="hero__stat">
+                    <span class="hero__stat-number">&lt;200ms</span>
+                    <span class="hero__stat-label">Response Time</span>
+                </div>
+                <div class="hero__stat-divider"></div>
+                <div class="hero__stat">
+                    <span class="hero__stat-number">100+</span>
+                    <span class="hero__stat-label">Languages</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hero Phone Mockup -->
+        <div class="hero__visual" data-animate="fade-up" data-delay="500">
+            <div class="phone-mockup">
+                <div class="phone-mockup__frame">
+                    <div class="phone-mockup__notch"></div>
+                    <div class="phone-mockup__screen">
+                        <div class="phone-mockup__status">
+                            <span>9:41</span>
+                            <div class="phone-mockup__icons">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+                            </div>
+                        </div>
+                        <div class="phone-mockup__content">
+                            <div class="phone-mockup__header">
+                                <div class="phone-mockup__mode-badge">🔮 Explorer</div>
+                                <span class="phone-mockup__live">● LIVE</span>
+                            </div>
+                            <div class="phone-mockup__camera">
+                                <div class="phone-mockup__cam-circle">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>
+                                </div>
+                            </div>
+                            <div class="phone-mockup__response">
+                                <div class="phone-mockup__wave">
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                </div>
+                                <p>I can see you're looking at the Eiffel Tower! Built in 1889, it stands 330m tall...</p>
+                            </div>
+                            <div class="phone-mockup__controls">
+                                <div class="phone-mockup__mic-btn">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="phone-mockup__glow"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== TECH BAR ========== -->
+    <section class="logos-bar">
+        <div class="container">
+            <p class="logos-bar__label">Built with cutting-edge technology</p>
+            <div class="logos-bar__track">
+                <div class="logos-bar__slide">
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--google"></span>Google Gemini</div>
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--flutter"></span>Flutter</div>
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--firebase"></span>Firebase</div>
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--webrtc"></span>WebRTC</div>
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--ai"></span>Multimodal AI</div>
+                    <div class="logos-bar__item"><span class="logos-bar__dot logos-bar__dot--cloud"></span>Google Cloud</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FEATURES ========== -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header" data-animate="fade-up">
+                <span class="section-tag">Capabilities</span>
+                <h2 class="section-title">One AI agent.<br><span class="gradient-text">Every sense.</span></h2>
+                <p class="section-desc">Arqivon combines vision, voice, and intelligence into a seamless real-time experience — no typing needed.</p>
+            </div>
+
+            <div class="features__grid">
+                <div class="feature-card feature-card--highlight" data-animate="fade-up" data-delay="0">
+                    <div class="feature-card__icon feature-card__icon--purple">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+                    </div>
+                    <h3 class="feature-card__title">Real-Time Vision</h3>
+                    <p class="feature-card__desc">Point your camera at anything. Arqivon sees what you see and understands context instantly — objects, text, scenes, people.</p>
+                </div>
+                <div class="feature-card" data-animate="fade-up" data-delay="100">
+                    <div class="feature-card__icon feature-card__icon--green">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </div>
+                    <h3 class="feature-card__title">Voice Conversation</h3>
+                    <p class="feature-card__desc">Speak naturally. Arqivon listens, understands, and talks back — like chatting with a brilliant friend who can see your screen.</p>
+                </div>
+                <div class="feature-card" data-animate="fade-up" data-delay="200">
+                    <div class="feature-card__icon feature-card__icon--blue">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    </div>
+                    <h3 class="feature-card__title">Live Streaming</h3>
+                    <p class="feature-card__desc">Continuous video + audio stream to Gemini's multimodal API. Zero lag, zero interruption — a true living lens experience.</p>
+                </div>
+                <div class="feature-card" data-animate="fade-up" data-delay="300">
+                    <div class="feature-card__icon feature-card__icon--amber">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <h3 class="feature-card__title">4 Specialized Modes</h3>
+                    <p class="feature-card__desc">Explorer, Translator, Tutor, Support — switch between purpose-built AI agents on the fly, each optimized for its task.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== MODES ========== -->
+    <section class="modes" id="modes">
+        <div class="container">
+            <div class="section-header" data-animate="fade-up">
+                <span class="section-tag">Agent Modes</span>
+                <h2 class="section-title">Four agents.<br><span class="gradient-text">One app.</span></h2>
+                <p class="section-desc">Each mode transforms Arqivon into a specialized AI assistant, tailored for the task at hand.</p>
+            </div>
+
+            <div class="modes__tabs" data-animate="fade-up" data-delay="100">
+                <button class="mode-tab mode-tab--active" data-mode="explorer">
+                    <span class="mode-tab__icon">🔮</span>
+                    <span class="mode-tab__label">Explorer</span>
+                </button>
+                <button class="mode-tab" data-mode="translator">
+                    <span class="mode-tab__icon">🌍</span>
+                    <span class="mode-tab__label">Translator</span>
+                </button>
+                <button class="mode-tab" data-mode="tutor">
+                    <span class="mode-tab__icon">🎓</span>
+                    <span class="mode-tab__label">Tutor</span>
+                </button>
+                <button class="mode-tab" data-mode="support">
+                    <span class="mode-tab__icon">🛠️</span>
+                    <span class="mode-tab__label">Support</span>
+                </button>
+            </div>
+
+            <div class="modes__panels">
+                <div class="mode-panel mode-panel--active" id="panel-explorer" data-animate="fade-up" data-delay="200">
+                    <div class="mode-panel__content">
+                        <div class="mode-panel__badge mode-panel__badge--purple">Explorer Mode</div>
+                        <h3 class="mode-panel__title">See the world. Understand everything.</h3>
+                        <p class="mode-panel__desc">Point your camera at anything — a building, a painting, a plant, a gadget — and Arqivon will identify it, explain it, and answer any follow-up question in real time.</p>
+                        <ul class="mode-panel__features">
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#7C5CFC" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#7C5CFC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Object &amp; scene recognition</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#7C5CFC" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#7C5CFC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Historical &amp; cultural context</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#7C5CFC" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#7C5CFC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Conversational follow-ups</li>
+                        </ul>
+                    </div>
+                    <div class="mode-panel__visual">
+                        <div class="mode-visual-card mode-visual-card--purple">
+                            <div class="mode-visual-card__emoji">🔮</div>
+                            <div class="mode-visual-card__bubble"><p><strong>AI:</strong> "That's the Colosseum in Rome, built in 70-80 AD. It could hold 50,000 spectators. Want to know about the gladiator events?"</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mode-panel" id="panel-translator">
+                    <div class="mode-panel__content">
+                        <div class="mode-panel__badge mode-panel__badge--amber">Translator Mode</div>
+                        <h3 class="mode-panel__title">Break every language barrier.</h3>
+                        <p class="mode-panel__desc">Hold your phone up to a sign, menu, or document — or just speak — and Arqivon translates in real time with perfect context and natural pronunciation.</p>
+                        <ul class="mode-panel__features">
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#F59E0B" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Visual text translation (signs, menus)</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#F59E0B" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Spoken language interpretation</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#F59E0B" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 100+ languages supported</li>
+                        </ul>
+                    </div>
+                    <div class="mode-panel__visual">
+                        <div class="mode-visual-card mode-visual-card--amber">
+                            <div class="mode-visual-card__emoji">🌍</div>
+                            <div class="mode-visual-card__bubble"><p><strong>AI:</strong> "The sign says 'Sortie de secours' — that's French for 'Emergency Exit'. The arrow points left."</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mode-panel" id="panel-tutor">
+                    <div class="mode-panel__content">
+                        <div class="mode-panel__badge mode-panel__badge--green">Tutor Mode</div>
+                        <h3 class="mode-panel__title">Your personal genius tutor.</h3>
+                        <p class="mode-panel__desc">Point at a math problem, a textbook page, or lab equipment — Arqivon explains concepts step-by-step, adapting to your level and learning style.</p>
+                        <ul class="mode-panel__features">
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#00D4AA" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#00D4AA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Step-by-step walkthroughs</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#00D4AA" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#00D4AA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Adaptive difficulty levels</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#00D4AA" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#00D4AA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Visual problem solving (math, science)</li>
+                        </ul>
+                    </div>
+                    <div class="mode-panel__visual">
+                        <div class="mode-visual-card mode-visual-card--green">
+                            <div class="mode-visual-card__emoji">🎓</div>
+                            <div class="mode-visual-card__bubble"><p><strong>AI:</strong> "This is a quadratic equation: x² + 5x + 6 = 0. Let me factor it step by step... (x+2)(x+3) = 0, so x = -2 or x = -3."</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mode-panel" id="panel-support">
+                    <div class="mode-panel__content">
+                        <div class="mode-panel__badge mode-panel__badge--blue">Support Mode</div>
+                        <h3 class="mode-panel__title">Fix anything. Visually guided.</h3>
+                        <p class="mode-panel__desc">Show Arqivon a broken appliance, an error screen, or a tangled cable setup — it diagnoses the issue and walks you through the fix, step by step.</p>
+                        <ul class="mode-panel__features">
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#3B82F6" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Visual diagnostics</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#3B82F6" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Step-by-step repair guidance</li>
+                            <li><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="10" fill="#3B82F6" fill-opacity="0.15"/><path d="M6 10l3 3 5-5" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Error code lookups</li>
+                        </ul>
+                    </div>
+                    <div class="mode-panel__visual">
+                        <div class="mode-visual-card mode-visual-card--blue">
+                            <div class="mode-visual-card__emoji">🛠️</div>
+                            <div class="mode-visual-card__bubble"><p><strong>AI:</strong> "I can see error code E4 on your washing machine. That's a drainage issue. First, check the filter at the bottom-right..."</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== HOW IT WORKS ========== -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-header" data-animate="fade-up">
+                <span class="section-tag">Simple as 1-2-3</span>
+                <h2 class="section-title">From camera to<br><span class="gradient-text">conversation in seconds.</span></h2>
+            </div>
+            <div class="steps">
+                <div class="step" data-animate="fade-up" data-delay="0">
+                    <div class="step__number">01</div>
+                    <div class="step__icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    </div>
+                    <h3 class="step__title">Open &amp; Point</h3>
+                    <p class="step__desc">Launch Arqivon, choose your mode, and point your camera at anything you want to understand.</p>
+                </div>
+                <div class="step__connector">
+                    <svg width="60" height="2"><line x1="0" y1="1" x2="60" y2="1" stroke="url(#cg1)" stroke-width="2" stroke-dasharray="6 4"/><defs><linearGradient id="cg1"><stop stop-color="#7C5CFC"/><stop offset="1" stop-color="#00D4AA"/></linearGradient></defs></svg>
+                </div>
+                <div class="step" data-animate="fade-up" data-delay="100">
+                    <div class="step__number">02</div>
+                    <div class="step__icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>
+                    </div>
+                    <h3 class="step__title">Ask Anything</h3>
+                    <p class="step__desc">Speak naturally — ask questions, request explanations, or just say "what is this?"</p>
+                </div>
+                <div class="step__connector">
+                    <svg width="60" height="2"><line x1="0" y1="1" x2="60" y2="1" stroke="url(#cg2)" stroke-width="2" stroke-dasharray="6 4"/><defs><linearGradient id="cg2"><stop stop-color="#7C5CFC"/><stop offset="1" stop-color="#00D4AA"/></linearGradient></defs></svg>
+                </div>
+                <div class="step" data-animate="fade-up" data-delay="200">
+                    <div class="step__number">03</div>
+                    <div class="step__icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h4"/></svg>
+                    </div>
+                    <h3 class="step__title">Get Answers</h3>
+                    <p class="step__desc">Arqivon responds instantly with voice + visual context. Continue the conversation as long as you want.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== WHY ARQIVON ========== -->
+    <section class="why">
+        <div class="container">
+            <div class="why__grid">
+                <div class="why__content" data-animate="fade-up">
+                    <span class="section-tag">Why Arqivon</span>
+                    <h2 class="section-title section-title--left">Not another chatbot.<br><span class="gradient-text">A living lens.</span></h2>
+                    <p class="section-desc section-desc--left">Unlike text-based AI tools, Arqivon processes live video, audio, and context simultaneously — enabling truly natural, hands-free interaction with the world around you.</p>
+                    <div class="why__metrics">
+                        <div class="why__metric">
+                            <div class="why__metric-value">60%</div>
+                            <div class="why__metric-label">faster than typing queries</div>
+                        </div>
+                        <div class="why__metric">
+                            <div class="why__metric-value">3x</div>
+                            <div class="why__metric-label">more context with vision</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="why__cards" data-animate="fade-up" data-delay="200">
+                    <div class="why-card">
+                        <div class="why-card__icon">👁️</div>
+                        <h4 class="why-card__title">Multimodal</h4>
+                        <p class="why-card__desc">Sees + hears + speaks. All simultaneously, in real time.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-card__icon">⚡</div>
+                        <h4 class="why-card__title">Instant</h4>
+                        <p class="why-card__desc">Sub-200ms latency. No loading screens, no waiting.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-card__icon">🔒</div>
+                        <h4 class="why-card__title">Private</h4>
+                        <p class="why-card__desc">Video never stored. Streamed, processed, discarded.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-card__icon">🌐</div>
+                        <h4 class="why-card__title">Universal</h4>
+                        <p class="why-card__desc">Works on Android, iOS, and Web. One codebase.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== DEMO LOGIN ========== -->
+    <section class="demo" id="demo">
+        <div class="container">
+            <div class="section-header" data-animate="fade-up">
+                <span class="section-tag">Live Demo</span>
+                <h2 class="section-title">Try Arqivon right now.<br><span class="gradient-text">No signup needed.</span></h2>
+                <p class="section-desc">Use our demo accounts to log in and experience the app instantly on web, Android, or iOS.</p>
+            </div>
+
+            <div class="demo__grid" data-animate="fade-up" data-delay="100">
+                <!-- Web App Card -->
+                <div class="demo-card demo-card--featured">
+                    <div class="demo-card__glow"></div>
+                    <div class="demo-card__header">
+                        <div class="demo-card__platform">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                            <span>Web App</span>
+                        </div>
+                        <span class="demo-card__badge">Recommended</span>
+                    </div>
+                    <p class="demo-card__desc">Open directly in your browser. No installation required.</p>
+                    <div class="demo-card__credentials">
+                        <h4>Demo Login Credentials</h4>
+                        <div class="demo-card__field">
+                            <label>Email</label>
+                            <div class="demo-card__copy" data-copy="demo@arqivon.com">
+                                <code>demo@arqivon.com</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="demo-card__field">
+                            <label>Password</label>
+                            <div class="demo-card__copy" data-copy="DemoArqivon2025!">
+                                <code>DemoArqivon2025!</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="https://arqivon-inc.web.app" target="_blank" class="btn btn--primary btn--full">
+                        Launch Web App
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                </div>
+
+                <!-- Android Card -->
+                <div class="demo-card">
+                    <div class="demo-card__header">
+                        <div class="demo-card__platform">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="#3DDC84"><path d="M17.523 15.341c-.5 0-.906-.405-.906-.906s.405-.906.906-.906.906.405.906.906-.406.906-.906.906zm-11.046 0c-.5 0-.906-.405-.906-.906s.406-.906.906-.906.906.405.906.906-.405.906-.906.906zm11.4-6.027l1.997-3.462a.416.416 0 00-.152-.567.416.416 0 00-.567.152L17.12 8.95a12.04 12.04 0 00-5.12-1.13 12.04 12.04 0 00-5.12 1.13L4.845 5.437a.416.416 0 00-.567-.152.416.416 0 00-.152.567l1.997 3.462C2.688 11.188.344 14.457 0 18.34h24c-.344-3.883-2.688-7.152-6.123-9.026z"/></svg>
+                            <span>Android</span>
+                        </div>
+                        <span class="demo-card__badge demo-card__badge--outline">APK Ready</span>
+                    </div>
+                    <p class="demo-card__desc">Download the APK and install on any Android device.</p>
+                    <div class="demo-card__credentials">
+                        <h4>Demo Login Credentials</h4>
+                        <div class="demo-card__field">
+                            <label>Email</label>
+                            <div class="demo-card__copy" data-copy="demo@arqivon.com">
+                                <code>demo@arqivon.com</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="demo-card__field">
+                            <label>Password</label>
+                            <div class="demo-card__copy" data-copy="DemoArqivon2025!">
+                                <code>DemoArqivon2025!</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="#" class="btn btn--outline btn--full" onclick="alert('APK download coming soon! Use the web app for now.'); return false;">
+                        Download APK (53.8 MB)
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
+                </div>
+
+                <!-- iOS Card -->
+                <div class="demo-card">
+                    <div class="demo-card__header">
+                        <div class="demo-card__platform">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                            <span>iOS</span>
+                        </div>
+                        <span class="demo-card__badge demo-card__badge--outline">TestFlight</span>
+                    </div>
+                    <p class="demo-card__desc">Join our TestFlight beta to try on iPhone or iPad.</p>
+                    <div class="demo-card__credentials">
+                        <h4>Demo Login Credentials</h4>
+                        <div class="demo-card__field">
+                            <label>Email</label>
+                            <div class="demo-card__copy" data-copy="demo@arqivon.com">
+                                <code>demo@arqivon.com</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="demo-card__field">
+                            <label>Password</label>
+                            <div class="demo-card__copy" data-copy="DemoArqivon2025!">
+                                <code>DemoArqivon2025!</code>
+                                <button class="copy-btn" title="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="#" class="btn btn--outline btn--full" onclick="alert('TestFlight link coming soon! Use the web app for now.'); return false;">
+                        Join TestFlight Beta
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="demo__note" data-animate="fade-up" data-delay="200">
+                <div class="demo__note-icon">💡</div>
+                <p>You can also sign in with your <strong>Google account</strong> or <strong>Apple ID</strong> directly in the app — no demo credentials needed.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== CTA ========== -->
+    <section class="cta">
+        <div class="container">
+            <div class="cta__card" data-animate="fade-up">
+                <div class="cta__bg-orb cta__bg-orb--1"></div>
+                <div class="cta__bg-orb cta__bg-orb--2"></div>
+                <h2 class="cta__title">Ready to see the world<br>through a living lens?</h2>
+                <p class="cta__desc">Join the future of AI interaction. No typing. No searching. Just look, ask, and know.</p>
+                <div class="cta__buttons">
+                    <a href="#demo" class="btn btn--white btn--lg">Try the Demo</a>
+                    <a href="https://github.com/Medialordofficial/Arqivo" target="_blank" class="btn btn--ghost-white btn--lg">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                        View on GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FOOTER ========== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__inner">
+                <div class="footer__brand">
+                    <a href="#" class="navbar__brand">
+                        <div class="navbar__logo">
+                            <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                                <circle cx="14" cy="14" r="12" stroke="url(#lg-f)" stroke-width="2.5"/>
+                                <circle cx="14" cy="14" r="5" fill="url(#lg-f)"/>
+                                <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#lg-f)" stroke-width="2" stroke-linecap="round"/>
+                                <defs><linearGradient id="lg-f" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7C5CFC"/><stop offset="1" stop-color="#00D4AA"/></linearGradient></defs>
+                            </svg>
+                        </div>
+                        <span class="navbar__name">Arqivon</span>
+                    </a>
+                    <p class="footer__tagline">The AI that sees your world.</p>
+                </div>
+                <div class="footer__links">
+                    <div class="footer__col">
+                        <h4>Product</h4>
+                        <a href="#features">Features</a>
+                        <a href="#modes">Agent Modes</a>
+                        <a href="#how-it-works">How It Works</a>
+                        <a href="#demo">Try Demo</a>
+                    </div>
+                    <div class="footer__col">
+                        <h4>Platform</h4>
+                        <a href="https://arqivon-inc.web.app" target="_blank">Web App</a>
+                        <a href="#">Android (APK)</a>
+                        <a href="#">iOS (TestFlight)</a>
+                    </div>
+                    <div class="footer__col">
+                        <h4>Resources</h4>
+                        <a href="https://github.com/Medialordofficial/Arqivo" target="_blank">GitHub</a>
+                        <a href="https://ai.google.dev/competition" target="_blank">Gemini Challenge</a>
+                        <a href="#">Documentation</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer__bottom">
+                <p>&copy; 2025 Arqivon by NotaNovice Group. Built for the Google Gemini Live Agent Challenge.</p>
+                <div class="footer__socials">
+                    <a href="https://github.com/Medialordofficial/Arqivo" target="_blank" aria-label="GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                </div>
+            </div>
         </div>
     </footer>
 
     <script>
-        // Navbar scroll effect
-        window.addEventListener('scroll', () => {
-            const nav = document.getElementById('navbar');
-            if (window.scrollY > 20) {
-                nav.classList.add('bg-dark/80', 'backdrop-blur-lg', 'border-b', 'border-white/10');
-            } else {
-                nav.classList.remove('bg-dark/80', 'backdrop-blur-lg', 'border-b', 'border-white/10');
+    // Navbar scroll
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+        navbar.classList.toggle('navbar--scrolled', window.scrollY > 50);
+    });
+
+    // Mobile menu
+    const hamburger = document.getElementById('hamburger');
+    const mobileMenu = document.getElementById('mobileMenu');
+    hamburger.addEventListener('click', () => {
+        hamburger.classList.toggle('active');
+        mobileMenu.classList.toggle('active');
+        document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+    });
+    document.querySelectorAll('.mobile-menu__link').forEach(link => {
+        link.addEventListener('click', () => {
+            hamburger.classList.remove('active');
+            mobileMenu.classList.remove('active');
+            document.body.style.overflow = '';
+        });
+    });
+
+    // Mode tabs
+    const modeTabs = document.querySelectorAll('.mode-tab');
+    const modePanels = document.querySelectorAll('.mode-panel');
+    modeTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            modeTabs.forEach(t => t.classList.remove('mode-tab--active'));
+            modePanels.forEach(p => p.classList.remove('mode-panel--active'));
+            tab.classList.add('mode-tab--active');
+            document.getElementById(`panel-${tab.dataset.mode}`).classList.add('mode-panel--active');
+        });
+    });
+
+    // Copy to clipboard
+    document.querySelectorAll('.demo-card__copy').forEach(el => {
+        el.addEventListener('click', async () => {
+            const text = el.dataset.copy;
+            try {
+                await navigator.clipboard.writeText(text);
+                const btn = el.querySelector('.copy-btn');
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00D4AA" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+                }, 2000);
+            } catch(e) {}
+        });
+    });
+
+    // Scroll animations
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                setTimeout(() => entry.target.classList.add('animated'), parseInt(entry.target.dataset.delay || 0));
+                observer.unobserve(entry.target);
             }
         });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+        a.addEventListener('click', function(e) {
+            e.preventDefault();
+            const t = document.querySelector(this.getAttribute('href'));
+            if (t) window.scrollTo({ top: t.getBoundingClientRect().top + window.pageYOffset - 80, behavior: 'smooth' });
+        });
+    });
     </script>
 </body>
 </html>

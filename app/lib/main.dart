@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'config/theme.dart';
+import 'firebase_options.dart';
+import 'providers/auth_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();  // Uncomment when firebase_options.dart is configured
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -35,7 +38,28 @@ class ArqivonApp extends ConsumerWidget {
       themeMode: settings.themeMode,
       theme: ArqivonTheme.lightTheme,
       darkTheme: ArqivonTheme.darkTheme,
-      home: const MainNavigator(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+/// Shows [LoginScreen] when not authenticated, [MainNavigator] otherwise.
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const LoginScreen(),
+      data: (user) {
+        if (user == null) return const LoginScreen();
+        return const MainNavigator();
+      },
     );
   }
 }

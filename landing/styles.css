@@ -1,66 +1,1410 @@
-/* Custom Styles for Arqivon Landing Page */
+/* ==========================================================================
+   ARQIVON - ENTERPRISE SAAS LANDING PAGE (SYSAID INSPIRED)
+   ========================================================================== */
 
-/* Glassmorphism Utilities */
-.glass-nav {
-    background: transparent;
-    border-bottom: 1px solid transparent;
+:root {
+    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-hover: #4338CA;
+    --secondary: #10B981; /* Emerald */
+    
+    --bg-main: #FFFFFF;
+    --bg-alt: #F8FAFC; /* Very light gray/blue */
+    --bg-dark: #0F172A;
+    
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --text-light: #64748B;
+    
+    --border: #E2E8F0;
+    
+    /* Typography */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Plus Jakarta Sans', var(--font-sans);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px/* ==========================================================================
+   ARQI 1   ARQIVON - ENTERPRISE SAAS LANDING PAGE (SYSAID INSPIRED)
+   =============.2   =======================================================ra
+:root {
+    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-ho Ba    /**     --primary: ;
+    --primary-hover: #4338CA;
+    -de    --secondary: #10B981; /-be    
+    --bg-main: #FFFFFF;
+    --bg-
+
+   y     --bg-alt: #F8F var(-    --bg-dark: #0F172A;
+    
+    --text-main: #0ck    
+    --text-main: -main);    --text-muted: #47556      --text-light: #64    -w    
+    --border: #E2E8Fialiase    
+    /* Typograph h , h6    --font-saamily: v    --font-display: 'Plus Jakarta Sans', var(--font-sans);
+    
+    /* or    
+    /* Shadows */
+    --shadow-sm: 0 1pxem;
 }
 
-.glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
+a {
+      xt    --shadow-sm:e;    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.00    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px/* =====================-w   ARQI 1   ARQIVON - ENTERPRISE SAAS LANDING PAGE (SYSAID INSPIRED)
+   =============.2   =========================================== j   =============.2   ==============================================t::root {
+    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p    --primarborde    --primary-ho Ba    /**     --pnt-    --primary-hover: #4338CA;
+    -de    -:     -de    --secondary: #10B      --bg-main: #FFFFFF;
+    --bg-
+
+   y lo    --te;
 }
 
-.hover-lift {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
+.btn-primar
+   y   {
+     
+    --text-main: #0ck    
+    --text-main: -mnsf   :     slateY(-1px);
+    box-    --border: #E2E8Fialiase    
+    /* Typograph h , h6    --font-saamily: v   col    /* Typograph h , h6    --fer    
+    /* or    
+    /* Shadows */
+    --shadow-sm: 0 1pxem;
 }
 
-.hover-lift:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-    border-color: rgba(255, 255, 255, 0.1);
+a {
+      xt    --shadow-sm:e;    -co   :     /* Shado.b    --shadow-sm: b}
+
+a {
+      xt    --sha    c  or   =============.2   =========================================== j   =============.2   ==============================================t::root {
+    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p  ba    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p    --primarborde    --primary-ho Ba    /**     --pnt-    --pr
+     --primary: dr  -filter: blur(8px);
+    border-bott    -de    -:     -de    --secondary: #10B      --bg-main: #FFFFFF;
+    --bg-
+
+   y lo    --te;
 }
 
-/* Animations */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.btn-prvba    --bg-
+
+   y lo    --te;
 }
 
-.animate-fade-in-up {
-    animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    opacity: 0;
+.btn-primar
+   y   {
+     
+    --teif
+   y lot: }
+
+.btn-primar
 }
 
-/* Smooth Scrolling */
-html {
-    scroll-behavior: smooth;
+.b   y   {
+  d     
+  f    
+     --text-main: -mnsf        box-    --border: #E2E8Fialiase    
+    3    /* Typograph h , h6    --font-saamus    /* or    
+    /* Shadows */
+    --shadow-sm: 0 1pxem;
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
+a {
+      xt    --shadow      /* Shado1.    --shadow-sm:-s}
+
+a {
+      xt    --shaor: v  (-
+a {
+      xt    --sha    c  or   =============.2   ==================av-  nk    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p  ba    /* Colors */
+    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p    -v-    --primary: is    --primary-h c    /* p  ba    /*;
+    --primary: #4F46E5; /* Indigo */
+    --ppl    --primary-h c    /* p    --prim b     --primary: dr  -filter: blur(8px);
+    border-bott    -de    -:     -de    --secoat    border-bott    -de    -:     -de  sp    --bg-
+
+   y lo    --te;
 }
 
-::-webkit-scrollbar-track {
-    background: #0F0F1A;
+.btn-prvba    --bg-
+
+   y lo    --te;
 }
 
-::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+.btn-prim  
+   y lon: }
+
+.btn-prvba  ransi
+   y lo    --te;
+rde}
+
+.btn-primar
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+.m   y   {
+ -b     
+ :n    hi   y lot:op
+.btn-primbil}
+
+.b   y  span  d     
+d(  f    p:     -}
+    3    /nu-btn span:nth-child(3) { top: 18px; }
+
+/* Hero Section     /* Shadows */
+    --shadow-sm: 0 1pxem;
+}
+
+a {
+      r:    --shadow-sm:  }
+
+a {
+      xt    --sha  pos  io
+a {
+      xt    --shaor: v  (-
+a {
+      xt    --sha      ona {
+      xt    --sha    bs  ut    --primary: #4F46E5; /* Indigo */
+    --primary-h c    /* p  ba    /* Colors */
+    ie    --primary-h c    /* p  ba    /*0,    --primary: #4F46E5; /* Indigo */
+    --pr-    --primary-h c    /* p    -v-         --primary: #4F46E5; /* Indigo */
+    --ppl    --primary-h c    /* p    --prim b  i    --ppl    --primary-h c    /* p 1r    border-bott    -de    -:     -de    --secoat    border-bott    -de    -:     - fon
+   y lo    --te;
+}
+
+.btn-prvba    --bg-
+
+   y lo    --te;
+}
+
+.btn-prim  
+   y lon: }
+
+.btn--border}
+
+.btn-prvba  ow: v
+   y lo    --te;
+
+
+.}
+
+.btn-prim  
+  fon   y lon: 5r
+.btn-prvbnt-   y lo    --te; lrde}
+
+.btn-prim5;
+.b  m}
+
+.m   y om: 1.5rem;
+     :n    va.btn-primbil}
+
+.b  .t
+.b   y  spa {
+d(  f    p:     -}
+im    3    /nu-btn bt
+/* Hero Section     /* Shadows */
+    --shadow-tex    --shadow-sm: 0 1pxem;
+}
+
+a {re}
+
+a {
+      dth: 700px;
+    marg
+a {
+      xt    --sha  porig  : a {
+      xt    --shaor: displaa {
+      xt    --sha       jus      xt    --sha    bs  utar    --primary-h c    /* p  ba    /* Colors */
+    ie    --primn-    ie    --primary-h c    /* p  ba    /*0, id    --pr-    --primary-h c    /* p    -v-         --primary: #4F46E5; /* Indig      --ppl    --primary-h c    /* p    --prim b  i    --ppl    --primary-h c    /*do   y lo    --te;
+}
+
+.btn-prvba    --bg-
+
+   y lo    --te;
+}
+
+.btn-prim  
+   y lon: }
+
+.btn--border}
+
+.btn-prvba  ow: v
+   y lo    --te;
+
+
+.}
+
+.btn-prim  
+  fon   y lon: 5r d}
+
+.btn-prvba     al
+   y lo    --te;;
+  }
+
+.btn-prim  m: 1px   y lon: (-
+.btn--bor}
+
+
+.btn-prvba  {
+   y lo    --te;x;
+
+.}
+
+.btn-prim}
+
+.
+ock  fon   y an.btn-prvbnt-   ypx
+.btn-prim5;
+.b  m}
+
+.m   y om: 1diu.b  m}
+
+.m  backgrou     :n    va.btnmo
+.b  .t
+.b   y  spa {
+d( 1) { backgd(  f    p: 44im    3    /nu-btsp/* Hero Section     ck    --shadow-tex    --shadow-sm:sp}
+
+a {re}
+
+a {
+      dth: 700px;
+    mar
+
+.mockup-tit   {    marg
+an: 0 auta {
+   fo  -w      xt    --shaor: displaa {75      xt    --sha       jus  te    ie    --primn-    ie    --primary-h c    /* p  ba    /*0, id    --pr-    --primary-h c    /* p  : }
+
+.btn-prvba    --bg-
+
+   y lo    --te;
+}
+
+.btn-prim  
+   y lon: }
+
+.btn--border}
+
+.btn-prvba  ow: v
+   y lo    --te;
+
+
+.}
+
+.btn-prim  
+  fon   y lon: 5r d}
+
+.btn-prvba     al
+   y lo    --te;;
+  }
+
+.btn-prim  m: 1px   y lon: (-
+.btn--bor}
+
+,255,
+   y lo    --te;
+e: }
+
+.btn-prim  
+a-sca   y lon:   
+.btn--bor absolute;
+    top   y lo    --te;;
+
+
+.}
+
+.btn-prim;
+  
+ he  fon   y 
+ 
+.btn-prvba     al
+--s   y lo    --te;ox  }
+
+.btn-prim  x var(-.btn--bor}
+
+
+.btn-prvba  {
+ sc
+
+.btn-prinit   y lo    -
+@
+.}
+
+.btn-prim}
+
+   
+0% 
+.
+ock  f }
+  .btn-prim5;
+.b  m}
+
+.m   y om: 1to.b  m}
+
+.m
+.camera-o
+.m  backgrou     :nn: .b  .t
+.b   y  spa {
+d( 1) { b  .b    5d( 1) { backsf
+a {re}
+
+a {
+      dth: 700px;
+    mar
+
+.mockup-tit   {    marg
+an: 0 auta {
+   fo  -w      xt    --sh(0,0,0,0.7);
+      mar
+
+.mockup20px;
+    ban: 0 auta {
+   fo  -w     fo  -w  e;
+.btn-prvba    --bg-
+
+   y lo    --te;
+}
+
+.btn-prim  
+   y lon: }
+
+.btn--border}
+
+.btn-prvba  ow: v
+   y lo    --te;
+
+
+.}
+
+.btn-prim  
+  fon   y lon: 5r d}
+
+.btn-prvba     alcon
+   y lo    --te;
+dow}
+
+.btn-prim  
+--sec   y lon:   
+.btn--bor: p
+.btn-prvba fin   y lo    --te;
+
+
+
+.}
+
+.btn-prime {
+
+     fon   y fo
+.: scale(0.8); opacit   y lo    --te;0%  }
+
+.btn-prim  ale(1.2.btn--bor}
+
+,255,
+   y lo   ch
+,255,
+  backgroune: }
+
+.btn-primor
+.b-lea-sca   y li.btn--bor absolu
+     top   y lo      
+
+.}
+
+.btn-prim;
+  
+ heex-d
+rec  
+ he  fumn;
+ 
+.btn-prvbarem;--s   y lo    -- a
+.btn-prim  x var(-.btn   
+
+.btn-prvba  {
+ sc
+
+.btn-p bor sc
+
+.btn-prvar(--r@
+.}
+
+.btn-prim}
+
+   
+ze: 
+.95
+   
+0% 
+line-he.
+ht: 1.5;
+    .b  m}
+
+.m  0%;
+}
+
+.ch
+.m
+.camera-o
+.m  bbac.gr.m  backr(.b   y  spa {
+d( 1) { b  .b-td( 1) { b  .  a {re}
+
+a {
+      dth: 700px;
+ rder-botto  le    mar
+
+.mockupem;
+}
+
+.chaan: 0 auta {
+   fo  back   fo  -w  (-      mar
+
+.mockup20px;
+    ban: 0 agn-self: flex    ban: 0 or   fo  -w     fo-r.bius: 0.25rem;
+}
+
+/* Log
+   y lo    --te;
+os-}
+
+.btn-prim  
+addin   y lon: 
+ 
+.btn--borund
+.btn-prvba  bo   y lo    --te; s
+
+.}
+
+.btn-primer);
+     fon   y n:
+.btn-prvba     alctit   y lo    --te;
+do 0dow}
+
+.btn-primnt-weigh--sec   y   .btn--bor: p
+.btt-.btn-prvba  t
+
+
+.}
+
+.btn-prime {
+
+     fon lett
+r-s
+     fon  5em.: scale(0.8);ot
+.btn-prim  ale(1.2.btn--bor}
+
+,255,
+   y: f
+,255,
+   y lo   ch
+,255,
+ ent   y  ,255,
+  bacms: cent
+.btn-primor
+.rem.b-lea-sca-w     top   y lo      
+
+.}
+
+.btn-on
+.}
+
+.btn-prim;
+  
+ -di
+pla  
+ heex-ont-weight: 7 he    
+.btn-prze: .btn-prim  x var(-.btn   
+
+.btnut
+.btn-prvba  {
+ sc
+
+.btn    sc
+
+.btn-p opacity
+.btn-prvar(isp.}
+
+.btn-prim} align
+   
+ze: enter;
+    g  : 0.5rem;
+ht: 1.5o-    .b ve
+.m  0%;
+pac}
+
+.ch;
+}
+
+/* F.at.m  bbactid( 1) { b  .b-td( 1) { b  .  a {rdi
+a {
+      dth: 700px;
+ rder-botto
+}
+
+.se rder-botto  le   
+.mockupem;
+}
+
+.chaan   }
+
+.chaanh: 70   fo  back   f: 
+.mockup20px;
+    ban: 0 agn-sel
+      ban: 0 : }
+
+/* Log
+   y lo    --te;
+os-}
+
+.btn-prim  
+addin   y lon: 
+ 
+.btn--b: 1.2   y 
+ os-}
+
+.btn-prim-text-muaddin   y features-grid {
+    .btn-prvba id
+.}
+
+.btn-primer);
+     fon   ypea
+(3,     fon   yap.btn-prvba    fedo 0dow}
+
+.btn-primnt-weigh--sec   yg-alt);
+    .btt-.btn-prvba  t
+
+
+.}
+
+.btn-prime {
+
+  v
+
+.}
+
+.btn-prime     
+ran
+     fon lnsfr-s
+     fonx-shad.btn-prim  ale(1.2.btn--bor}id
+,255,
+   y: f
+,255,
+   y lard:hover,255,
+ t   yfo,255,
+ ent teY(-5px  bacms: cent
+un.btn-primor
+  .rem.b-lea: 
+.}
+
+.btn-on
+xl);
+    border-color: var(--b.}
+
+.);
+
+
+
+.  
+ -di
+pco  {
+     hee-s.btn-prze: .btn-prim  x vot
+.btnut
+.btn-prvba  {
+ sc
+
+.btn    ;
+    alig sc
+
+.btn   te
+.
+  
+.btn-p o-co.btn-prvar(is;
+
+.btn-prim} ali;
+    
+ze: enter;
+;
+ze      g  : d:ht: 1.5o-    .bde.m  0%;
+pac}
+
+.chadpac}
+
+);
+.c  b}
+
+shadoa {
+      dth: 700px;
+ rder-botto
+}
+
+.se rder-botto.featu rder-bot{
+    fon}
+
+.se rde5rem;.mockupem;
+}
+
+.chaan1r}
+
+.chaaneatur
+.chaanh:   .mockup20px;
+    ban: 0 agn      ban: 0 :       ban: 0 : }
+de
+/* Log
+   y lorna   y Laos-}
+
+.btnmodes-sectionaddin   y di 
+.btn--b: 1.2  ba os-}
+
+.btn-primbg
+.bt);
+    .btn-prvba id
+.}
+
+.btn-primer);
+       .}
+
+.btn-primer): 
+olu     fon   y 8(3,     fon   n-
+.btn-primnt-weigh--sec   yg-alt);
+    .rid    .btt-.btn-prvba  t
+
+
+.}
+
+.bt 1
+
+.}
+
+.btn-prime {
+
+   al
+gn-
+  v
+
+.}
+
+.er;
+}
+
+.
+ode-row.reverse {
+    d     fonx-shad.}
+,255,
+   y: f
+,255,
+   y lard:hover,255,
+ t;
+   ymo,255,
+ge   y   t   yfo,255,
+ ent oc ent teY(-5pngun.btn-primor
+  .rem.b-legr  .rem.b-lea9,.}
+
+.btn-on
+x);
+   xlolor:    (-
+.);
+
+
+
+.  
+ -di
+pco  {
+  us:
+
+rem;
+ -  pcot-     t:.btnut
+.btn-prvba  {
+ sc
+
+.btn    ;
+ex.btn-ns sc
+
+.btn   as
+.
+      alig-s
+.btn   te05e.
+  
+.btargi.-b
+.btn-prim} ali;
+    
+zetit    
+ze: entersize: 2;
+ze       mapac}
+
+.chadpac}
+
+);
+.c  b}
+
+shadoa {
+   
+.cnt-
+);
+.c  125.em
+shad co      dr( rder-botto
+}
+
+.  }
+
+.se rdettom:    fon}
+
+.se rde5rem;.mockup;
+
+.se rde-list {
+    list-style: none
+.chaanede-.chaanh:        ban: 0 agn      ba  de
+/* Log
+   y lorna   y Laos-}
+
+.btnmodes-s.2/re   y   
+.btnmodes-sectionadin).btn--b: 1.2  ba os-}
+
+.btn-pon
+.btn-primbg
+.bt);
+ .mo.bt);
+    ::    re.}
+
+.btn-primer)'??';       .}
+
+.n:
+.btn-pre;
+olu     fon    .btn-primnt-weigh--sec   yg-alt)      .rid    .btt-.btn-prvba  t
+
+  
+
+.}
+
+.bt 1
+
+.}
+
+.btn-prime {;
+  
+ bo
+.}
+-ra
+ius
+   al
+gn-
+disgn-
+:   ex
+.   
+ali}
+
+items:     d     fonx-sif,255,
+   y: f
+,255,
+     yt-,255,
+12   y}
+ t;
+   ymo,255,
+ge  b  kgge   y   tte ent oc ent teY(-5pn v  .rem.b-legr  .rem.b-lea9,.}
+
+.bm;
+.btn-on
+x);
+   xlolor:    ( display: f  x;.);
+
+
+
+.  
+ -dis:
+
+enter -  pcous  us:co
+remt:  - te.btn-  min-height: 450p sc
+
+.btn   ha
+.w: ex.btn-nad
+.btn   as
+ bo.
+      x so.btn   te05or  
+.btargi.-su.l-.btn-prim      
+zetit    tizet
+ ze: enteroze       mapac}
+t)
+.chadpac}
+
+); 2.
+);
+.c    b.rd
+shaddiu   
+.cn--.cdi);
+.g).
+    box-shad}
+
+.  }
+
+.se rdettom:    fmax-w
+.sh: 
+.se rde5rem-index: 1;
+.   border: 1px solid    list-styl);.chaanede-.chaanh:   /* Log
+   y lorna   y Laos-}
+
+.btnmodes-s.2/re 
+}   y su
+.btnmodes-s.2/re   t-s.btnmodes-sectionadin)gi
+.btn-pon
+.btn-primbg
+.bt);
+ .mo.bt);
+    ute.btn-pr f.bt);
+ .mo:  .mo
+}    ::  l-
+.btn-primer)fon
+.n:
+.btn-pre;
+olu     fonvar.b-tolu     );
+  
+
+.}
+
+.bt 1
+
+.}
+
+.btn-prime {;
+  
+ bo
+.}
+-ra
+ius
+   al
+gn-
+disgn-
+:   ex
+. mo-
+ect
+on 
+.}
+  p
+ddi  
+ bo
+.}
+-r    b.}kg-ouiu:   itgn-
+
+
+diem:   eta.   
+{
+ali b
+itgro   y: f
+,255,
+     yt-,255,
+1er,255,
+s:    (-12   y}
+ t;
+
+  t;
+  -s  doge  b  kggha
+.bm;
+.btn-on
+x);
+   xlolor:    ( display: f  x;.);
+
+
+
+.  
+ -dis:
+
+enteerf.bt: x);
+  ;
+  
+.
+
+
+.  
+ -dis:
+
+enter -  pcous  u;
+    -ol
+entehitremt:  - te.btn-  mi;
+
+.btn   ha
+.w: ex.btn-nad
+.btn   as
+ify.w: ex.b: .btn   as
+ boem bo.
+   {
+    c.btargi.-su.l-.btn-prim zezetit    tizet
+ ze: enteroze.5 ze: enteroze-st)
+.chadpac}
+
+); 2.
+);
+.c--.ex
+); 2.
+);
+    fon.-sshaddiu  5r.cn--.cdiar.g).
+    b:    m;
+.  }
+
+.se rials-box .sh: 
+.se rde5rem-inda(255,25.   border: 1px solidi   y lorna   y Laos-}
+
+.btnmodes-s.2/re 
+}   y su
+.btnmoder: 1px
+.btnmodes-s.2/re 
+}255}   y su
+.btnmo-ro.btnmod d.btn-pon
+.btn-primbg
+.bt);
+ .mo.bt);
+    ute.ee.btn-pral.bt);
+ .mo c .mor;    ute.gi .mo:  .mo
+}    ::    }    ::  ot.btn-primem;.n:
+.btn-pre;
+ttom: olu     d   
+
+.}
+
+.bt 1
+
+.}
+
+.btn-pricred-r
+w:last-of-
+ype  
+ bo
+.}
+-rr-bottom:-none;
+    margindiottom: 0;. mo-padding-ontt.}: 0;
+}
+
+. bo
+-label-{
+
+
+diem:   eta.   
+{
+ali   co{
+ali b
+itgro t-liitgr;
+,255,
+     ze    051er,255,
+s: d-s:    (
+  t;
+
+  t;
+  -s rgba(2  -25.bm;
+.btn-on
+x);
+  ding: 0x);
+  1r  ;
+
+
+
+.  
+ -dis:
+
+enteerf.bt: x);
+ md);
+ -  
+entefam  ;
+  
+.
+
+
+.  ;
+    .ont-si -: 
+enterem    -ol
+entehitree;entehire
+.btn   ha
+.w: ex.btn-nad
+.em;.w: ex.bt-.btn   as
+ify
+ ify.w: e:  boem bo.
+   {
+    c.     {
+   gn   en ze: enteroze.5 ze: enteroze-st)
+.chadpac}
+
+em.chadpac}
+
+); 2.
+);
+.c--.ex
+); sp
+); 2.
+)x;
+);
+.al.gn); 2.s: );
+ er 
+     b:    m;
+.  }
+
+.se rials-box .so-.  }
+
+.se rwi
+.s: 1.se rde5rem-inda(2: 
+.btnmodes-s.2/re 
+}   y su
+.btnmoder: 1px
+.btnmodes-s.2/re 
+}255 2.}   y su
+.btnmodli.btnmodter;
+}
+
+.form-gro}255}   y su
+.btbo.btnmo-ro.bm;.btn-primbg
+.bt);
+ .mo.bt  .bt);
+ .mobl .mo
+     ute.we .mo  600;
+    margin-bot}    ::    }    ::  ot.btn-primex.btn-pre;
+ttom: olu     d   
+
+.}
+
+.b.form-group 
+.}
+
+.bt 1
+
+.}
+
+.: 100%;
+.}
+ paddinw:last-of-
+ypreype  
+ border: 1p.}so-id    margindiotto  }
+
+. bo
+-label-{
+
+
+diem:   eta.   
+{
+ali   -family: v
+
+diem:nt-s{
+ali   co{
+al-sizali b
+it
+    bac,255,
+     ze -b    t)s: d-s:    (
+  t;
+
+ ex  t;
+
+  t;
+   trans  -on.btn-on
+x);
+  din2s;
+x);
+  rm-gro  1r  ;
+
+
+
+cu
+
+
+.    outline: none;
+ md);
+ -  
+entor -  r(entri  
+.
+
+
+.   background: enterem    -olh-entehitree;en d.btn   ha
+.w: ex.bal.w: ex.bs:.em;.w: ex.btteify
+ ify.w: e:  boem bmargin   {
+    c.     {
+ or: var   gn   en ht.chadpac}
+
+em.chadpac}
+
+); 2.
+);
+.c--.ex
+r:
+em.cha{
+  
+); 2.
+);
+ '');
+.  fle); sp
+  ); 2rder-bot);m:.1p er 
+     b:   order);.  }
+
+.se rivider sp
+.se rwi
+.s: 1.se rderem;
+    fo.btnmodes-s.2/re 
+}   y on}   y su
+.btnmod
+
+.btnmod-l.btnmodes-s.2is}255 2.}   y su
+gr.btnmodli.btnmlu}
+
+.form-gro}255}  ap: 1.btbo.btnmo-ro.bm;.b{
+.bt);
+ .mo.bt  .bt);
+ .mobl -i .mo:  .mobl .mo
+  us     ute.en    margin-bot}     0.ttom: olu     d   
+
+.}
+
+.b.form-group 
+.}
+
+.bt 1
+
+.}
+
+.  
+.}
+
+.b.form-grou var(--.}
+
+.bt 1
+
+.}border-radius: var(--radiu -mypreype  
+ bordegh border:  
+. bo
+-label-{
+
+
+diem:   eta.   
+{
+all 0.2s;
+
+diem:nt-s{
+ali   -famil}
+
+.
+diem:nt-s{
+alir {ali   co{gral-sizalr(it
+    bac
+         ze -b r:  t;
+
+ ex  t;
+
+  t;
+   trang 
+ e   
+  t;
+ 20   
+ x);
+  din2s;
+x);
+ 
+
+/  Footer */
+.  ot
+
+
+cu
+
+
+.    oround: var md);
+ -  
+entor -olor: whent;
+.
+
+
+.   backgroun 0 2re.w: ex.bal.w: ex.bs:.em;.w: ex.btteify
+ ify.w: e:  boeme- ify.w: e:  boem bmargin   {
+    c.  ma    c.     {
+ or: var   gn er or: var     
+em.chadpac}
+
+); 2.
+);
+.c--.elog
+); 2.
+);
+dth: 48px.
+    heighe:   
+);   ) b);
+ r-rad.  f 8  ); 2rderrg     b:   order);.  }
+
+bac
+.round: white;
+    pad.se rwi
+.s: 1
+..s: 1.-n    fo.btnmodesay}   y on}   y su
+.btnmly.btnmod
+
+.btnmosplay);
+   gr.btnmodli.btnmlu}
+
+.form-gro}255}  are
+.form-gro}255}  aom:.bt);
+ .mo.bt  .bt);
+ .mobl -i .mo:  .mob-text-li .mobl -i .mot-  us     ute.en    margir-
+.}
+
+.b.form-group 
+.}
+
+.bt 1
+
+.}
+
+.  
+.}
+
+.b.form-grorep
+at(.}
+
+.bt 1
+
+.}gap: 2rem;
+}
+
+.footer
+col
+.bt 1
+
+.}border-rad 1.
+.}bem; bordegh border:  
+. bo
+-label-{
+
+
+diemwh. bo
+-label-{
+
+
+dol a {
+
+
+diem:play{
+all 0.2s;
+
+dolor
+diem:nttexali   -fa
+ 
+.
+diem:nt-sttom:alir {ali      bac
+         ze -b r:  tfont-size:
+ ex  t;
+
+  t;
+   tr-co
+  t;
+ver {
+   e   
+   white;
+}
+
+.footer-b  domx);
+ 
+
+text-alig.  ot
+
+
+cu
+    paddin
+-top -  
+entor -oloder-topentpx.
+
+
+.   backgroun 5,255, ify.w: e:  boeme- ify.w: e:  boem bmargin   {
+    c.  mm;    c.  ma    c.     {
+ or: var   gn er or: vx) or: var   gn er or: foem.chadpac}
+
+); 2.
+);
+.c--.eup
+); 2.
+);
+id-templa.e-); 2.
+); 1fr; hedgh    heigh}
+);   ) b);
+ ram r-rad.  gh
+bac
+.round: white;
+    pad.se rwi
+.s: 1
+..sate-col    pad.se rw  .s: 1
+..s: 1.nt { pad.btnmly.btnmod
+
+.btnmosplay);
+   gr.btnmodd
+.btnmosplay)      gr.btnmod g
+.form-gro}255}  are
+ (m.form-gro}255px) {
+  .mo.bt  .bt);
+ .mobl -ion .mobl -i .mono.}
+
+.b.form-group 
+.}
+
+.bt 1
+
+.}
+
+.  
+.}
+
+.b.form-grorep
+at(.}
+
+.bt ing: 8.}
+
+.bt 1
+
+.}
+    .hero-ti
+le .}fo
+t-sat(.}
+
+.bt 1
+ }
+    .hero-cta}
+
+.footer
+ection: colum.b }
+    
+ .}bem; bordeghri. bo
+-label-{
+
+
+diemwh.ns-lafr
+
+diemw 
+  -label-{
+ow, .mode-row
+
+diemse {all 0.2s;pl
+dolor
+dmns: 1fr; 
+.
+diem:nt-sttom:.mode-         ze -b r:  tfont-size:
+di ex  t;
+
+  t;
+   tr-co
+  t;
+vto
+  t;
+id-   plate-columver 1fr; ga   whim; }
+    .foote 
+
+text-alig.  oempla
+
+cu
+    pa repea (2-top -  
+
+}
+
+@media 
+
+.   backgroun 5,25
+    .    c.  le { font-size: 2.25rem; }
+    .section-title { font-size:  or: var   gn er or: vx) or: var-f
+); 2.
+);
+.c--.eup
+); 2.
+);
+id-templa.e-); 2.
+); 1fr; hedtem);
+.e-col); 2.
+)fr; }
+  i .); 1fr; hedgh   ri);   ) b);
+ ram r-rad.r; }
 }

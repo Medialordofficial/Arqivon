@@ -162,7 +162,7 @@ class SettingsScreen extends ConsumerWidget {
                     value: settings.isDarkMode,
                     onChanged: (_) =>
                         ref.read(settingsProvider.notifier).toggleTheme(),
-                    activeColor: const Color(0xFF7C3AED),
+                    activeThumbColor: const Color(0xFF7C3AED),
                     contentPadding: EdgeInsets.zero,
                   ),
                 ],
@@ -239,25 +239,45 @@ class SettingsScreen extends ConsumerWidget {
             _sectionHeader(context, 'ABOUT'),
             GlassmorphicCard(
               margin: const EdgeInsets.only(bottom: 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Text(
-                    'Arqivon',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.3,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'The Living Lens · v2.0.0',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Arqivon',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'The Living Lens · v2.0.0',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
                           .withOpacity(0.5),
                     ),
                   ),

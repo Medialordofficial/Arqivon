@@ -36,7 +36,9 @@ class WebSocketService {
 
   Future<void> connect() async {
     if (_state == WsConnectionState.connected ||
-        _state == WsConnectionState.connecting) return;
+        _state == WsConnectionState.connecting) {
+      return;
+    }
 
     _intentionalClose = false;
     _setState(WsConnectionState.connecting);

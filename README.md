@@ -1,4 +1,4 @@
-# Arqivon – The Living Lens
+# <img src="app/assets/images/logo.png" width="48" height="48" align="center"> Arqivon – The Living Lens
 
 > **A real-time, multimodal Live Agent that sees what you see, hears what you hear, and acts before you ask.**
 
