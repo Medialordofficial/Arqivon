@@ -22,22 +22,22 @@ void main() async {
       statusBarIconBrightness: Brightness.light,
     ),
   );
-  runApp(const ProviderScope(child: ArqivoApp()));
+  runApp(const ProviderScope(child: ArqivonApp()));
 }
 
-class ArqivoApp extends ConsumerWidget {
-  const ArqivoApp({super.key});
+class ArqivonApp extends ConsumerWidget {
+  const ArqivonApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(settingsProvider).themeMode;
 
     return MaterialApp(
-      title: 'Arqivo',
+      title: 'Arqivon',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: ArqivoTheme.lightTheme,
-      darkTheme: ArqivoTheme.darkTheme,
+      theme: ArqivonTheme.lightTheme,
+      darkTheme: ArqivonTheme.darkTheme,
       home: const AuthGate(),
     );
   }

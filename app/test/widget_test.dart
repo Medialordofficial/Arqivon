@@ -9,12 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:arqivo/main.dart';
+import 'package:arqivon/main.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: ArqivoApp()));
+    await tester.pumpWidget(const ProviderScope(child: ArqivonApp()));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

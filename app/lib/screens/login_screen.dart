@@ -115,7 +115,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final appleAvailable = ref.read(authServiceProvider).isAppleSignInAvailable;
 
     return Scaffold(
-      backgroundColor: ArqivoTheme.white,
+      backgroundColor: ArqivonTheme.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -153,11 +153,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 14),
                       const Text(
-                        'Arqivo',
+                        'Arqivon',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
-                          color: ArqivoTheme.espresso,
+                          color: ArqivonTheme.espresso,
                           letterSpacing: 0.3,
                         ),
                       ),
@@ -166,7 +166,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         'The Living Lens',
                         style: TextStyle(
                           fontSize: 13,
-                          color: ArqivoTheme.warmGrey,
+                          color: ArqivonTheme.warmGrey,
                         ),
                       ),
                     ]),
@@ -177,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // ── Auth card ──────────────────────────────
                   Container(
                     decoration: BoxDecoration(
-                      color: ArqivoTheme.white,
+                      color: ArqivonTheme.white,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: const Color(0xFFE8D9CF)),
                       boxShadow: const [
@@ -199,17 +199,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             style: const TextStyle(
                               fontSize: 19,
                               fontWeight: FontWeight.w700,
-                              color: ArqivoTheme.inkBrown,
+                              color: ArqivonTheme.inkBrown,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             _isLogin
                                 ? 'Sign in to continue'
-                                : 'Join Arqivo today',
+                                : 'Join Arqivon today',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: ArqivoTheme.warmGrey,
+                              color: ArqivonTheme.warmGrey,
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -220,7 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             style: const TextStyle(
-                                fontSize: 14, color: ArqivoTheme.inkBrown),
+                                fontSize: 14, color: ArqivonTheme.inkBrown),
                             decoration: const InputDecoration(
                               labelText: 'Email address',
                               prefixIcon: Icon(Icons.email_outlined, size: 19),
@@ -244,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => _submitEmail(),
                             style: const TextStyle(
-                                fontSize: 14, color: ArqivoTheme.inkBrown),
+                                fontSize: 14, color: ArqivonTheme.inkBrown),
                             decoration: InputDecoration(
                               labelText: 'Password',
                               prefixIcon:
@@ -255,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       ? Icons.visibility_off_outlined
                                       : Icons.visibility_outlined,
                                   size: 19,
-                                  color: ArqivoTheme.warmGrey,
+                                  color: ArqivonTheme.warmGrey,
                                 ),
                                 onPressed: () => setState(
                                     () => _obscurePassword = !_obscurePassword),
@@ -287,7 +287,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 child: const Text('Forgot password?',
                                     style: TextStyle(
                                         fontSize: 12,
-                                        color: ArqivoTheme.caramel)),
+                                        color: ArqivonTheme.caramel)),
                               ),
                             ),
                           ] else
@@ -308,13 +308,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: Row(
                                 children: [
                                   const Icon(Icons.error_outline,
-                                      size: 16, color: ArqivoTheme.errorRed),
+                                      size: 16, color: ArqivonTheme.errorRed),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(_errorMessage!,
                                         style: const TextStyle(
                                             fontSize: 12,
-                                            color: ArqivoTheme.errorRed)),
+                                            color: ArqivonTheme.errorRed)),
                                   ),
                                 ],
                               ),
@@ -329,7 +329,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: FilledButton(
                               onPressed: _loading ? null : _submitEmail,
                               style: FilledButton.styleFrom(
-                                backgroundColor: ArqivoTheme.espresso,
+                                backgroundColor: ArqivonTheme.espresso,
                                 disabledBackgroundColor:
                                     const Color(0xFFBBA090),
                                 shape: RoundedRectangleBorder(
@@ -364,7 +364,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ? "Don't have an account?"
                                     : 'Already have an account?',
                                 style: const TextStyle(
-                                    fontSize: 13, color: ArqivoTheme.warmGrey),
+                                    fontSize: 13, color: ArqivonTheme.warmGrey),
                               ),
                               TextButton(
                                 onPressed: () => setState(() {
@@ -382,7 +382,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: ArqivoTheme.caramel,
+                                    color: ArqivonTheme.caramel,
                                   ),
                                 ),
                               ),
@@ -405,7 +405,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           'or continue with',
                           style: TextStyle(
                               fontSize: 12,
-                              color: ArqivoTheme.warmGrey.withOpacity(0.8)),
+                              color: ArqivonTheme.warmGrey.withOpacity(0.8)),
                         ),
                       ),
                       const Expanded(child: Divider()),
@@ -430,7 +430,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: _SocialButton(
                             onPressed: _loading ? null : _signInWithApple,
                             icon: const Icon(Icons.apple_rounded,
-                                size: 20, color: ArqivoTheme.espresso),
+                                size: 20, color: ArqivonTheme.espresso),
                             label: 'Apple',
                           ),
                         ),
@@ -468,8 +468,8 @@ class _SocialButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: ArqivoTheme.inkBrown,
-          backgroundColor: ArqivoTheme.cream,
+          foregroundColor: ArqivonTheme.inkBrown,
+          backgroundColor: ArqivonTheme.cream,
           side: const BorderSide(color: Color(0xFFDDD0C8)),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -483,7 +483,7 @@ class _SocialButton extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: ArqivoTheme.inkBrown)),
+                    color: ArqivonTheme.inkBrown)),
           ],
         ),
       ),

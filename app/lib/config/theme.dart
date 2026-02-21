@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Arqivo — Coffee Brown + Pure White design system.
-class ArqivoTheme {
-  ArqivoTheme._();
+class ArqivonTheme {
+  ArqivonTheme._();
 
   // ── Palette ───────────────────────────────────────────────────────────
 

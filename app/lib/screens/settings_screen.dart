@@ -258,7 +258,7 @@ class SettingsScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Arqivo',
+                            'Arqivon',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
