@@ -158,7 +158,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Background: camera in A/V mode, dark gradient in audio-only ──
+          // ── Background ──────────────────────────────────────────
           if (_inputMode == _LiveInputMode.audioVideo &&
               _cameraReady &&
               _cameraController != null)
@@ -166,65 +166,58 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               child: CameraPreview(_cameraController!),
             )
           else
+            // Deep purple gradient — premium AI assistant look
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF131929), Color(0xFF0B0F1A)],
-                ),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 110,
-                      height: 110,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF5B5FEF).withOpacity(0.12),
-                        border: Border.all(
-                          color: const Color(0xFF5B5FEF).withOpacity(0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: const Icon(Icons.mic_rounded,
-                          size: 50, color: Color(0xFF818CF8)),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Audio Mode',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white54,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Camera is off — saving battery.',
-                      style: TextStyle(fontSize: 12, color: Colors.white30),
-                    ),
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0D0820),
+                    Color(0xFF130A2E),
+                    Color(0xFF0F1035),
+                    Color(0xFF070510),
                   ],
+                  stops: [0.0, 0.3, 0.65, 1.0],
                 ),
               ),
             ),
 
-          // ── Dark gradient overlay for readability ──────────────────
-          Positioned.fill(
+          // ── Gradient scrim (camera mode only) ─────────────────────
+          if (_inputMode == _LiveInputMode.audioVideo)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.45),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                    stops: const [0, 0.2, 0.55, 1.0],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── Bottom fade scrim (always) ─────────────────────────────
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 200,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.35),
                     Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.75),
+                    const Color(0xFF070510).withValues(alpha: 0.95),
                   ],
-                  stops: const [0, 0.2, 0.55, 1.0],
                 ),
               ),
             ),
@@ -281,29 +274,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               },
             ),
           ),
-
-          // ── Transcript overlay ──────────────────────────────────────
-          if (transcript != null && transcript.isNotEmpty)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 94,
-              left: 20,
-              right: 20,
-              child: GlassmorphicCard(
-                blur: 20,
-                opacity: 0.15,
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  transcript,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
 
           // ── Translator: live translation subtitle ──────────────────
           if (mode == AgentMode.translator && currentTranslation != null)
@@ -368,73 +338,79 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               ),
             ),
 
-          // ── Live wave animation ─────────────────────────────────────
-          if (isStreaming)
-            Positioned(
-              bottom: 140,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: LiveWave(
-                  isListening: isStreaming,
-                  isResponding: false,
-                  color: mode.color,
-                  size: 200,
-                ),
+          // ── Centered orb — always visible ─────────────────────────
+          Positioned.fill(
+            child: Align(
+              alignment: const Alignment(0, -0.20),
+              child: LiveWave(
+                isListening: isStreaming,
+                isResponding: false,
+                color: mode.color,
+                size: 270,
               ),
             ),
+          ),
 
-          // ── Text input toggle ───────────────────────────────────────
-          if (_showTextInput)
-            Positioned(
-              bottom: 100,
-              left: 16,
-              right: 16,
-              child: GlassmorphicCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _textController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: _hintTextForMode(mode),
-                          hintStyle: const TextStyle(color: Colors.white38),
-                          border: InputBorder.none,
-                        ),
-                        onSubmitted: (_) => _sendTextMessage(),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _sendTextMessage,
-                      icon: Icon(Icons.send_rounded, color: mode.color),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Bottom controls ─────────────────────────────────────────
+          // ── Idle prompt / transcript beneath orb ───────────────────
           Positioned(
-            bottom: 30,
+            left: 24,
+            right: 24,
+            bottom: 190,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (transcript != null && transcript.isNotEmpty)
+                  Text(
+                    transcript,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                      letterSpacing: -0.3,
+                    ),
+                  )
+                else
+                  Text(
+                    isStreaming
+                        ? 'Listening…'
+                        : 'Go ahead, I\'m ready to assist',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Bottom area: mic + text input ──────────────────────────
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 16,
             left: 0,
             right: 0,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Input mode toggle
+                // Input mode toggle pill
                 if (!isStreaming)
                   Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.45),
+                      color: Colors.white.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.12), width: 1),
+                          color: Colors.white.withValues(alpha: 0.10),
+                          width: 1),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -458,44 +434,16 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     ),
                   ),
 
+                // Side controls + mic button row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Text input toggle
+                    // Camera flip (A/V mode) or keyboard toggle
                     _controlButton(
-                      icon: Icons.keyboard_rounded,
-                      onPressed: () =>
-                          setState(() => _showTextInput = !_showTextInput),
-                    ),
-                    // Main record button
-                    GestureDetector(
-                      onTap: _toggleSession,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isStreaming ? Colors.red : mode.color,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isStreaming ? Colors.red : mode.color)
-                                  .withOpacity(0.4),
-                              blurRadius: 20,
-                              spreadRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          isStreaming ? Icons.stop_rounded : Icons.mic_rounded,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    // Camera flip — only relevant in A/V mode
-                    _controlButton(
-                      icon: Icons.flip_camera_ios_rounded,
+                      icon: _inputMode == _LiveInputMode.audioVideo
+                          ? Icons.flip_camera_ios_rounded
+                          : Icons.keyboard_rounded,
                       onPressed: _inputMode == _LiveInputMode.audioVideo
                           ? () async {
                               final cameras = await availableCameras();
@@ -503,7 +451,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               final current = _cameraController?.description;
                               final next = cameras.firstWhere(
                                 (c) =>
-                                    c.lensDirection != current?.lensDirection,
+                                    c.lensDirection !=
+                                    current?.lensDirection,
                                 orElse: () => cameras.first,
                               );
                               await _cameraController?.dispose();
@@ -515,9 +464,104 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               await _cameraController!.initialize();
                               if (mounted) setState(() {});
                             }
-                          : null,
+                          : () => setState(
+                              () => _showTextInput = !_showTextInput),
+                    ),
+
+                    // ── Main mic / stop button ──────────────────────
+                    GestureDetector(
+                      onTap: _toggleSession,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: isStreaming
+                              ? null
+                              : const LinearGradient(
+                                  colors: [
+                                    Color(0xFF7C3AED),
+                                    Color(0xFF5B5FEF),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                          color: isStreaming ? Colors.red : null,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isStreaming
+                                      ? Colors.red
+                                      : const Color(0xFF5B5FEF))
+                                  .withValues(alpha: 0.50),
+                              blurRadius: 28,
+                              spreadRadius: 6,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isStreaming
+                              ? Icons.stop_rounded
+                              : Icons.mic_rounded,
+                          size: 32,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+
+                    // Placeholder side button (maintains layout symmetry)
+                    _controlButton(
+                      icon: Icons.more_horiz_rounded,
+                      onPressed: null,
                     ),
                   ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── Text input field ─────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.13),
+                          width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 15),
+                            decoration: InputDecoration(
+                              hintText: _hintTextForMode(mode),
+                              hintStyle: TextStyle(
+                                  color:
+                                      Colors.white.withValues(alpha: 0.35),
+                                  fontSize: 15),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14),
+                            ),
+                            onSubmitted: (_) => _sendTextMessage(),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _sendTextMessage,
+                          icon: const Icon(Icons.arrow_upward_rounded,
+                              color: Colors.white54),
+                          iconSize: 22,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

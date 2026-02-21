@@ -1,29 +1,28 @@
-import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-/// ChatGPT-style audio wave visualizer.
+/// Glowing volumetric orb — inspired by premium AI assistant UIs.
 ///
-/// Shows a breathing orb when idle, and smooth multi-layer sine wave bars
-/// when actively listening or responding — seamless, fluid, production quality.
+/// Idle: soft breathing sphere with cyan→blue→purple radial gradient.
+/// Listening: orb expands, outer glow intensifies, ripple rings emanate.
+/// Responding: orb pulses with warmer magenta shift.
 class LiveWave extends StatefulWidget {
   const LiveWave({
     super.key,
     required this.isListening,
     required this.isResponding,
     this.color,
-    this.size = 220,
+    this.size = 260,
   });
 
-  /// True while the user's microphone is open.
   final bool isListening;
-
-  /// True while the AI is playing back audio.
   final bool isResponding;
 
+  /// Accent tint (blended subtly into the orb's palette).
   final Color? color;
 
-  /// Diameter of the orb / wave area.
+  /// Bounding square for the orb.
   final double size;
 
   @override
@@ -31,15 +30,17 @@ class LiveWave extends StatefulWidget {
 }
 
 class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
-  // Breathing (idle pulse)
+  // Slow breathing — always running
   late final AnimationController _breathCtrl;
   late final Animation<double> _breathAnim;
 
-  // Wave scroll (continuous left-to-right wave phase)
-  late final AnimationController _waveCtrl;
+  // Ripple rings — only when active
+  late final AnimationController _ripple1;
+  late final AnimationController _ripple2;
+  late final AnimationController _ripple3;
 
-  // Fade between idle orb and active bars
-  late final AnimationController _fadeCtrl;
+  // Active state crossfade
+  late final AnimationController _activeCtrl;
 
   @override
   void initState() {
@@ -47,7 +48,7 @@ class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
 
     _breathCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 3000),
     )..repeat(reverse: true);
 
     _breathAnim = CurvedAnimation(
@@ -55,17 +56,29 @@ class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
       curve: Curves.easeInOutSine,
     );
 
-    _waveCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat();
+    // Staggered ripple rings
+    _ripple1 = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2000))
+      ..repeat();
+    _ripple2 = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2000))
+      ..repeat();
+    _ripple3 = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2000))
+      ..repeat();
 
-    _fadeCtrl = AnimationController(
+    // Stagger start times
+    Future.delayed(const Duration(milliseconds: 650),
+        () => mounted ? _ripple2.forward() : null);
+    Future.delayed(const Duration(milliseconds: 1300),
+        () => mounted ? _ripple3.forward() : null);
+
+    _activeCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 500),
     );
 
-    _syncFade();
+    _syncActive();
   }
 
   @override
@@ -73,115 +86,51 @@ class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
     super.didUpdateWidget(old);
     if (old.isListening != widget.isListening ||
         old.isResponding != widget.isResponding) {
-      _syncFade();
+      _syncActive();
     }
   }
 
-  void _syncFade() {
-    final active = widget.isListening || widget.isResponding;
-    if (active) {
-      _fadeCtrl.forward();
+  void _syncActive() {
+    if (widget.isListening || widget.isResponding) {
+      _activeCtrl.forward();
     } else {
-      _fadeCtrl.reverse();
+      _activeCtrl.reverse();
     }
   }
 
   @override
   void dispose() {
     _breathCtrl.dispose();
-    _waveCtrl.dispose();
-    _fadeCtrl.dispose();
+    _ripple1.dispose();
+    _ripple2.dispose();
+    _ripple3.dispose();
+    _activeCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = widget.color ?? const Color(0xFF5B5FEF);
-    final isActive = widget.isListening || widget.isResponding;
-
     return AnimatedBuilder(
-      animation: Listenable.merge([_breathAnim, _waveCtrl, _fadeCtrl]),
+      animation: Listenable.merge(
+          [_breathAnim, _ripple1, _ripple2, _ripple3, _activeCtrl]),
       builder: (context, _) {
+        final breathe = _breathAnim.value;
+        final active = _activeCtrl.value;
+        final isResponding = widget.isResponding;
+
         return SizedBox(
           width: widget.size,
           height: widget.size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // ── Outer glow ring 3 ─────────────────────────────────
-              _GlowRing(
-                diameter: widget.size *
-                    (0.88 + 0.06 * _breathAnim.value) *
-                    (1 + 0.08 * _fadeCtrl.value),
-                color: primary,
-                opacity: 0.06 + 0.04 * _breathAnim.value,
-              ),
-              // ── Outer glow ring 2 ────────────────────────────────
-              _GlowRing(
-                diameter: widget.size *
-                    (0.70 + 0.05 * _breathAnim.value) *
-                    (1 + 0.06 * _fadeCtrl.value),
-                color: primary,
-                opacity: 0.1 + 0.05 * _breathAnim.value,
-              ),
-              // ── Inner glow ring ───────────────────────────────────
-              _GlowRing(
-                diameter: widget.size *
-                    (0.52 + 0.04 * _breathAnim.value) *
-                    (1 + 0.04 * _fadeCtrl.value),
-                color: primary,
-                opacity: 0.18 + 0.08 * _breathAnim.value,
-              ),
-
-              // ── Wave bars (active) ────────────────────────────────
-              Opacity(
-                opacity: _fadeCtrl.value.clamp(0.0, 1.0),
-                child: CustomPaint(
-                  size: Size(widget.size, widget.size),
-                  painter: _WaveBarPainter(
-                    phase: _waveCtrl.value * 2 * pi,
-                    breathValue: _breathAnim.value,
-                    color: primary,
-                    isResponding: widget.isResponding,
-                  ),
-                ),
-              ),
-
-              // ── Core orb ─────────────────────────────────────────
-              Container(
-                width: widget.size * (0.32 + 0.04 * _breathAnim.value),
-                height: widget.size * (0.32 + 0.04 * _breathAnim.value),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      isActive
-                          ? Color.lerp(primary, Colors.white, 0.3)!
-                          : primary.withValues(alpha: 0.9),
-                      primary,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primary.withValues(
-                          alpha: 0.5 + 0.2 * _breathAnim.value),
-                      blurRadius:
-                          24 + 16 * _breathAnim.value + 12 * _fadeCtrl.value,
-                      spreadRadius: 2 + 4 * _fadeCtrl.value,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  isActive
-                      ? (widget.isResponding
-                          ? Icons.volume_up_rounded
-                          : Icons.mic_rounded)
-                      : Icons.mic_none_rounded,
-                  color: Colors.white,
-                  size: widget.size * 0.14,
-                ),
-              ),
-            ],
+          child: CustomPaint(
+            painter: _OrbPainter(
+              breathe: breathe,
+              active: active,
+              ripple1: _ripple1.value,
+              ripple2: _ripple2.value,
+              ripple3: _ripple3.value,
+              isResponding: isResponding,
+              accentColor: widget.color,
+            ),
           ),
         );
       },
@@ -189,100 +138,172 @@ class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
   }
 }
 
-// ── Glow ring ─────────────────────────────────────────────────────────────────
-class _GlowRing extends StatelessWidget {
-  const _GlowRing({
-    required this.diameter,
-    required this.color,
-    required this.opacity,
-  });
-
-  final double diameter;
-  final Color color;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: diameter,
-      height: diameter,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: color.withValues(alpha: (opacity * 0.9).clamp(0, 1)),
-          width: 1.5,
-        ),
-        color: color.withValues(alpha: (opacity * 0.35).clamp(0, 1)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: (opacity * 0.5).clamp(0, 1)),
-            blurRadius: 12,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Sine-wave bar painter ──────────────────────────────────────────────────────
-class _WaveBarPainter extends CustomPainter {
-  _WaveBarPainter({
-    required this.phase,
-    required this.breathValue,
-    required this.color,
+// ── Orb painter ───────────────────────────────────────────────────────────────
+class _OrbPainter extends CustomPainter {
+  const _OrbPainter({
+    required this.breathe,
+    required this.active,
+    required this.ripple1,
+    required this.ripple2,
+    required this.ripple3,
     required this.isResponding,
+    this.accentColor,
   });
 
-  final double phase;
-  final double breathValue;
-  final Color color;
+  final double breathe;
+  final double active;
+  final double ripple1;
+  final double ripple2;
+  final double ripple3;
   final bool isResponding;
+  final Color? accentColor;
 
-  static const int _barCount = 40;
-  static final Random _rng = Random(7);
-  // Pre-generate per-bar noise offsets so they're consistent
-  static final List<double> _noise =
-      List.generate(_barCount, (i) => _rng.nextDouble());
+  // Orb color palette — matches the reference image
+  static const _cyanHi = Color(0xFF7FFFF4);
+  static const _blueCore = Color(0xFF1E90FF);
+  static const _indigoBod = Color(0xFF4B5EFC);
+  static const _purpleEdge = Color(0xFF7C3AED);
+  static const _magentaEdge = Color(0xFFC026D3);
+  static const _deepEdge = Color(0xFF1A003A);
 
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final maxR = size.width * 0.48;
-    final barW = (2 * pi * maxR * 0.55) / _barCount;
+    final baseR = size.width * (0.375 + 0.025 * breathe);
+    final orbR = baseR * (1.0 + 0.04 * active);
 
-    for (int i = 0; i < _barCount; i++) {
-      final angle = (2 * pi * i / _barCount) - pi / 2;
+    // ── 1. Ambient outer glow — largest, very soft ────────────────────
+    _paintGlow(canvas, cx, cy, orbR * 1.95,
+        _purpleEdge.withValues(alpha: 0.08 + 0.06 * active),
+        _purpleEdge.withValues(alpha: 0.0), blurSigma: orbR * 0.6);
 
-      // Wave amplitude: sine wave with phase scroll + per-bar noise
-      final waveVal = 0.5 + 0.5 * sin(phase * 1.3 + i * (2 * pi / _barCount));
-      final noised = 0.4 + 0.6 * (waveVal * (0.6 + 0.4 * _noise[i]));
-      final amplitude = noised *
-          (isResponding ? 0.88 : 0.65) *
-          (0.7 + 0.3 * breathValue) *
-          maxR *
-          0.50;
+    _paintGlow(canvas, cx, cy, orbR * 1.58,
+        _indigoBod.withValues(alpha: 0.14 + 0.10 * active),
+        _indigoBod.withValues(alpha: 0.0), blurSigma: orbR * 0.4);
 
-      final barLen = amplitude.clamp(3.0, maxR * 0.52);
-      final innerR = maxR * 0.38;
+    // ── 2. Ripple rings (visible when active) ─────────────────────────
+    _paintRipple(canvas, cx, cy, orbR, ripple1, active);
+    _paintRipple(canvas, cx, cy, orbR, ripple2, active);
+    _paintRipple(canvas, cx, cy, orbR, ripple3, active);
 
-      final startX = cx + innerR * cos(angle);
-      final startY = cy + innerR * sin(angle);
-      final endX = cx + (innerR + barLen) * cos(angle);
-      final endY = cy + (innerR + barLen) * sin(angle);
+    // ── 3. Core sphere — layered radial gradients ─────────────────────
+    final sphereGrad = ui.Gradient.radial(
+      Offset(cx - orbR * 0.30, cy - orbR * 0.28), // off-center focal highlight
+      orbR,
+      isResponding
+          ? [
+              const Color(0xFFE0B0FF), // warm lavender highlight
+              const Color(0xFF9B59F5),
+              _indigoBod,
+              _magentaEdge,
+              _deepEdge,
+            ]
+          : [
+              _cyanHi, // bright highlight (top-left)
+              const Color(0xFF56CCF2), // sky
+              _blueCore, // mid blue
+              _indigoBod, // indigo body
+              _purpleEdge, // purple edge
+              _deepEdge, // deep shadow
+            ],
+      isResponding
+          ? [0.0, 0.22, 0.50, 0.80, 1.0]
+          : [0.0, 0.18, 0.40, 0.65, 0.85, 1.0],
+    );
 
-      final opacity = (0.55 + 0.45 * noised).clamp(0.0, 1.0);
-      final paint = Paint()
-        ..color = color.withValues(alpha: opacity)
-        ..strokeWidth = barW * 0.58
-        ..strokeCap = StrokeCap.round;
+    final spherePaint = Paint()
+      ..shader = sphereGrad
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0);
 
-      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), paint);
-    }
+    canvas.drawCircle(Offset(cx, cy), orbR, spherePaint);
+
+    // ── 4. Specular highlight — small bright ellipse top-left ─────────
+    final hlPaint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(cx - orbR * 0.28, cy - orbR * 0.28),
+        orbR * 0.38,
+        [
+          Colors.white.withValues(alpha: 0.55),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+      );
+    canvas.drawCircle(
+        Offset(cx - orbR * 0.25, cy - orbR * 0.26), orbR * 0.38, hlPaint);
+
+    // ── 5. Edge rim glow ──────────────────────────────────────────────
+    final rimPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = orbR * 0.04
+      ..shader = ui.Gradient.sweep(
+        Offset(cx, cy),
+        [
+          _cyanHi.withValues(alpha: 0.0),
+          _cyanHi.withValues(alpha: 0.6),
+          _purpleEdge.withValues(alpha: 0.5),
+          _magentaEdge.withValues(alpha: 0.3),
+          _cyanHi.withValues(alpha: 0.0),
+        ],
+        [0.0, 0.18, 0.5, 0.75, 1.0],
+      )
+      ..maskFilter =
+          MaskFilter.blur(BlurStyle.normal, orbR * 0.04);
+    canvas.drawCircle(Offset(cx, cy), orbR - orbR * 0.02, rimPaint);
+
+    // ── 6. Inner micro glow center ────────────────────────────────────
+    final corePaint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(cx, cy),
+        orbR * 0.45,
+        [
+          _blueCore.withValues(alpha: 0.25),
+          _blueCore.withValues(alpha: 0.0),
+        ],
+      );
+    canvas.drawCircle(Offset(cx, cy), orbR * 0.45, corePaint);
+  }
+
+  void _paintGlow(
+    Canvas canvas,
+    double cx,
+    double cy,
+    double r,
+    Color inner,
+    Color outer, {
+    required double blurSigma,
+  }) {
+    final paint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(cx, cy),
+        r,
+        [inner, outer],
+      )
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma);
+    canvas.drawCircle(Offset(cx, cy), r, paint);
+  }
+
+  void _paintRipple(Canvas canvas, double cx, double cy, double orbR,
+      double rippleT, double activeAmt) {
+    if (activeAmt < 0.01) return;
+    // Ripple expands from 1x to ~1.9x orb radius and fades out
+    final curved = Curves.easeOut.transform(rippleT);
+    final r = orbR * (1.0 + curved * 0.9);
+    final alpha = (1.0 - curved) * 0.35 * activeAmt;
+    if (alpha < 0.01) return;
+    final paint = Paint()
+      ..color = _indigoBod.withValues(alpha: alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(Offset(cx, cy), r, paint);
   }
 
   @override
-  bool shouldRepaint(_WaveBarPainter old) =>
-      old.phase != phase || old.breathValue != breathValue;
+  bool shouldRepaint(_OrbPainter o) =>
+      o.breathe != breathe ||
+      o.active != active ||
+      o.ripple1 != ripple1 ||
+      o.ripple2 != ripple2 ||
+      o.ripple3 != ripple3;
 }
+
