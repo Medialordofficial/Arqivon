@@ -1,9 +1,11 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config/theme.dart';
+import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/firebase_provider.dart';
 import 'providers/settings_provider.dart';
@@ -15,18 +17,19 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Pre-warm SharedPreferences so SettingsNotifier returns real values
-  // on first build — prevents the brief dark→light theme flash.
-  await SharedPreferences.getInstance();
-  // Run orientation + overlay style before Firebase so the splash looks right
-  // immediately — Firebase init happens in the background via a FutureProvider.
+  // Initialise Firebase and SharedPreferences in parallel before the first
+  // frame — both are fast on-device and this removes the loading splash delay.
+  await Future.wait([
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    SharedPreferences.getInstance(),
+  ]);
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.white,
-      systemNavigationBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF0D0820),
+      systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
   runApp(const ProviderScope(child: ArqivonApp()));
@@ -61,6 +64,7 @@ class AuthGate extends ConsumerWidget {
     final firebaseAsync = ref.watch(firebaseInitProvider);
 
     return firebaseAsync.when(
+      // Firebase was already initialised in main() — this state is instant.
       loading: () => const _SplashScreen(),
       error: (e, _) => Scaffold(
         body: Center(child: Text('Startup error: $e')),
@@ -85,63 +89,67 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
+    return const Scaffold(
+      backgroundColor: Color(0xFF0D0820),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: ArqivonTheme.espresso,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: ArqivonTheme.espresso.withValues(alpha: 0.25),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.camera_alt_rounded,
-                color: Colors.white,
-                size: 38,
+            // App icon
+            SizedBox(
+              width: 100,
+              height: 100,
+              child: Image(
+                image: AssetImage('assets/images/logo.png'),
+                errorBuilder: _iconFallback,
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 28),
             Text(
               'Arqivon',
               style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: ArqivonTheme.espresso,
-                letterSpacing: -0.5,
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: -0.8,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 6),
             Text(
               'The Living Lens',
               style: TextStyle(
                 fontSize: 13,
-                color: ArqivonTheme.warmGrey,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: ArqivonTheme.caramel,
+                color: Color(0x99FFFFFF),
+                letterSpacing: 1.5,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  static Widget _iconFallback(BuildContext ctx, Object err, StackTrace? st) {
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF7C3AED), Color(0xFF5B5FEF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x667C3AED),
+            blurRadius: 32,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+      child: const Icon(Icons.mic_rounded, color: Colors.white, size: 48),
     );
   }
 }
@@ -174,7 +182,8 @@ class _MainNavigatorState extends State<MainNavigator> {
         decoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
             ),
           ),
         ),

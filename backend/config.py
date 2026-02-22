@@ -17,7 +17,7 @@ class Settings:
     """Immutable application settings."""
 
     gemini_api_key: str = field(default_factory=lambda: os.environ.get("GEMINI_API_KEY", ""))
-    gemini_model: str = field(default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-live-2.5-flash-native-audio"))
+    gemini_model: str = field(default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest"))
     gcp_project_id: str = field(default_factory=lambda: os.environ.get("GCP_PROJECT_ID", ""))
     gcs_bucket: str = field(default_factory=lambda: os.environ.get("GCS_BUCKET", ""))
 
