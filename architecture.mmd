@@ -13,7 +13,7 @@ graph TD
     end
 
     subgraph Google AI
-        Gemini[gemini-3.1-pro-preview Live API]
+        Gemini[Gemini 2.5 Flash Live API]
     end
 
     subgraph Firebase
@@ -35,4 +35,5 @@ graph TD
     WS_Client --> Spk
     
     ToolReg -->|upsert_firestore_memory| FS
-    Flutter App -->|Auth & Archive Fetch| Auth & FS
+    WS_Client -->|Auth| Auth
+    UI -->|Archive Fetch| FS

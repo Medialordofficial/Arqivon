@@ -14,7 +14,7 @@
 - **Audio (User - Interrupting):** "Wait, what about the smaller text below it?"
 - **Visual:** UI shows Arqivo instantly muting and listening.
 - **Audio (Arqivo):** "Ah, the smaller text says 'Tow Away Zone'."
-- **Narration:** "Powered by Gemini 3.1 Pro Preview, Arqivo supports native Voice Activity Detection for seamless, natural conversations."
+- **Narration:** "Powered by Gemini 2.5 Flash with native audio via the Live API, Arqivo supports Voice Activity Detection for seamless, natural conversations."
 
 **Scene 3: Agentic Tool Registry & UI Actions (1:15 - 2:15)**
 - **Visual:** Split screen. Left: Flutter App. Right: Backend logs showing Function Calling.
