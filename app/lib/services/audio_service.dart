@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
@@ -29,8 +31,10 @@ class AudioService {
   /// Streaming playback queue — small WAV segments are appended as they arrive.
   final ConcatenatingAudioSource _playlist =
       ConcatenatingAudioSource(children: []);
+  final List<String> _tempFiles = [];
   Timer? _flushTimer;
   bool _playbackStarted = false;
+  StreamSubscription? _playbackSub;
 
   /// Callback fired when AI finishes speaking (playback done).
   VoidCallback? onPlaybackDone;
@@ -40,10 +44,27 @@ class AudioService {
     if (_audioSessionConfigured) return;
     try {
       final session = await AudioSession.instance;
-      await session.configure(AudioSessionConfiguration.speech());
+      await session.configure(AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions:
+            AVAudioSessionCategoryOptions.allowBluetooth |
+                AVAudioSessionCategoryOptions.defaultToSpeaker,
+        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        avAudioSessionRouteSharingPolicy:
+            AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          flags: AndroidAudioFlags.none,
+          // Use media instead of voiceCommunication to force speaker output
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransient,
+        androidWillPauseWhenDucked: true,
+      ));
       _audioSessionConfigured = true;
       if (kDebugMode)
-        debugPrint('[Audio] Audio session configured (play+record)');
+        debugPrint('[Audio] Audio session configured (play+record, speaker)');
     } catch (e) {
       if (kDebugMode) debugPrint('[Audio] Audio session config failed: $e');
     }
@@ -132,7 +153,14 @@ class AudioService {
         _buildWav(pcm, sampleRate: 24000, channels: 1, bitsPerSample: 16);
 
     try {
-      await _playlist.add(_WavBytesSource(wav));
+      final dir = await getTemporaryDirectory();
+      final ts = DateTime.now().microsecondsSinceEpoch;
+      final filePath = '${dir.path}/arqivon_resp_chunk_$ts.wav';
+      final file = File(filePath);
+      await file.writeAsBytes(wav, flush: true);
+      _tempFiles.add(filePath);
+
+      await _playlist.add(AudioSource.uri(Uri.file(filePath)));
       if (kDebugMode)
         debugPrint(
             '[Audio] Queued segment: ${wav.length} bytes (${_playlist.length} in queue)');
@@ -151,6 +179,16 @@ class AudioService {
       } catch (e) {
         if (kDebugMode) debugPrint('[Audio] Playback start failed: $e');
         _playbackStarted = false;
+      }
+    } else if (_player.processingState == ProcessingState.completed) {
+      // The player finished the previous chunks before this one arrived.
+      // We need to seek to the new chunk and resume playing.
+      try {
+        await _player.seek(Duration.zero, index: _playlist.length - 1);
+        _player.play();
+        if (kDebugMode) debugPrint('[Audio] Resumed streaming playback');
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Audio] Failed to resume playback: $e');
       }
     }
   }
@@ -175,16 +213,24 @@ class AudioService {
           '[Audio] turn_complete — ${_playlist.length} segments in queue');
 
     // Listen for playlist completion, then reset.
-    _player.playerStateStream
-        .firstWhere((s) => s.processingState == ProcessingState.completed)
-        .then((_) => _resetPlayback())
-        .ignore();
+    _playbackSub?.cancel();
+    _playbackSub = _player.playerStateStream.listen((s) {
+      if (s.processingState == ProcessingState.completed) {
+        _playbackSub?.cancel();
+        _playbackSub = null;
+        _resetPlayback();
+      }
+    });
   }
 
   /// Clean up after playback finishes.
   void _resetPlayback() {
     _playbackStarted = false;
     _playlist.clear();
+    for (final path in _tempFiles) {
+      File(path).delete().ignore();
+    }
+    _tempFiles.clear();
     if (kDebugMode) debugPrint('[Audio] Playback complete — queue cleared');
     onPlaybackDone?.call();
   }
@@ -193,17 +239,24 @@ class AudioService {
   Future<void> stopPlayback() async {
     _flushTimer?.cancel();
     _flushTimer = null;
+    _playbackSub?.cancel();
+    _playbackSub = null;
     _pcmBuffer.clear();
     if (kDebugMode) debugPrint('[Audio] stopPlayback — interrupted');
     try {
       await _player.stop();
       await _playlist.clear();
+      for (final path in _tempFiles) {
+        File(path).delete().ignore();
+      }
+      _tempFiles.clear();
     } catch (_) {}
     _playbackStarted = false;
   }
 
   void dispose() {
     _flushTimer?.cancel();
+    _playbackSub?.cancel();
     stop();
     _player.dispose();
     _audioController.close();
@@ -259,22 +312,3 @@ class AudioService {
 
 // Backwards-compat alias so existing references compile unchanged.
 typedef AudioCaptureService = AudioService;
-
-/// Minimal StreamAudioSource that serves in-memory WAV bytes to just_audio.
-class _WavBytesSource extends StreamAudioSource {
-  _WavBytesSource(this._bytes);
-  final Uint8List _bytes;
-
-  @override
-  Future<StreamAudioResponse> request([int? start, int? end]) async {
-    start ??= 0;
-    end ??= _bytes.length;
-    return StreamAudioResponse(
-      sourceLength: _bytes.length,
-      contentLength: end - start,
-      offset: start,
-      stream: Stream.value(_bytes.sublist(start, end)),
-      contentType: 'audio/wav',
-    );
-  }
-}
