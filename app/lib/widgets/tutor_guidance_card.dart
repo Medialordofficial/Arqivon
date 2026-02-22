@@ -26,6 +26,10 @@ class TutorGuidanceCard extends StatelessWidget {
         return const Color(0xFFF59E0B);
       case 'analyze_homework':
         return const Color(0xFF6366F1);
+      case 'solve_problem':
+        return const Color(0xFF8B5CF6);
+      case 'explain_concept':
+        return const Color(0xFF06B6D4);
       default:
         return AgentMode.tutor.color;
     }
@@ -43,6 +47,10 @@ class TutorGuidanceCard extends StatelessWidget {
         return Icons.document_scanner_rounded;
       case 'tutor_card':
         return Icons.menu_book_rounded;
+      case 'solve_problem':
+        return Icons.calculate_rounded;
+      case 'explain_concept':
+        return Icons.psychology_rounded;
       default:
         return Icons.school_rounded;
     }
@@ -58,6 +66,10 @@ class TutorGuidanceCard extends StatelessWidget {
         return 'ANALYSIS';
       case 'tutor_card':
         return 'GUIDE';
+      case 'solve_problem':
+        return 'SOLUTION';
+      case 'explain_concept':
+        return 'CONCEPT';
       default:
         return 'TUTOR';
     }
@@ -245,6 +257,141 @@ class TutorGuidanceCard extends StatelessWidget {
                 'Concept: ${step.concept}',
                 style: const TextStyle(fontSize: 11, color: Colors.white54),
               ),
+            ),
+          ],
+
+          // Solution steps (solve_problem)
+          if (step.solutionSteps.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...step.solutionSteps.asMap().entries.map((entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Text(
+                          '${entry.key + 1}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF8B5CF6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          entry.value,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.8),
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+          if (step.finalAnswer != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ANSWER',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    step.finalAnswer!,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Examples (explain_concept)
+          if (step.examples.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'EXAMPLES',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: Color(0xFF06B6D4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...step.examples.map((ex) => Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(
+                              color: Color(0xFF06B6D4), fontSize: 13)),
+                      Expanded(
+                        child: Text(
+                          ex,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.75),
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+          if (step.relatedTopics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: step.relatedTopics
+                  .map((t) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          t,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white54),
+                        ),
+                      ))
+                  .toList(),
             ),
           ],
 

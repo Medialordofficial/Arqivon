@@ -80,6 +80,16 @@ class TutorStep {
   final String? subject;
   final String? difficulty;
 
+  // solve_problem fields
+  final String? problem;
+  final List<String> solutionSteps;
+  final String? finalAnswer;
+
+  // explain_concept fields
+  final List<String> examples;
+  final List<String> relatedTopics;
+  final String? difficultyLevel;
+
   const TutorStep({
     required this.tool,
     this.stepNumber = 0,
@@ -95,6 +105,12 @@ class TutorStep {
     this.nextStepHint,
     this.subject,
     this.difficulty,
+    this.problem,
+    this.solutionSteps = const [],
+    this.finalAnswer,
+    this.examples = const [],
+    this.relatedTopics = const [],
+    this.difficultyLevel,
   });
 
   factory TutorStep.fromPayload(Map<String, dynamic> p) => TutorStep(
@@ -112,6 +128,17 @@ class TutorStep {
         nextStepHint: p['next_step_hint'] as String?,
         subject: p['subject'] as String?,
         difficulty: p['difficulty'] as String?,
+        problem: p['problem'] as String?,
+        solutionSteps:
+            (p['solution_steps'] as List?)?.map((e) => e.toString()).toList() ??
+                const [],
+        finalAnswer: p['final_answer'] as String?,
+        examples: (p['examples'] as List?)?.map((e) => e.toString()).toList() ??
+            const [],
+        relatedTopics:
+            (p['related_topics'] as List?)?.map((e) => e.toString()).toList() ??
+                const [],
+        difficultyLevel: p['difficulty_level'] as String?,
       );
 }
 
@@ -160,5 +187,33 @@ class SupportTopic {
         topic: p['new_topic'] as String? ?? 'General',
         reason: p['reason'] as String? ?? '',
         changedAt: DateTime.now(),
+      );
+}
+
+/// Exportable document payload from the backend's export_document tool.
+class ExportDocument {
+  final String title;
+  final String content;
+  final String format;
+  final List<Map<String, dynamic>> sections;
+  final DateTime receivedAt;
+
+  const ExportDocument({
+    required this.title,
+    required this.content,
+    this.format = 'pdf',
+    this.sections = const [],
+    required this.receivedAt,
+  });
+
+  factory ExportDocument.fromPayload(Map<String, dynamic> p) => ExportDocument(
+        title: p['title'] as String? ?? 'Export',
+        content: p['content'] as String? ?? '',
+        format: p['format'] as String? ?? 'pdf',
+        sections: (p['sections'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            const [],
+        receivedAt: DateTime.now(),
       );
 }

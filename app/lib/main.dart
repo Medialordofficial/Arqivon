@@ -154,6 +154,18 @@ class _SplashScreen extends StatelessWidget {
   }
 }
 
+/// Notifier so child widgets (LiveScreen) can observe tab changes.
+class TabIndexNotifier extends ChangeNotifier {
+  int _index = 0;
+  int get index => _index;
+  void setIndex(int i) {
+    if (_index != i) {
+      _index = i;
+      notifyListeners();
+    }
+  }
+}
+
 class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key});
 
@@ -163,14 +175,26 @@ class MainNavigator extends StatefulWidget {
 
 class _MainNavigatorState extends State<MainNavigator> {
   int _currentIndex = 0;
+  final TabIndexNotifier _tabNotifier = TabIndexNotifier();
 
   /// Tracks which tabs have been navigated to (lazy init).
   final Set<int> _activatedTabs = {0}; // Home is always active
 
-  void _goLive() => setState(() {
-        _currentIndex = 1;
-        _activatedTabs.add(1);
-      });
+  void _goLive() => _selectTab(1);
+
+  void _selectTab(int i) {
+    setState(() {
+      _currentIndex = i;
+      _activatedTabs.add(i);
+    });
+    _tabNotifier.setIndex(i);
+  }
+
+  @override
+  void dispose() {
+    _tabNotifier.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +203,9 @@ class _MainNavigatorState extends State<MainNavigator> {
 
     final screens = <Widget>[
       HomeScreen(onGoLive: _goLive),
-      _activatedTabs.contains(1) ? const LiveScreen() : const SizedBox.shrink(),
+      _activatedTabs.contains(1)
+          ? LiveScreen(tabNotifier: _tabNotifier)
+          : const SizedBox.shrink(),
       _activatedTabs.contains(2)
           ? const ArchiveScreen()
           : const SizedBox.shrink(),
@@ -202,7 +228,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          onDestinationSelected: _selectTab,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           animationDuration: const Duration(milliseconds: 400),
           destinations: const [

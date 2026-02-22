@@ -114,6 +114,31 @@ async def translation_card(
     return json.dumps({"status": "card_created", "original": original, "translated": translated})
 
 
+async def export_document(
+    *, title: str, content: str, format: str = "pdf",
+    sections: list[dict[str, str]] | None = None,
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Export translated content or any structured text as a document.
+
+    The actual PDF generation happens client-side; this tool captures the
+    structured content and sends it to the client for rendering.
+    """
+    logger.info("Tool: export_document title=%s format=%s user=%s", title, format, user_id)
+    doc_data = {
+        "title": title,
+        "content": content,
+        "format": format,
+        "sections": sections or [],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if db is not None:
+        db.collection("users").document(user_id).collection("exports").add({
+            **doc_data, "userId": user_id,
+        })
+    return json.dumps({"status": "export_ready", **doc_data})
+
+
 # ── Tutor Mode ────────────────────────────────────────────────────────────────
 
 async def analyze_homework(
@@ -125,6 +150,52 @@ async def analyze_homework(
     return json.dumps({
         "status": "analyzed", "subject": subject,
         "description": description, "difficulty": difficulty,
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+
+
+async def solve_problem(
+    *, subject: str, problem: str, solution_steps: list[str],
+    final_answer: str, explanation: str = "",
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Solve a problem completely with step-by-step working and final answer.
+
+    Called when the student requests a full solution rather than hints.
+    """
+    logger.info("Tool: solve_problem subject=%s user=%s", subject, user_id)
+    result = {
+        "status": "solved",
+        "subject": subject,
+        "problem": problem,
+        "solution_steps": solution_steps,
+        "final_answer": final_answer,
+        "explanation": explanation,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if db is not None:
+        db.collection("users").document(user_id).collection("solutions").add({
+            **result, "userId": user_id,
+        })
+    return json.dumps(result)
+
+
+async def explain_concept(
+    *, concept: str, subject: str, explanation: str,
+    examples: list[str] | None = None, related_topics: list[str] | None = None,
+    difficulty_level: str = "intermediate",
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Provide a rich explanation of an academic concept with examples."""
+    logger.info("Tool: explain_concept concept=%s user=%s", concept, user_id)
+    return json.dumps({
+        "status": "explained",
+        "concept": concept,
+        "subject": subject,
+        "explanation": explanation,
+        "examples": examples or [],
+        "related_topics": related_topics or [],
+        "difficulty_level": difficulty_level,
         "timestamp": datetime.utcnow().isoformat(),
     })
 
@@ -281,8 +352,8 @@ _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
         name="live_translate",
         description=(
             "Produce a live translation of the user's spoken or typed text. "
-            "Call this with the source and translated text whenever the user speaks "
-            "so a subtitle overlay appears."
+            "ALWAYS call this with source and translated text so subtitles appear on screen. "
+            "Also use this when translating documents, signs, menus, or any text shown via camera."
         ),
         parameters={
             "type": "OBJECT",
@@ -309,7 +380,7 @@ _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
     ),
     types.FunctionDeclaration(
         name="translation_card",
-        description="Create a saveable translation card for important phrases.",
+        description="Create a saveable translation flashcard for important phrases or vocabulary.",
         parameters={
             "type": "OBJECT",
             "properties": {
@@ -321,16 +392,32 @@ _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
             "required": ["original", "translated", "source_lang", "target_lang"],
         },
     ),
+    types.FunctionDeclaration(
+        name="export_document",
+        description=(
+            "Export translated content as a downloadable document (PDF). "
+            "Use when the user asks to save, export, or download a translation."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Document title."},
+                "content": {"type": "STRING", "description": "Full translated content as plain text or markdown."},
+                "format": {"type": "STRING", "description": "Output format: pdf, text. Defaults to pdf."},
+            },
+            "required": ["title", "content"],
+        },
+    ),
 ]
 
 _TUTOR_DECLARATIONS: list[types.FunctionDeclaration] = [
     types.FunctionDeclaration(
         name="analyze_homework",
-        description="Analyse the homework, diagram, or problem shown via the camera.",
+        description="Analyse the homework, diagram, equation, or problem shown via the camera.",
         parameters={
             "type": "OBJECT",
             "properties": {
-                "subject": {"type": "STRING", "description": "Academic subject (math, physics, chemistry…)."},
+                "subject": {"type": "STRING", "description": "Academic subject (math, physics, chemistry, biology, CS, history, geography…)."},
                 "description": {"type": "STRING", "description": "What the problem/diagram contains."},
                 "difficulty": {"type": "STRING", "description": "easy, medium, or hard."},
             },
@@ -338,8 +425,57 @@ _TUTOR_DECLARATIONS: list[types.FunctionDeclaration] = [
         },
     ),
     types.FunctionDeclaration(
+        name="solve_problem",
+        description=(
+            "Solve a problem completely with step-by-step working and a clear final answer. "
+            "Use when the student asks to solve, answer, or complete a problem."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "subject": {"type": "STRING", "description": "Academic subject."},
+                "problem": {"type": "STRING", "description": "The problem statement."},
+                "solution_steps": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Ordered list of solution steps.",
+                },
+                "final_answer": {"type": "STRING", "description": "The final answer."},
+                "explanation": {"type": "STRING", "description": "Additional explanation or reasoning."},
+            },
+            "required": ["subject", "problem", "solution_steps", "final_answer"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="explain_concept",
+        description=(
+            "Explain an academic concept with examples and related topics. "
+            "Use when the student asks to understand or learn about a topic."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "concept": {"type": "STRING", "description": "The concept to explain."},
+                "subject": {"type": "STRING", "description": "Academic subject."},
+                "explanation": {"type": "STRING", "description": "Clear explanation of the concept."},
+                "examples": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Illustrative examples.",
+                },
+                "related_topics": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Related topics to explore.",
+                },
+                "difficulty_level": {"type": "STRING", "description": "beginner, intermediate, or advanced."},
+            },
+            "required": ["concept", "subject", "explanation"],
+        },
+    ),
+    types.FunctionDeclaration(
         name="provide_hint",
-        description="Push a contextual hint without giving the full answer.",
+        description="Push a contextual hint without giving the full answer. Use when the student asks for hints.",
         parameters={
             "type": "OBJECT",
             "properties": {
@@ -378,6 +514,22 @@ _TUTOR_DECLARATIONS: list[types.FunctionDeclaration] = [
                 "progress_pct": {"type": "NUMBER", "description": "0.0–1.0 progress fraction."},
             },
             "required": ["title", "explanation"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="export_document",
+        description=(
+            "Export a solution, explanation, or study notes as a downloadable PDF. "
+            "Use when the student asks to save, export, or download their work."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Document title."},
+                "content": {"type": "STRING", "description": "Full content as plain text or markdown."},
+                "format": {"type": "STRING", "description": "Output format: pdf, text. Defaults to pdf."},
+            },
+            "required": ["title", "content"],
         },
     ),
 ]
@@ -434,6 +586,22 @@ _SUPPORT_DECLARATIONS: list[types.FunctionDeclaration] = [
             "required": ["title", "description"],
         },
     ),
+    types.FunctionDeclaration(
+        name="export_document",
+        description=(
+            "Export a support resolution, troubleshooting guide, or summary as a downloadable document. "
+            "Use when the user asks to save, export, or download support notes."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Document title."},
+                "content": {"type": "STRING", "description": "Full content as plain text or markdown."},
+                "format": {"type": "STRING", "description": "Output format: pdf, text. Defaults to pdf."},
+            },
+            "required": ["title", "content"],
+        },
+    ),
 ]
 
 
@@ -466,8 +634,11 @@ TOOL_MAP: dict[str, Any] = {
     "live_translate": live_translate,
     "detect_language": detect_language,
     "translation_card": translation_card,
+    "export_document": export_document,
     # Tutor
     "analyze_homework": analyze_homework,
+    "solve_problem": solve_problem,
+    "explain_concept": explain_concept,
     "provide_hint": provide_hint,
     "grade_step": grade_step,
     "tutor_card": tutor_card,

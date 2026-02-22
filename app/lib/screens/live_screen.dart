@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/constants.dart';
+import '../main.dart';
 import '../models/agent_mode.dart';
 import '../providers/live_session_provider.dart';
 import '../services/websocket_service.dart';
@@ -16,11 +17,15 @@ import '../widgets/smart_action_card.dart';
 import '../widgets/support_topic_tracker.dart';
 import '../widgets/translation_overlay.dart';
 import '../widgets/tutor_guidance_card.dart';
+import '../widgets/export_document_card.dart';
 
 enum _LiveInputMode { audioOnly, audioVideo }
 
 class LiveScreen extends ConsumerStatefulWidget {
-  const LiveScreen({super.key});
+  const LiveScreen({super.key, required this.tabNotifier});
+
+  /// Notifier from [MainNavigator] that fires when the bottom tab changes.
+  final TabIndexNotifier tabNotifier;
 
   @override
   ConsumerState<LiveScreen> createState() => _LiveScreenState();
@@ -39,12 +44,25 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Stop audio/video when user navigates away from the Live tab.
+    widget.tabNotifier.addListener(_onTabChanged);
     // Camera init deferred to when audio+video mode is selected.
     // WebSocket pre-connect: runs on first frame only (not at app startup
     // since MainNavigator now lazy-builds this screen).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(liveSessionProvider.notifier).connectOnly();
     });
+  }
+
+  void _onTabChanged() {
+    if (widget.tabNotifier.index != 1) {
+      // User navigated away from Live tab — stop session.
+      final current = ref.read(liveSessionProvider).valueOrNull;
+      if (current?.isStreaming ?? false) {
+        _stopFrameCapture();
+        ref.read(liveSessionProvider.notifier).stopSession();
+      }
+    }
   }
 
   @override
@@ -131,6 +149,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   @override
   void dispose() {
+    widget.tabNotifier.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     _frameTimer?.cancel();
     _cameraController?.dispose();
@@ -154,6 +173,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     final currentTutorStep = session?.currentTutorStep;
     final currentSupportTopic = session?.currentSupportTopic;
     final supportTopics = session?.supportTopics ?? [];
+    final pendingExport = session?.pendingExport;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -325,6 +345,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                       .read(liveSessionProvider.notifier)
                       .sendText('Can you give me a hint for the current step?');
                 },
+              ),
+            ),
+
+          // ── Export: document export card ────────────────────────────
+          if (pendingExport != null)
+            Positioned(
+              bottom: 220,
+              left: 0,
+              right: 0,
+              child: ExportDocumentCard(
+                doc: pendingExport,
+                onDismiss: () =>
+                    ref.read(liveSessionProvider.notifier).dismissExport(),
               ),
             ),
 

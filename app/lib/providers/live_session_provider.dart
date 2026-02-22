@@ -36,6 +36,9 @@ class LiveSessionState {
   final SupportTopic? currentSupportTopic;
   final List<SupportTopic> supportTopics;
 
+  // Export
+  final ExportDocument? pendingExport;
+
   const LiveSessionState({
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
@@ -53,6 +56,7 @@ class LiveSessionState {
     this.tutorSteps = const [],
     this.currentSupportTopic,
     this.supportTopics = const [],
+    this.pendingExport,
   });
 
   LiveSessionState copyWith({
@@ -77,6 +81,8 @@ class LiveSessionState {
     List<TutorStep>? tutorSteps,
     SupportTopic? currentSupportTopic,
     List<SupportTopic>? supportTopics,
+    ExportDocument? pendingExport,
+    bool clearExport = false,
   }) {
     return LiveSessionState(
       connectionState: connectionState ?? this.connectionState,
@@ -99,6 +105,7 @@ class LiveSessionState {
       tutorSteps: tutorSteps ?? this.tutorSteps,
       currentSupportTopic: currentSupportTopic ?? this.currentSupportTopic,
       supportTopics: supportTopics ?? this.supportTopics,
+      pendingExport: clearExport ? null : (pendingExport ?? this.pendingExport),
     );
   }
 }
@@ -296,6 +303,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(current.copyWith(clearTutorStep: true));
   }
 
+  /// Dismiss pending export document card.
+  void dismissExport() {
+    final current = state.valueOrNull ?? const LiveSessionState();
+    state = AsyncData(current.copyWith(clearExport: true));
+  }
+
   // ── Message handling ──────────────────────────────────────────────────
 
   void _handleServerMessage(WsOutbound msg) {
@@ -363,6 +376,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             currentSupportTopic: topic,
             supportTopics: [...current.supportTopics, topic],
           ));
+        }
+        break;
+
+      case 'export':
+        if (msg.payload != null) {
+          final doc = ExportDocument.fromPayload(msg.payload!);
+          state = AsyncData(current.copyWith(pendingExport: doc));
         }
         break;
 

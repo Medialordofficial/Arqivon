@@ -52,6 +52,7 @@ class OutboundType(str, Enum):
     TRANSLATION = "translation"     # live translation text overlay
     TUTOR_STEP = "tutor_step"       # step-by-step tutor guidance
     SUPPORT_TOPIC = "support_topic" # topic tracking for customer support
+    EXPORT = "export"               # document export (PDF, etc.)
     STATUS = "status"
     ERROR = "error"
     PONG = "pong"
