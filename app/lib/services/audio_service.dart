@@ -77,6 +77,8 @@ class AudioService {
 
   /// Start microphone capture. Safe to call multiple times – silently returns
   /// if already capturing.
+  int _recordChunkCount = 0;
+
   Future<void> start() async {
     if (_isCapturing || _disposed) return;
     await _ensureAudioSession();
@@ -86,42 +88,62 @@ class AudioService {
       await _recorder.stop();
     } catch (_) {}
 
-    final stream = await _recorder.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits,
-      sampleRate: 16000,
-      numChannels: 1,
-      echoCancel: true,
-      noiseSuppress: true,
-      autoGain: true,
-    ));
+    try {
+      final stream = await _recorder.startStream(const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+        echoCancel: true,
+        noiseSuppress: true,
+        autoGain: true,
+      ));
 
-    _isCapturing = true;
-    _recordSub?.cancel();
-    _recordSub = stream.listen(
-      (data) {
-        if (!_audioController.isClosed) {
-          _audioController.add(base64Encode(data));
-        }
-      },
-      onError: (e) {
-        debugPrint('[AudioService] recorder error: $e');
-      },
-      onDone: () {
-        debugPrint('[AudioService] recorder stream ended — will auto-restart');
-        _isCapturing = false;
-        _recordSub = null;
-        // Auto-restart after a brief delay unless we were disposed.
-        if (!_disposed && !_audioController.isClosed) {
-          Future.delayed(const Duration(milliseconds: 120), () {
-            if (!_disposed && !_isCapturing) {
-              debugPrint('[AudioService] auto-restarting recorder');
-              start();
-            }
-          });
-        }
-      },
-    );
-    debugPrint('[AudioService] recorder started');
+      _isCapturing = true;
+      _recordChunkCount = 0;
+      _recordSub?.cancel();
+      _recordSub = stream.listen(
+        (data) {
+          _recordChunkCount++;
+          if (_recordChunkCount % 100 == 1) {
+            print(
+                '[AudioService] recorder data chunk #$_recordChunkCount (${data.length} bytes)');
+          }
+          if (!_audioController.isClosed) {
+            _audioController.add(base64Encode(data));
+          }
+        },
+        onError: (e) {
+          print('[AudioService] recorder error: $e');
+        },
+        onDone: () {
+          print('[AudioService] recorder stream ended — will auto-restart');
+          _isCapturing = false;
+          _recordSub = null;
+          // Auto-restart after a brief delay unless we were disposed.
+          if (!_disposed && !_audioController.isClosed) {
+            Future.delayed(const Duration(milliseconds: 120), () {
+              if (!_disposed && !_isCapturing) {
+                print('[AudioService] auto-restarting recorder');
+                start();
+              }
+            });
+          }
+        },
+      );
+      print('[AudioService] recorder started');
+    } catch (e) {
+      print(
+          '[AudioService] recorder startStream FAILED: $e — will retry in 500ms');
+      _isCapturing = false;
+      // Retry after a delay — audio focus may not be released yet
+      if (!_disposed) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (!_disposed && !_isCapturing) {
+            start();
+          }
+        });
+      }
+    }
   }
 
   /// Stop microphone capture.
@@ -135,13 +157,23 @@ class AudioService {
     debugPrint('[AudioService] recorder stopped');
   }
 
-  /// Explicitly restart the recorder if it died (e.g. after audio focus
-  /// changes on Android).  Called by the provider after each AI turn.
+  /// Force-restart the recorder after AI playback finishes.
+  ///
+  /// On Android, the native recorder can silently stop emitting data when
+  /// audio focus changes (e.g. during AI playback) WITHOUT firing `onDone`.
+  /// The `_isCapturing` flag stays `true` but the platform stream is dead.
+  /// The only reliable fix is to tear down and recreate the stream.
   Future<void> ensureRecording() async {
-    if (!_isCapturing && !_disposed) {
-      debugPrint('[AudioService] ensureRecording — restarting mic');
-      await start();
-    }
+    if (_disposed) return;
+    print('[AudioService] ensureRecording — force-restarting recorder');
+    // Tear down existing stream regardless of _isCapturing flag
+    _isCapturing = false;
+    _recordSub?.cancel();
+    _recordSub = null;
+    try {
+      await _recorder.stop();
+    } catch (_) {}
+    await start();
   }
 
   // ── Playback ──────────────────────────────────────────────────────
@@ -208,6 +240,8 @@ class AudioService {
   /// turn player to finish before calling [onPlaybackDone].
   Future<void> flushAndPlay() async {
     _flushTimer?.cancel();
+    print(
+        '[AudioService] flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}');
 
     // Flush remaining PCM.
     if (_pcmBuffer.isNotEmpty) {
@@ -304,6 +338,7 @@ class AudioService {
 
       debugPrint(
           '[AudioService] turn player disposed — calling onPlaybackDone');
+      print('[AudioService] turn player disposed — calling onPlaybackDone');
       onPlaybackDone?.call();
     });
   }

@@ -334,12 +334,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # ── Client → Gemini ───────────────────────────────────────────────────
 
+    client_audio_count = 0
+
     async def receive_from_client() -> None:
-        nonlocal current_mode, source_lang, target_lang
+        nonlocal current_mode, source_lang, target_lang, client_audio_count
+        msg_count = 0
         try:
             while not cancel_event.is_set():
                 raw = await websocket.receive_text()
                 msg = InboundMessage.model_validate_json(raw)
+                msg_count += 1
+                # Log every message type so we can diagnose silent drops
+                if msg.type != InboundType.PING and msg.type != InboundType.AUDIO:
+                    logger.info("WS msg #%d type=%s", msg_count, msg.type)
+                elif msg.type == InboundType.PING and msg_count % 5 == 0:
+                    logger.info("WS msg #%d type=ping (periodic)", msg_count)
 
                 if msg.type == InboundType.PING:
                     await _send_json(websocket, OutboundMessage(type=OutboundType.PONG))
@@ -390,23 +399,28 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 # Media
                 if msg.type == InboundType.AUDIO and msg.data:
                     audio_bytes = base64.b64decode(msg.data)
-                    await session.send(
-                        input=types.LiveClientRealtimeInput(
-                            media_chunks=[types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")]
-                        ),
+                    client_audio_count += 1
+                    if client_audio_count % 50 == 1:
+                        logger.info("Client audio chunk #%d (%d bytes) → Gemini", client_audio_count, len(audio_bytes))
+                    await session.send_realtime_input(
+                        media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
                     )
                 elif msg.type == InboundType.VIDEO and msg.data:
                     image_bytes = base64.b64decode(msg.data)
-                    await session.send(
-                        input=types.LiveClientRealtimeInput(
-                            media_chunks=[types.Blob(data=image_bytes, mime_type="image/jpeg")]
-                        ),
+                    await session.send_realtime_input(
+                        media=types.Blob(data=image_bytes, mime_type="image/jpeg"),
                     )
                 elif msg.type == InboundType.TEXT and msg.text:
-                    await session.send(input=msg.text, end_of_turn=True)
+                    await session.send_client_content(
+                        turns=types.Content(
+                            role="user",
+                            parts=[types.Part(text=msg.text)],
+                        ),
+                        turn_complete=True,
+                    )
                     session_record.turn_count += 1
                 elif msg.type == InboundType.END_TURN:
-                    await session.send(input="", end_of_turn=True)
+                    await session.send_client_content(turns=None, turn_complete=True)
 
         except WebSocketDisconnect:
             logger.info("Client disconnected: user=%s", user_id)
@@ -421,6 +435,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         try:
             while not cancel_event.is_set():
                 try:
+                    logger.info("Waiting for next Gemini turn... (client_audio_count=%d)", client_audio_count)
                     turn = session.receive()
                     async for response in turn:
                         # Model audio / text
@@ -450,13 +465,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             # output_transcription is intentionally ignored — see
                             # config comment above.
                             if sc.turn_complete:
+                                logger.info(">>> turn_complete from Gemini — sending to client (audio_chunks_from_client=%d)", client_audio_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:
+                                logger.info(">>> interrupted from Gemini — sending to client")
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
 
                         # Tool / function calls
                         if response.tool_call is not None:
-                            fn_responses: list[types.LiveClientToolResponse] = []
+                            fn_responses: list[types.FunctionResponse] = []
                             for fc in response.tool_call.function_calls:
                                 logger.info("Function call: %s(%s)", fc.name, fc.args)
                                 result_json = await dispatch_tool_call(
@@ -537,17 +554,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     ))
 
                                 fn_responses.append(
-                                    types.LiveClientToolResponse(
-                                        function_responses=[
-                                            types.FunctionResponse(
-                                                name=fc.name,
-                                                response={"result": result_json},
-                                            )
-                                        ]
+                                    types.FunctionResponse(
+                                        name=fc.name,
+                                        response={"result": result_json},
+                                        id=fc.id,
                                     )
                                 )
-                            for tr in fn_responses:
-                                await session.send(input=tr)
+                            await session.send_tool_response(
+                                function_responses=fn_responses,
+                            )
 
                 except Exception as inner_exc:
                     if cancel_event.is_set():

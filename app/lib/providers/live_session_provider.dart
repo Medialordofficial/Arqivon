@@ -109,6 +109,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   AudioCaptureService? _audio;
   StreamSubscription? _msgSub;
   StreamSubscription? _stateSub;
+  int _audioChunksSent = 0;
+
   StreamSubscription? _audioSub;
   // Track which mode was last sent to the backend so we avoid triggering an
   // unnecessary Gemini session restart on every mic tap.
@@ -195,6 +197,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // When AI finishes speaking (playback complete), clear responding flag
     // and ensure the recorder is still alive for the next turn.
     _audio!.onPlaybackDone = () {
+      print('[ARQIVO] onPlaybackDone fired');
       final cur = state.valueOrNull ?? const LiveSessionState();
       if (cur.isResponding) {
         state = AsyncData(cur.copyWith(isResponding: false));
@@ -202,6 +205,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       // CRITICAL: explicitly restart recorder if it died during playback.
       // Android may kill the mic when audio focus changes.
       if (cur.isStreaming) {
+        print('[ARQIVO] calling ensureRecording after playback done');
         _audio?.ensureRecording();
       }
     };
@@ -230,8 +234,19 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Start audio capture and pipe to WebSocket
     await _audio!.start();
+    _audioChunksSent = 0;
     _audioSub = _audio!.audioStream.listen((b64) {
+      _audioChunksSent++;
+      if (_audioChunksSent % 50 == 1) {
+        print(
+            '[ARQIVO] audio chunk #$_audioChunksSent → WS (state=${_ws?.state})');
+      }
       _ws?.send(WsInbound(type: 'audio', data: b64));
+    }, onDone: () {
+      print(
+          '[ARQIVO] *** audioStream DONE — subscription ended! chunks=$_audioChunksSent');
+    }, onError: (e) {
+      print('[ARQIVO] *** audioStream ERROR: $e');
     });
 
     state = AsyncData(current.copyWith(
@@ -292,6 +307,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
+            print(
+                '[ARQIVO] first audio chunk received — setting isResponding=true');
             state = AsyncData(current.copyWith(
               isResponding: true,
               clearUserTranscript: true,
@@ -362,6 +379,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Flush remaining audio to the streaming queue.
         // isResponding stays true until playback actually finishes
         // (handled by onPlaybackDone callback).
+        print('[ARQIVO] turn_complete received from backend');
         _audio?.flushAndPlay();
         state = AsyncData(current.copyWith(
           clearTranscript: true,
@@ -371,6 +389,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'interrupted':
         // User barged in — stop playback immediately and clear stale overlays.
+        print('[ARQIVO] interrupted received from backend');
         _audio?.stopPlayback();
         state = AsyncData(current.copyWith(
           isResponding: false,
