@@ -18,6 +18,7 @@ class LiveSessionState {
   final bool isResponding;
   final AgentMode mode;
   final String? transcript;
+  final String? userTranscript;
   final SmartAction? currentAction;
   final List<SmartAction> actionHistory;
 
@@ -41,6 +42,7 @@ class LiveSessionState {
     this.isResponding = false,
     this.mode = AgentMode.general,
     this.transcript,
+    this.userTranscript,
     this.currentAction,
     this.actionHistory = const [],
     this.currentTranslation,
@@ -59,6 +61,9 @@ class LiveSessionState {
     bool? isResponding,
     AgentMode? mode,
     String? transcript,
+    bool clearTranscript = false,
+    String? userTranscript,
+    bool clearUserTranscript = false,
     SmartAction? currentAction,
     bool clearAction = false,
     List<SmartAction>? actionHistory,
@@ -78,7 +83,9 @@ class LiveSessionState {
       isStreaming: isStreaming ?? this.isStreaming,
       isResponding: isResponding ?? this.isResponding,
       mode: mode ?? this.mode,
-      transcript: transcript ?? this.transcript,
+      transcript: clearTranscript ? null : (transcript ?? this.transcript),
+      userTranscript:
+          clearUserTranscript ? null : (userTranscript ?? this.userTranscript),
       currentAction: clearAction ? null : (currentAction ?? this.currentAction),
       actionHistory: actionHistory ?? this.actionHistory,
       currentTranslation: clearTranslation
@@ -273,13 +280,20 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // Mute the mic while AI is speaking to prevent echo feedback.
           if (!current.isResponding) {
             _audio?.pauseForwarding();
-            state = AsyncData(current.copyWith(isResponding: true));
+            state = AsyncData(current.copyWith(
+              isResponding: true,
+              clearUserTranscript: true,
+            ));
           }
         }
         break;
 
       case 'transcript':
         state = AsyncData(current.copyWith(transcript: msg.text));
+        break;
+
+      case 'user_transcript':
+        state = AsyncData(current.copyWith(userTranscript: msg.text));
         break;
 
       case 'ui_action':
@@ -336,8 +350,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _audio?.flushAndPlay();
         // AI finished speaking — re-enable mic forwarding and clear responding flag.
         _audio?.resumeForwarding();
-        state =
-            AsyncData(current.copyWith(isResponding: false, transcript: null));
+        state = AsyncData(current.copyWith(
+          isResponding: false,
+          clearTranscript: true,
+          clearUserTranscript: true,
+        ));
         break;
 
       case 'interrupted':

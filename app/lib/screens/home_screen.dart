@@ -119,7 +119,7 @@ class HomeScreen extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: ArqivonTheme.darkText,
+                    color: Color(0xFF60A5FA), // light vibrant blue
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -140,7 +140,7 @@ class HomeScreen extends ConsumerWidget {
                   label: AgentMode.general.label,
                   description:
                       'Ask anything. Point your camera, speak your question, get instant answers.',
-                  accentColor: ArqivonTheme.modeGeneral,
+                  accentColor: const Color(0xFF3B82F6), // blue-500
                   onTap: onGoLive,
                 ),
                 const SizedBox(height: 10),
@@ -149,7 +149,7 @@ class HomeScreen extends ConsumerWidget {
                   label: AgentMode.translator.label,
                   description:
                       'Live bilingual captions — translated in real time as you speak.',
-                  accentColor: ArqivonTheme.modeTranslator,
+                  accentColor: const Color(0xFF0EA5E9), // sky-500
                   onTap: onGoLive,
                 ),
                 const SizedBox(height: 10),
@@ -158,7 +158,7 @@ class HomeScreen extends ConsumerWidget {
                   label: AgentMode.tutor.label,
                   description:
                       'Point at a textbook or whiteboard — get step-by-step guided explanations.',
-                  accentColor: ArqivonTheme.modeTutor,
+                  accentColor: const Color(0xFF818CF8), // indigo-400
                   onTap: onGoLive,
                 ),
                 const SizedBox(height: 10),
@@ -167,7 +167,7 @@ class HomeScreen extends ConsumerWidget {
                   label: AgentMode.support.label,
                   description:
                       'Voice-driven support flows with topic tracking and smart suggestions.',
-                  accentColor: ArqivonTheme.modeSupport,
+                  accentColor: const Color(0xFF22D3EE), // cyan-400
                   onTap: onGoLive,
                 ),
 
@@ -237,15 +237,19 @@ class _GoLiveButton extends StatelessWidget {
         height: 70,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF4338CA), Color(0xFF5B5FEF), Color(0xFF0EA5E9)],
+            colors: [
+              Color(0xFF0055FF), // deep electric blue
+              Color(0xFF0099FF), // vivid sky blue
+              Color(0xFF00C6FF), // bright cyan-blue
+            ],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: ArqivonTheme.primary.withValues(alpha: 0.45),
-              blurRadius: 24,
+              color: const Color(0xFF0070FF).withValues(alpha: 0.50),
+              blurRadius: 28,
               offset: const Offset(0, 8),
             ),
           ],
@@ -320,22 +324,45 @@ class _ModeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: ArqivonTheme.darkCard,
           borderRadius: BorderRadius.circular(16),
-          border: Border(
-            left: BorderSide(color: accentColor, width: 3),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.30),
+            width: 1.5,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
+              // ── Circular icon button ─────────────────────────────
               Container(
-                width: 48,
-                height: 48,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      accentColor,
+                      accentColor.withValues(alpha: 0.70),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withValues(alpha: 0.40),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, color: accentColor, size: 24),
+                child: Icon(icon, color: Colors.white, size: 26),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -366,9 +393,11 @@ class _ModeCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded,
-                  color: ArqivonTheme.darkSubtext.withValues(alpha: 0.5),
-                  size: 20),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: accentColor.withValues(alpha: 0.60),
+                size: 20,
+              ),
             ],
           ),
         ),

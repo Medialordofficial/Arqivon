@@ -48,6 +48,7 @@ class OutboundType(str, Enum):
     TEXT = "text"
     UI_ACTION = "ui_action"
     TRANSCRIPT = "transcript"
+    USER_TRANSCRIPT = "user_transcript"  # user speech-to-text (input transcription)
     TRANSLATION = "translation"     # live translation text overlay
     TUTOR_STEP = "tutor_step"       # step-by-step tutor guidance
     SUPPORT_TOPIC = "support_topic" # topic tracking for customer support

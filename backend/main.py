@@ -64,7 +64,9 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "When you detect actionable items (phone numbers, addresses, calendar events, "
         "text to translate, QR codes, business cards), proactively call create_ui_action. "
         "When the user asks you to remember something, call upsert_firestore_memory. "
-        "Be concise, friendly, and proactive. Speak naturally."
+        "Be concise, friendly, and proactive. Speak naturally. "
+        "CRITICAL: Always detect the language the user is speaking and respond in that "
+        "exact same language. Never switch languages unless explicitly asked to."
     ),
     AgentMode.TRANSLATOR: (
         "You are Arqivon Translator, a real-time multilingual translation assistant. "
@@ -76,7 +78,10 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "translate the new input immediately. Detect language automatically when set to 'auto'. "
         "For important phrases, use translation_card to create a saveable flashcard. "
         "Speak the translated text aloud in the target language. "
-        "Support formal/informal registers. Be natural and conversational."
+        "Support formal/informal registers. Be natural and conversational. "
+        "CRITICAL: Always detect the language the user is speaking and respond in that "
+        "exact same language unless performing a translation. Never switch languages "
+        "unless explicitly asked to."
     ),
     AgentMode.TUTOR: (
         "You are Arqivon Tutor, a vision-enabled smart tutoring assistant. "
@@ -90,7 +95,9 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "concept mid-explanation, acknowledge the pivot and adapt. "
         "Preserve context: remember what was discussed earlier in the session. "
         "Use the Socratic method. Be encouraging and patient. "
-        "Related concepts should be woven into explanations naturally."
+        "Related concepts should be woven into explanations naturally. "
+        "CRITICAL: Always detect the language the user is speaking and respond in that "
+        "exact same language. Never switch languages unless explicitly asked to."
     ),
     AgentMode.SUPPORT: (
         "You are Arqivon Support, a voice-driven intelligent customer support agent. "
@@ -102,7 +109,9 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Handle mid-conversation topic switching gracefully: acknowledge the change, "
         "briefly summarize what was discussed, and transition smoothly. "
         "Maintain a professional but warm tone. Reference previous context naturally. "
-        "If the user says 'go back to…', resume the previous topic seamlessly."
+        "If the user says 'go back to…', resume the previous topic seamlessly. "
+        "CRITICAL: Always detect the language the user is speaking and respond in that "
+        "exact same language. Never switch languages unless explicitly asked to."
     ),
 }
 
@@ -235,7 +244,9 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
-        output_audio_transcription=types.AudioTranscriptionConfig(),
+        # NOTE: output_audio_transcription intentionally omitted — AI audio is
+        # already played to the user; transcribing it back as text causes
+        # haphazard text in random languages to appear on the client.
     )
     live_ctx = genai_client.aio.live.connect(
         model=settings.gemini_model,
@@ -416,22 +427,20 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                             type=OutboundType.AUDIO, data=audio_b64,
                                         ))
                                     elif part.text:
-                                        await _send_json(websocket, OutboundMessage(
-                                            type=OutboundType.TRANSCRIPT, text=part.text,
-                                        ))
-                            # Transcribe user & model speech when available
+                                        # For native-audio models the text parts are internal
+                                        # "thinking" fragments — do NOT surface them as
+                                        # transcript to the client.
+                                        logger.debug("model_turn text (suppressed): %s", part.text[:80])
+                            # Send user speech transcription as a distinct type
+                            # so the client can show "You said: …" separately.
                             if sc.input_transcription:
                                 txt = getattr(sc.input_transcription, 'text', None)
                                 if txt:
                                     await _send_json(websocket, OutboundMessage(
-                                        type=OutboundType.TRANSCRIPT, text=txt,
+                                        type=OutboundType.USER_TRANSCRIPT, text=txt,
                                     ))
-                            if sc.output_transcription:
-                                txt = getattr(sc.output_transcription, 'text', None)
-                                if txt:
-                                    await _send_json(websocket, OutboundMessage(
-                                        type=OutboundType.TRANSCRIPT, text=txt,
-                                    ))
+                            # output_transcription is intentionally ignored — see
+                            # config comment above.
                             if sc.turn_complete:
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:

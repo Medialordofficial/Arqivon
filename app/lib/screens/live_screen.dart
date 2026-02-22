@@ -147,6 +147,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
         session?.connectionState ?? WsConnectionState.disconnected;
     final currentAction = session?.currentAction;
     final transcript = session?.transcript;
+    final userTranscript = session?.userTranscript;
     final mode = session?.mode ?? AgentMode.general;
     final currentTranslation = session?.currentTranslation;
     final currentTutorStep = session?.currentTutorStep;
@@ -335,6 +336,27 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                       .read(liveSessionProvider.notifier)
                       .sendText('Can you give me a hint for the current step?');
                 },
+              ),
+            ),
+
+          // ── User speech (above orb) ───────────────────────────
+          if (userTranscript != null && userTranscript.isNotEmpty)
+            Positioned(
+              left: 32,
+              right: 32,
+              top: MediaQuery.of(context).padding.top + 100,
+              child: Text(
+                userTranscript,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.50),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  fontStyle: FontStyle.italic,
+                  height: 1.4,
+                ),
               ),
             ),
 
