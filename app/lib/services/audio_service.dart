@@ -142,22 +142,22 @@ class AudioService {
     // Primary: write to temp file for reliable cross-device playback.
     try {
       final dir = await getTemporaryDirectory();
-      final file = File(
-        '\${dir.path}/arqivon_resp_\${DateTime.now().millisecondsSinceEpoch}.wav',
-      );
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '${dir.path}/arqivon_resp_$ts.wav';
+      final file = File(filePath);
       await file.writeAsBytes(wav, flush: true);
+      if (kDebugMode)
+        debugPrint('[Audio] WAV written to $filePath (${wav.length} bytes)');
       await _player.stop();
       await _player.setFilePath(file.path);
-      unawaited(_player.play());
+      await _player.play();
       if (kDebugMode)
         debugPrint('[Audio] Playing ${wav.length} byte WAV from file');
       // Clean up temp file once playback finishes.
-      unawaited(
-        _player.playerStateStream
-            .firstWhere((s) => s.processingState == ProcessingState.completed)
-            .then((_) => file.delete().catchError((_) {}))
-            .catchError((_) {}),
-      );
+      _player.playerStateStream
+          .firstWhere((s) => s.processingState == ProcessingState.completed)
+          .then((_) => file.delete())
+          .ignore();
       return;
     } catch (e) {
       if (kDebugMode)
@@ -168,7 +168,7 @@ class AudioService {
     try {
       await _player.stop();
       await _player.setAudioSource(_WavBytesSource(wav));
-      unawaited(_player.play());
+      await _player.play();
       if (kDebugMode) debugPrint('[Audio] Fallback in-memory playback started');
     } catch (e) {
       if (kDebugMode) debugPrint('[Audio] All playback methods failed: $e');

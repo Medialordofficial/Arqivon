@@ -36,13 +36,13 @@ class ModeSelectorStrip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? mode.color.withOpacity(0.25)
-                    : Colors.white.withOpacity(0.08),
+                    ? mode.color.withOpacity(0.15)
+                    : const Color(0xFF0F172A).withOpacity(0.05),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
-                      ? mode.color.withOpacity(0.6)
-                      : Colors.white.withOpacity(0.1),
+                      ? mode.color.withOpacity(0.5)
+                      : const Color(0xFF0F172A).withOpacity(0.10),
                   width: isSelected ? 1.5 : 1,
                 ),
               ),
@@ -52,7 +52,7 @@ class ModeSelectorStrip extends StatelessWidget {
                   Icon(
                     mode.icon,
                     size: 16,
-                    color: isSelected ? mode.color : Colors.white54,
+                    color: isSelected ? mode.color : const Color(0xFF64748B),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -61,7 +61,7 @@ class ModeSelectorStrip extends StatelessWidget {
                       fontSize: 12,
                       fontWeight:
                           isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? mode.color : Colors.white54,
+                      color: isSelected ? mode.color : const Color(0xFF64748B),
                     ),
                   ),
                 ],

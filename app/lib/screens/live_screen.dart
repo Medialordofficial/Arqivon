@@ -167,21 +167,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               child: CameraPreview(_cameraController!),
             )
           else
-            // Deep purple gradient — premium AI assistant look
+            // Clean white background
             Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF0D0820),
-                    Color(0xFF130A2E),
-                    Color(0xFF0F1035),
-                    Color(0xFF070510),
-                  ],
-                  stops: [0.0, 0.3, 0.65, 1.0],
-                ),
-              ),
+              color: Colors.white,
             ),
 
           // ── Gradient scrim (camera mode only) ─────────────────────
@@ -217,7 +205,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    const Color(0xFF070510).withValues(alpha: 0.95),
+                    Colors.white.withValues(alpha: 0.95),
                   ],
                 ),
               ),
@@ -351,7 +339,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.50),
+                  color: const Color(0xFF64748B).withValues(alpha: 0.70),
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
                   fontStyle: FontStyle.italic,
@@ -389,7 +377,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF0F172A),
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
                       height: 1.35,
@@ -406,8 +394,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isResponding
-                          ? Colors.white.withValues(alpha: 0.85)
-                          : Colors.white.withValues(alpha: 0.55),
+                          ? const Color(0xFF0F172A).withValues(alpha: 0.85)
+                          : const Color(0xFF64748B).withValues(alpha: 0.70),
                       fontSize: 16,
                       fontWeight:
                           isResponding ? FontWeight.w500 : FontWeight.w400,
@@ -433,10 +421,11 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.07),
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.10),
+                          color:
+                              const Color(0xFF0F172A).withValues(alpha: 0.10),
                           width: 1),
                     ),
                     child: Row(
@@ -565,11 +554,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.13),
-                          width: 1),
+                      border:
+                          Border.all(color: const Color(0xFFE2E8F0), width: 1),
                     ),
                     child: Row(
                       children: [
@@ -578,11 +566,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           child: TextField(
                             controller: _textController,
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 15),
+                                color: Color(0xFF0F172A), fontSize: 15),
                             decoration: InputDecoration(
                               hintText: _hintTextForMode(mode),
                               hintStyle: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.35),
+                                  color: const Color(0xFF64748B)
+                                      .withValues(alpha: 0.50),
                                   fontSize: 15),
                               border: InputBorder.none,
                               isDense: true,
@@ -595,7 +584,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                         IconButton(
                           onPressed: _sendTextMessage,
                           icon: const Icon(Icons.arrow_upward_rounded,
-                              color: Colors.white54),
+                              color: Color(0xFF64748B)),
                           iconSize: 22,
                         ),
                       ],
@@ -631,13 +620,15 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: onPressed != null
-            ? Colors.white.withOpacity(0.15)
-            : Colors.white.withOpacity(0.06),
+            ? const Color(0xFF0F172A).withOpacity(0.08)
+            : const Color(0xFF0F172A).withOpacity(0.04),
       ),
       child: IconButton(
         onPressed: onPressed,
         icon: Icon(icon,
-            color: onPressed != null ? Colors.white : Colors.white30),
+            color: onPressed != null
+                ? const Color(0xFF0F172A)
+                : const Color(0xFF94A3B8)),
         iconSize: 28,
       ),
     );
@@ -673,14 +664,15 @@ class _InputModeChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
-                size: 16, color: selected ? Colors.white : Colors.white54),
+                size: 16,
+                color: selected ? Colors.white : const Color(0xFF64748B)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? Colors.white : Colors.white54,
+                color: selected ? Colors.white : const Color(0xFF64748B),
               ),
             ),
           ],

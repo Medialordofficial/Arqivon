@@ -1,11 +1,10 @@
-// Dark Indigo design — production grade.
+// Light design — production grade.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../config/theme.dart';
 import '../models/agent_mode.dart';
 import '../providers/auth_provider.dart';
 
@@ -19,7 +18,7 @@ class HomeScreen extends ConsumerWidget {
     final topPad = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: ArqivonTheme.darkBg,
+      backgroundColor: Colors.white,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -29,7 +28,7 @@ class HomeScreen extends ConsumerWidget {
             expandedHeight: 0,
             toolbarHeight: 64 + topPad,
             elevation: 0,
-            backgroundColor: ArqivonTheme.darkSurface,
+            backgroundColor: Colors.white,
             surfaceTintColor: Colors.transparent,
             automaticallyImplyLeading: false,
             flexibleSpace: Padding(
@@ -44,14 +43,14 @@ class HomeScreen extends ConsumerWidget {
                       backgroundImage: user.photoURL != null
                           ? NetworkImage(user.photoURL!)
                           : null,
-                      backgroundColor: ArqivonTheme.darkCard,
+                      backgroundColor: const Color(0xFFF1F5F9),
                       child: user.photoURL == null
                           ? Text(
                               (user.displayName?.isNotEmpty == true)
                                   ? user.displayName![0].toUpperCase()
                                   : '?',
                               style: const TextStyle(
-                                color: ArqivonTheme.darkText,
+                                color: Color(0xFF0F172A),
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
                               ),
@@ -63,11 +62,11 @@ class HomeScreen extends ConsumerWidget {
                       width: 40,
                       height: 40,
                       decoration: const BoxDecoration(
-                        color: ArqivonTheme.darkCard,
+                        color: Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.person_rounded,
-                          color: ArqivonTheme.darkSubtext, size: 22),
+                          color: Color(0xFF64748B), size: 22),
                     ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -79,7 +78,7 @@ class HomeScreen extends ConsumerWidget {
                           user != null ? 'Welcome back,' : 'Hello,',
                           style: const TextStyle(
                             fontSize: 12,
-                            color: ArqivonTheme.darkSubtext,
+                            color: Color(0xFF64748B),
                             letterSpacing: 0.2,
                           ),
                         ),
@@ -90,7 +89,7 @@ class HomeScreen extends ConsumerWidget {
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: ArqivonTheme.darkText,
+                            color: Color(0xFF0F172A),
                             letterSpacing: -0.4,
                           ),
                         ),
@@ -100,7 +99,7 @@ class HomeScreen extends ConsumerWidget {
                   IconButton(
                     onPressed: () {},
                     icon: const Icon(Icons.notifications_none_rounded,
-                        color: ArqivonTheme.darkSubtext, size: 24),
+                        color: Color(0xFF64748B), size: 24),
                   ),
                 ],
               ),
@@ -131,7 +130,7 @@ class HomeScreen extends ConsumerWidget {
                   'All four run live — audio and video, no uploads.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: ArqivonTheme.darkSubtext,
+                    color: Color(0xFF64748B),
                     height: 1.4,
                   ),
                 ),
@@ -295,22 +294,22 @@ class _CircularModeCard extends StatelessWidget {
                 center: const Alignment(-0.3, -0.3),
                 radius: 1.0,
                 colors: [
-                  accentColor.withValues(alpha: 0.22),
-                  ArqivonTheme.darkCard,
+                  accentColor.withValues(alpha: 0.12),
+                  const Color(0xFFF1F5F9),
                 ],
               ),
               border: Border.all(
-                color: accentColor.withValues(alpha: 0.30),
+                color: accentColor.withValues(alpha: 0.25),
                 width: 2.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: accentColor.withValues(alpha: 0.14),
+                  color: accentColor.withValues(alpha: 0.10),
                   blurRadius: 28,
                   spreadRadius: 4,
                 ),
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 14,
                   offset: const Offset(0, 6),
                 ),
@@ -322,7 +321,7 @@ class _CircularModeCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.90),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.85),
               fontSize: 14,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
@@ -668,7 +667,7 @@ class _StepDescriptionCard extends StatelessWidget {
                 Text(
                   step.description,
                   style: const TextStyle(
-                    color: ArqivonTheme.darkSubtext,
+                    color: Color(0xFF64748B),
                     fontSize: 13,
                     height: 1.45,
                   ),
