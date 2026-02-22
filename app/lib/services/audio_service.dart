@@ -105,6 +105,17 @@ class AudioService {
       onError: (Object e) {
         if (kDebugMode) debugPrint('[Audio] Capture error: $e');
       },
+      onDone: () {
+        // Android may silently kill the recorder during playback due to
+        // audio-focus changes.  Auto-restart so the next turn works.
+        if (kDebugMode) {
+          debugPrint('[Audio] Capture stream ended — auto-restarting');
+        }
+        _isCapturing = false;
+        if (!_audioController.isClosed) {
+          start(); // re-open recorder
+        }
+      },
     );
     _isCapturing = true;
     if (kDebugMode) debugPrint('[Audio] Capture started');
@@ -229,14 +240,34 @@ class AudioService {
   }
 
   /// Clean up after playback finishes.
-  void _resetPlayback() {
+  Future<void> _resetPlayback() async {
     _playbackStarted = false;
-    _playlist.clear();
+
+    // CRITICAL: fully stop the player so it releases audio focus and the
+    // echo-canceller stops referencing the stale output.  Without this the
+    // recorder is silently clipped on the next turn.
+    try {
+      await _player.stop();
+    } catch (_) {}
+
+    try {
+      await _playlist.clear();
+    } catch (_) {}
+
     for (final path in _tempFiles) {
       File(path).delete().ignore();
     }
     _tempFiles.clear();
-    if (kDebugMode) debugPrint('[Audio] Playback complete — queue cleared');
+
+    // Re-ensure speaker mode — player.stop() may reset Android routing.
+    if (Platform.isAndroid) {
+      try {
+        await AndroidAudioManager().setSpeakerphoneOn(true);
+      } catch (_) {}
+    }
+
+    if (kDebugMode)
+      debugPrint('[Audio] Playback complete — player stopped, queue cleared');
     onPlaybackDone?.call();
   }
 
@@ -257,6 +288,13 @@ class AudioService {
       _tempFiles.clear();
     } catch (_) {}
     _playbackStarted = false;
+
+    // Re-ensure speaker mode — player.stop() may reset Android routing.
+    if (Platform.isAndroid) {
+      try {
+        await AndroidAudioManager().setSpeakerphoneOn(true);
+      } catch (_) {}
+    }
   }
 
   void dispose() {
