@@ -1,5 +1,8 @@
 // Dark Indigo design — production grade.
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/theme.dart';
@@ -134,85 +137,47 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // ── Mode cards — full-width vertical list ─────────────
-                _ModeCard(
-                  icon: Icons.auto_awesome_rounded,
-                  label: AgentMode.general.label,
-                  description:
-                      'Ask anything. Point your camera, speak your question, get instant answers.',
-                  accentColor: const Color(0xFF3B82F6), // blue-500
-                  onTap: onGoLive,
+                // ── Mode cards — 2×2 circular grid ─────────────────
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _CircularModeCard(
+                      icon: Icons.auto_awesome_rounded,
+                      label: AgentMode.general.label,
+                      accentColor: const Color(0xFF3B82F6),
+                      onTap: onGoLive,
+                    ),
+                    _CircularModeCard(
+                      icon: Icons.translate_rounded,
+                      label: AgentMode.translator.label,
+                      accentColor: const Color(0xFF0EA5E9),
+                      onTap: onGoLive,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.translate_rounded,
-                  label: AgentMode.translator.label,
-                  description:
-                      'Live bilingual captions — translated in real time as you speak.',
-                  accentColor: const Color(0xFF0EA5E9), // sky-500
-                  onTap: onGoLive,
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.school_rounded,
-                  label: AgentMode.tutor.label,
-                  description:
-                      'Point at a textbook or whiteboard — get step-by-step guided explanations.',
-                  accentColor: const Color(0xFF818CF8), // indigo-400
-                  onTap: onGoLive,
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.headset_mic_rounded,
-                  label: AgentMode.support.label,
-                  description:
-                      'Voice-driven support flows with topic tracking and smart suggestions.',
-                  accentColor: const Color(0xFF22D3EE), // cyan-400
-                  onTap: onGoLive,
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _CircularModeCard(
+                      icon: Icons.school_rounded,
+                      label: AgentMode.tutor.label,
+                      accentColor: const Color(0xFF818CF8),
+                      onTap: onGoLive,
+                    ),
+                    _CircularModeCard(
+                      icon: Icons.headset_mic_rounded,
+                      label: AgentMode.support.label,
+                      accentColor: const Color(0xFF22D3EE),
+                      onTap: onGoLive,
+                    ),
+                  ],
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 36),
 
-                // ── How it works ─────────────────────────────────────
-                const Text(
-                  'How it works',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: ArqivonTheme.darkText,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const _Step(
-                  number: '1',
-                  title: 'Open the Live tab',
-                  body:
-                      'Tap "Live" at the bottom — your session connects automatically.',
-                  color: ArqivonTheme.primary,
-                ),
-                const _Step(
-                  number: '2',
-                  title: 'Pick a mode',
-                  body:
-                      'Select General, Translator, Tutor, or Support from the chips at the top.',
-                  color: ArqivonTheme.accent,
-                ),
-                const _Step(
-                  number: '3',
-                  title: 'Speak or show',
-                  body:
-                      'Talk naturally or point your camera — Arqivon responds in real time.',
-                  color: ArqivonTheme.teal,
-                ),
-                const _Step(
-                  number: '4',
-                  title: 'Review later',
-                  body:
-                      'Every session is saved to your Archive for replay and reference.',
-                  color: ArqivonTheme.modeSupport,
-                  isLast: true,
-                ),
+                // ── How it works — animated circles + arrows ─────────
+                const _HowItWorksSection(),
 
                 const SizedBox(height: 120),
               ]),
@@ -300,18 +265,16 @@ class _GoLiveButton extends StatelessWidget {
   }
 }
 
-// ── Mode card ────────────────────────────────────────────────────────────────
-class _ModeCard extends StatelessWidget {
+// ── Circular mode card ───────────────────────────────────────────────────────
+class _CircularModeCard extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String description;
   final Color accentColor;
   final VoidCallback? onTap;
 
-  const _ModeCard({
+  const _CircularModeCard({
     required this.icon,
     required this.label,
-    required this.description,
     required this.accentColor,
     this.onTap,
   });
@@ -320,169 +283,401 @@ class _ModeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: ArqivonTheme.darkCard,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: accentColor.withValues(alpha: 0.30),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: accentColor.withValues(alpha: 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                center: const Alignment(-0.3, -0.3),
+                radius: 1.0,
+                colors: [
+                  accentColor.withValues(alpha: 0.22),
+                  ArqivonTheme.darkCard,
+                ],
+              ),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.30),
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withValues(alpha: 0.14),
+                  blurRadius: 28,
+                  spreadRadius: 4,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              // ── Circular icon button ─────────────────────────────
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      accentColor,
-                      accentColor.withValues(alpha: 0.70),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accentColor.withValues(alpha: 0.40),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 26),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: accentColor,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: ArqivonTheme.darkSubtext,
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: accentColor.withValues(alpha: 0.60),
-                size: 20,
-              ),
-            ],
+            child: Icon(icon, color: accentColor, size: 40),
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.90),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── How it works step ────────────────────────────────────────────────────────
-class _Step extends StatelessWidget {
-  final String number;
-  final String title;
-  final String body;
-  final Color color;
-  final bool isLast;
+// ── How it works — animated section ──────────────────────────────────────────
 
-  const _Step({
+class _StepData {
+  final String title;
+  final String description;
+  final IconData icon;
+  const _StepData(this.title, this.description, this.icon);
+}
+
+class _HowItWorksSection extends StatefulWidget {
+  const _HowItWorksSection();
+
+  @override
+  State<_HowItWorksSection> createState() => _HowItWorksSectionState();
+}
+
+class _HowItWorksSectionState extends State<_HowItWorksSection> {
+  int _selectedStep = 0;
+
+  static const _steps = [
+    _StepData(
+      'Open Live',
+      'Tap "Go Live" above — your AI session connects instantly in under 2 seconds.',
+      Icons.play_circle_outline_rounded,
+    ),
+    _StepData(
+      'Pick Mode',
+      'Swipe the mode strip at the top to choose Assistant, Translator, Tutor, or Support.',
+      Icons.tune_rounded,
+    ),
+    _StepData(
+      'Speak / Show',
+      'Talk naturally or point your camera at anything — Arqivon responds in real time.',
+      Icons.record_voice_over_rounded,
+    ),
+    _StepData(
+      'Review',
+      'Every session is auto-saved to your Archive for replay, search, and reference.',
+      Icons.history_rounded,
+    ),
+  ];
+
+  static const _colors = [
+    Color(0xFF3B82F6),
+    Color(0xFF0EA5E9),
+    Color(0xFF818CF8),
+    Color(0xFF22D3EE),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'How it works',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF60A5FA),
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // ── Numbered circles with animated arrows ────────────────
+        SizedBox(
+          height: 56,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const circleSize = 48.0;
+              final spacing = (constraints.maxWidth - 4 * circleSize) / 3;
+
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Arrows between circles
+                  for (int i = 0; i < 3; i++)
+                    Positioned(
+                      left: (i + 1) * circleSize + i * spacing + 4,
+                      top: circleSize / 2 - 1,
+                      child: _AnimatedArrow(
+                        width: spacing - 8,
+                        color: _colors[i].withValues(alpha: 0.40),
+                        delay: Duration(milliseconds: 400 + i * 200),
+                      ),
+                    ),
+                  // Circles
+                  for (int i = 0; i < 4; i++)
+                    Positioned(
+                      left: i * (circleSize + spacing),
+                      top: 0,
+                      child: _StepCircle(
+                        number: i + 1,
+                        color: _colors[i],
+                        isSelected: _selectedStep == i,
+                        onTap: () => setState(() => _selectedStep = i),
+                        delay: Duration(milliseconds: i * 150),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── Expanded description card w/ animated swap ───────────
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.08),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
+          ),
+          child: _StepDescriptionCard(
+            key: ValueKey(_selectedStep),
+            step: _steps[_selectedStep],
+            color: _colors[_selectedStep],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Step circle with entry animation ─────────────────────────────────────────
+class _StepCircle extends StatelessWidget {
+  final int number;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Duration delay;
+
+  const _StepCircle({
     required this.number,
-    required this.title,
-    required this.body,
     required this.color,
-    this.isLast = false,
+    required this.isSelected,
+    required this.onTap,
+    required this.delay,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-                border:
-                    Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
-              ),
-              child: Center(
-                child: Text(
-                  number,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: color,
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isSelected ? color : color.withValues(alpha: 0.10),
+          border: Border.all(
+            color: isSelected ? color : color.withValues(alpha: 0.30),
+            width: isSelected ? 2.5 : 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.45),
+                    blurRadius: 18,
+                    spreadRadius: 2,
                   ),
-                ),
-              ),
-            ),
-            if (!isLast)
-              Container(
-                  width: 2, height: 44, color: color.withValues(alpha: 0.18)),
-          ],
+                ]
+              : [],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 16),
+        child: Center(
+          child: Text(
+            '$number',
+            style: TextStyle(
+              color: isSelected ? Colors.white : color,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    )
+        .animate()
+        .scale(
+          begin: const Offset(0, 0),
+          end: const Offset(1, 1),
+          delay: delay,
+          duration: 500.ms,
+          curve: Curves.elasticOut,
+        )
+        .fadeIn(delay: delay, duration: 300.ms);
+  }
+}
+
+// ── Animated dashed arrow ────────────────────────────────────────────────────
+class _AnimatedArrow extends StatelessWidget {
+  final double width;
+  final Color color;
+  final Duration delay;
+
+  const _AnimatedArrow({
+    required this.width,
+    required this.color,
+    required this.delay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: 2,
+      child: CustomPaint(
+        size: Size(width, 2),
+        painter: _ArrowPainter(color: color),
+      ),
+    )
+        .animate()
+        .scaleX(
+          begin: 0,
+          end: 1,
+          alignment: Alignment.centerLeft,
+          delay: delay,
+          duration: 500.ms,
+          curve: Curves.easeOutCubic,
+        )
+        .fadeIn(delay: delay, duration: 300.ms);
+  }
+}
+
+class _ArrowPainter extends CustomPainter {
+  final Color color;
+  _ArrowPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    // Dashed line
+    const dashW = 6.0;
+    const gap = 4.0;
+    double x = 0;
+    while (x < size.width - 8) {
+      canvas.drawLine(
+        Offset(x, size.height / 2),
+        Offset(min(x + dashW, size.width - 8), size.height / 2),
+        paint,
+      );
+      x += dashW + gap;
+    }
+
+    // Arrow head
+    final arrowPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width, size.height / 2)
+      ..lineTo(size.width - 7, size.height / 2 - 4)
+      ..lineTo(size.width - 7, size.height / 2 + 4)
+      ..close();
+    canvas.drawPath(path, arrowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ── Step description card ────────────────────────────────────────────────────
+class _StepDescriptionCard extends StatelessWidget {
+  final _StepData step;
+  final Color color;
+
+  const _StepDescriptionCard({
+    super.key,
+    required this.step,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.15),
+              border:
+                  Border.all(color: color.withValues(alpha: 0.30), width: 1.5),
+            ),
+            child: Icon(step.icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: ArqivonTheme.darkText,
+                  step.title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
-                  body,
+                  step.description,
                   style: const TextStyle(
-                    fontSize: 12.5,
                     color: ArqivonTheme.darkSubtext,
+                    fontSize: 13,
                     height: 1.45,
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

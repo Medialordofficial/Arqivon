@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
@@ -21,9 +24,26 @@ class AudioService {
   // When true the recorder keeps running but chunks are NOT forwarded to the
   // WebSocket (used to silence the mic while the AI is speaking).
   bool _forwarding = true;
+  bool _audioSessionConfigured = false;
 
   /// PCM chunks buffered from the server between audio packets and turn_complete.
   final List<Uint8List> _pcmBuffer = [];
+
+  /// Configure audio session for simultaneous play + record.
+  /// Without this, Android routes playback to earpiece (not speaker) when the
+  /// mic is active, causing "no audio" on many devices.
+  Future<void> _ensureAudioSession() async {
+    if (_audioSessionConfigured) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(AudioSessionConfiguration.speech());
+      _audioSessionConfigured = true;
+      if (kDebugMode)
+        debugPrint('[Audio] Audio session configured (play+record)');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Audio] Audio session config failed: $e');
+    }
+  }
 
   // ── Recording ──────────────────────────────────────────────────────────
 
@@ -32,6 +52,7 @@ class AudioService {
 
   Future<void> start() async {
     if (_isCapturing) return;
+    await _ensureAudioSession();
     final hasPerm = await _recorder.hasPermission();
     if (!hasPerm) {
       if (kDebugMode) debugPrint('[Audio] Microphone permission denied');
@@ -81,7 +102,12 @@ class AudioService {
   /// Buffer one incoming PCM chunk from the AI.
   void queueChunk(String base64Audio) {
     try {
-      _pcmBuffer.add(base64Decode(base64Audio));
+      final decoded = base64Decode(base64Audio);
+      _pcmBuffer.add(decoded);
+      if (kDebugMode && _pcmBuffer.length % 5 == 1) {
+        debugPrint(
+            '[Audio] Buffered ${_pcmBuffer.length} chunks (latest ${decoded.length} bytes)');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('[Audio] Bad chunk: $e');
     }
@@ -90,8 +116,16 @@ class AudioService {
   /// Called on turn_complete — combine buffered PCM, wrap in WAV, play.
   /// Gemini Live API outputs PCM at 24 kHz, 16-bit, mono.
   Future<void> flushAndPlay() async {
-    if (_pcmBuffer.isEmpty) return;
+    if (_pcmBuffer.isEmpty) {
+      if (kDebugMode)
+        debugPrint('[Audio] flushAndPlay: buffer empty — nothing to play');
+      return;
+    }
     final totalLen = _pcmBuffer.fold<int>(0, (s, c) => s + c.length);
+    if (kDebugMode) {
+      debugPrint(
+          '[Audio] flushAndPlay: ${_pcmBuffer.length} chunks, $totalLen bytes total');
+    }
     final pcm = Uint8List(totalLen);
     var offset = 0;
     for (final chunk in _pcmBuffer) {
@@ -102,17 +136,50 @@ class AudioService {
     if (totalLen == 0) return;
     final wav =
         _buildWav(pcm, sampleRate: 24000, channels: 1, bitsPerSample: 16);
+
+    await _ensureAudioSession();
+
+    // Primary: write to temp file for reliable cross-device playback.
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '\${dir.path}/arqivon_resp_\${DateTime.now().millisecondsSinceEpoch}.wav',
+      );
+      await file.writeAsBytes(wav, flush: true);
+      await _player.stop();
+      await _player.setFilePath(file.path);
+      unawaited(_player.play());
+      if (kDebugMode)
+        debugPrint('[Audio] Playing ${wav.length} byte WAV from file');
+      // Clean up temp file once playback finishes.
+      unawaited(
+        _player.playerStateStream
+            .firstWhere((s) => s.processingState == ProcessingState.completed)
+            .then((_) => file.delete().catchError((_) {}))
+            .catchError((_) {}),
+      );
+      return;
+    } catch (e) {
+      if (kDebugMode)
+        debugPrint('[Audio] File playback failed: $e — trying in-memory');
+    }
+
+    // Fallback: in-memory StreamAudioSource.
     try {
       await _player.stop();
       await _player.setAudioSource(_WavBytesSource(wav));
-      await _player.play();
+      unawaited(_player.play());
+      if (kDebugMode) debugPrint('[Audio] Fallback in-memory playback started');
     } catch (e) {
-      if (kDebugMode) debugPrint('[Audio] Playback error: $e');
+      if (kDebugMode) debugPrint('[Audio] All playback methods failed: $e');
     }
   }
 
   /// Stop playback and discard buffered chunks (e.g. on interrupted).
   Future<void> stopPlayback() async {
+    if (kDebugMode)
+      debugPrint(
+          '[Audio] stopPlayback — discarding ${_pcmBuffer.length} buffered chunks');
     _pcmBuffer.clear();
     try {
       await _player.stop();

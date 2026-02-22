@@ -232,6 +232,13 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
         system_instruction=prompt,
         tools=[types.Tool(function_declarations=declarations)],
         response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name="Aoede",
+                ),
+            ),
+        ),
         # Explicitly declare the input audio format so Gemini VAD works correctly.
         # The Flutter client streams PCM 16-bit mono at 16 kHz.
         realtime_input_config=types.RealtimeInputConfig(
@@ -423,6 +430,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 for part in sc.model_turn.parts:
                                     if part.inline_data and part.inline_data.data:
                                         audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
+                                        logger.info("Audio chunk → client: %d bytes", len(part.inline_data.data))
                                         await _send_json(websocket, OutboundMessage(
                                             type=OutboundType.AUDIO, data=audio_b64,
                                         ))
