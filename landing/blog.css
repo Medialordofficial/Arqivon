@@ -57,7 +57,7 @@
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--accent);
-    background: rgba(37, 99, 235, .07);
+    background: rgba(139, 94, 60, .07);
     padding: 4px 12px;
     border-radius: var(--radius-full);
 }
@@ -118,7 +118,7 @@
 .blog-content code {
     font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
     font-size: .88em;
-    background: rgba(37, 99, 235, .06);
+    background: rgba(139, 94, 60, .06);
     color: var(--accent);
     padding: 2px 6px;
     border-radius: 4px;
@@ -241,7 +241,7 @@
 .blog-tool__mode--shared { background: rgba(100,116,139,.1); color: #64748b; }
 .blog-tool__mode--translator { background: rgba(245,158,11,.1); color: #D97706; }
 .blog-tool__mode--tutor { background: rgba(0,212,170,.1); color: #059669; }
-.blog-tool__mode--support { background: rgba(59,130,246,.1); color: #2563EB; }
+.blog-tool__mode--support { background: rgba(139, 94, 60, .1); color: #8B5E3C; }
 .blog-tool__name {
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: .8rem;
