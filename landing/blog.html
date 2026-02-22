@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog — Arqivon</title>
+    <meta name="description" content="Behind-the-scenes stories, technical deep dives, and product updates from the Arqivon team.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="blog.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+</head>
+<body>
+
+    <!-- ========== NAVBAR ========== -->
+    <header class="navbar navbar--scrolled" id="navbar">
+        <div class="container navbar__inner">
+            <a href="index.html" class="navbar__brand">
+                <div class="navbar__logo">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <circle cx="14" cy="14" r="12" stroke="url(#logo-grad)" stroke-width="2.5"/>
+                        <circle cx="14" cy="14" r="5" fill="url(#logo-grad)"/>
+                        <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0" y1="0" x2="28" y2="28">
+                                <stop stop-color="#7C5CFC"/>
+                                <stop offset="1" stop-color="#00D4AA"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span class="navbar__name">Arqivon</span>
+            </a>
+            <nav class="navbar__links" id="navLinks">
+                <a href="index.html#features" class="navbar__link">Features</a>
+                <a href="index.html#modes" class="navbar__link">Modes</a>
+                <a href="index.html#how-it-works" class="navbar__link">How it Works</a>
+                <a href="blog.html" class="navbar__link" style="color: var(--accent);">Blog</a>
+                <a href="index.html#demo" class="navbar__link">Try Demo</a>
+            </nav>
+            <div class="navbar__actions">
+                <a href="index.html#demo" class="btn btn--primary">Try Free <span class="btn__arrow">&rarr;</span></a>
+            </div>
+            <button class="navbar__hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ========== BLOG HEADER ========== -->
+    <section class="blog-hero">
+        <div class="container">
+            <span class="section-tag">Blog</span>
+            <h1 class="blog-hero__title">Stories from the <span class="gradient-text">Living Lens</span></h1>
+            <p class="blog-hero__desc">Technical deep dives, design decisions, and lessons learned while building Arqivon — the AI that sees your world.</p>
+        </div>
+    </section>
+
+    <!-- ========== BLOG POSTS ========== -->
+    <section class="blog-posts">
+        <div class="container">
+
+            <!-- Featured Post -->
+            <article class="blog-card blog-card--featured" id="building-arqivon">
+                <div class="blog-card__meta">
+                    <span class="blog-card__date">22 February 2026</span>
+                    <span class="blog-card__tag">Engineering</span>
+                    <span class="blog-card__read">12 min read</span>
+                </div>
+                <h2 class="blog-card__title">Building Arqivon: How We Turned a Phone Camera Into a Real-Time AI Agent With the Gemini Live API</h2>
+                <p class="blog-card__subtitle">A deep dive into designing, building, and shipping a multimodal live agent that sees, hears, and acts — for the Gemini Live Agent Challenge.</p>
+
+                <div class="blog-content">
+
+                    <p class="blog-content__lead">
+                        What if your AI assistant could see the world through your eyes — in real time? Not a photo you upload five minutes later, but a continuous, living feed of what's happening right now. That question became Arqivon, and this is the story of how we built it.
+                    </p>
+
+                    <h3>The Spark: Why We Built a Living Lens</h3>
+                    <p>
+                        We're a tiny team at <strong>NotaNovice Group</strong>, and we've all felt the friction of traditional AI assistants. You're standing in a foreign city, staring at a sign in a language you don't understand. You pull out your phone, open a translation app, take a photo, crop it, wait, and eventually get a translation. By then, you've already walked past the sign.
+                    </p>
+                    <p>
+                        Or you're helping your kid with homework. They're stuck on a quadratic equation. You try to type the equation into ChatGPT (good luck formatting that on a phone keyboard), wait 15 seconds, read a wall of text, then try to explain it back to a confused 13-year-old. The moment is gone.
+                    </p>
+                    <p>
+                        When Google announced the <strong>Gemini Live Agent Challenge</strong>, we saw our opening. The Gemini Live API's native audio support — bidirectional, real-time, with barge-in and function calling — was exactly the missing piece. We could build what we'd always wanted: an AI agent that you don't <em>type at</em>, but one that you <em>look with</em> and <em>talk to</em>.
+                    </p>
+
+                    <h3>Architecture: The Three-Legged Stool</h3>
+                    <p>Arqivon's architecture comes down to three components, each doing one thing well:</p>
+
+                    <div class="blog-arch">
+                        <div class="blog-arch__item">
+                            <div class="blog-arch__icon">📱</div>
+                            <h4>Flutter App</h4>
+                            <p>Captures camera at 2fps (JPEG) and microphone at 16kHz (PCM). Ships both streams simultaneously over a single WebSocket. Renders mode-specific UI overlays — translation subtitles, tutor step cards, PDF exports.</p>
+                        </div>
+                        <div class="blog-arch__item">
+                            <div class="blog-arch__icon">☁️</div>
+                            <h4>FastAPI Relay on Cloud Run</h4>
+                            <p>Manages per-user WebSocket connections. Each connection spawns a Gemini Live API session with mode-specific system prompts and tool declarations. Three concurrent asyncio coroutines: client→Gemini, Gemini→client, and heartbeat.</p>
+                        </div>
+                        <div class="blog-arch__item">
+                            <div class="blog-arch__icon">🤖</div>
+                            <h4>Gemini 2.5 Flash Live API</h4>
+                            <p>The brain. Receives audio + vision, responds with native audio, and invokes function calls against our 17-tool registry. Native VAD enables barge-in — users can interrupt mid-sentence.</p>
+                        </div>
+                    </div>
+
+                    <p>
+                        The key insight was that the backend should be a <strong>thin relay</strong>, not a processing layer. We don't do any AI inference on our server. Cloud Run receives the raw audio + video from the client, forwards it to Gemini via the <code>google-genai</code> SDK's <code>aio.live.connect()</code>, and routes the responses back. This keeps latency under 200ms and lets us scale to hundreds of concurrent users without GPU infrastructure.
+                    </p>
+
+                    <h3>The Tool Registry: Where the Magic Happens</h3>
+                    <p>
+                        Here's what separates a "Gemini wrapper" from a genuine agent: <strong>tools</strong>. Arqivon registers 17 function declarations with the Gemini Live API, organized across four specialized modes:
+                    </p>
+
+                    <div class="blog-tools">
+                        <div class="blog-tool">
+                            <span class="blog-tool__mode blog-tool__mode--shared">Shared</span>
+                            <span class="blog-tool__name">analyze_live_frame</span>
+                            <span class="blog-tool__name">create_ui_action</span>
+                            <span class="blog-tool__name">upsert_firestore_memory</span>
+                        </div>
+                        <div class="blog-tool">
+                            <span class="blog-tool__mode blog-tool__mode--translator">Translator</span>
+                            <span class="blog-tool__name">live_translate</span>
+                            <span class="blog-tool__name">detect_language</span>
+                            <span class="blog-tool__name">translation_card</span>
+                            <span class="blog-tool__name">export_document</span>
+                        </div>
+                        <div class="blog-tool">
+                            <span class="blog-tool__mode blog-tool__mode--tutor">Tutor</span>
+                            <span class="blog-tool__name">analyze_homework</span>
+                            <span class="blog-tool__name">solve_problem</span>
+                            <span class="blog-tool__name">explain_concept</span>
+                            <span class="blog-tool__name">provide_hint</span>
+                            <span class="blog-tool__name">grade_step</span>
+                            <span class="blog-tool__name">tutor_card</span>
+                            <span class="blog-tool__name">export_document</span>
+                        </div>
+                        <div class="blog-tool">
+                            <span class="blog-tool__mode blog-tool__mode--support">Support</span>
+                            <span class="blog-tool__name">switch_topic</span>
+                            <span class="blog-tool__name">escalate_case</span>
+                            <span class="blog-tool__name">log_resolution</span>
+                            <span class="blog-tool__name">support_card</span>
+                            <span class="blog-tool__name">export_document</span>
+                        </div>
+                    </div>
+
+                    <p>
+                        When a user switches modes, the backend tears down the existing Gemini session and reconnects with a completely different system prompt and tool subset. The Translator agent only sees translation tools; the Tutor only sees tutoring tools. This constraint is what makes each mode feel genuinely specialized rather than a generic "do everything" assistant.
+                    </p>
+
+                    <h3>Lesson 1: The SDK Migration That Almost Broke Everything</h3>
+                    <p>
+                        Three weeks into development, we hit our first major crisis. We'd built the entire backend around <code>session.send()</code> for sending audio and video to Gemini. Then <code>google-genai</code> version 1.64.0 dropped and <strong>deprecated the entire method</strong>.
+                    </p>
+                    <p>
+                        The replacement was three separate methods:
+                    </p>
+                    <ul class="blog-list">
+                        <li><code>send_realtime_input()</code> for audio and video streams</li>
+                        <li><code>send_client_content()</code> for text messages and mode switches</li>
+                        <li><code>send_tool_response()</code> for returning function call results</li>
+                    </ul>
+                    <p>
+                        This broke our multi-turn conversations completely. The old unified <code>send()</code> handled everything, but now we had to carefully route different message types to different methods. Tool responses sent via <code>send_realtime_input()</code> would silently fail. Text sent via <code>send_tool_response()</code> would crash.
+                    </p>
+                    <p>
+                        <strong>Takeaway:</strong> When using a fast-moving SDK like <code>google-genai</code>, pin your version in <code>requirements.txt</code> and test every upgrade in isolation. We now run <code>pip install --upgrade google-genai</code> in a dedicated branch and regression-test all four modes before merging.
+                    </p>
+
+                    <h3>Lesson 2: Android Audio Focus Is a Silent Killer</h3>
+                    <p>
+                        The <code>record</code> Flutter plugin silently dies when another app steals audio focus. No error, no callback, no exception. The recorder just stops producing data, and the WebSocket sends empty frames to the backend, which Gemini interprets as silence.
+                    </p>
+                    <p>
+                        We discovered this the hard way during a demo — the phone played a notification sound, the recorder died, and the agent went completely silent. The fix was an <code>ensureRecording()</code> function that checks recorder state every audio cycle and force-restarts if needed:
+                    </p>
+                    <pre class="blog-code"><code>// Simplified version of our fix
+Future&lt;void&gt; ensureRecording() async {
+  if (!_recorder.isRecording) {
+    await _recorder.stop();
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.pcm16bits,
+                         sampleRate: 16000, numChannels: 1),
+      path: '',
+    );
+  }
+}</code></pre>
+
+                    <h3>Lesson 3: Cloud Run WebSocket Timeout — The 5-Minute Wall</h3>
+                    <p>
+                        Cloud Run defaults to a 5-minute request timeout. For REST APIs, that's generous. For a WebSocket-based voice agent, it means your conversation dies after 5 minutes. Every time.
+                    </p>
+                    <p>
+                        The fix was a combination of three Cloud Run settings:
+                    </p>
+                    <ul class="blog-list">
+                        <li><code>--timeout=3600</code> — 1-hour maximum connection lifetime</li>
+                        <li><code>--no-cpu-throttling</code> — prevent CPU from being throttled between requests (critical for WebSocket keepalives)</li>
+                        <li><code>--min-instances=1</code> — keep at least one instance warm to avoid cold starts during reconnection</li>
+                    </ul>
+                    <p>
+                        Plus a 12-second heartbeat ping from the backend to keep the WebSocket alive through any intermediate proxies or load balancers.
+                    </p>
+
+                    <h3>Lesson 4: Camera FPS Is a Balancing Act</h3>
+                    <p>
+                        We started at 10fps — seemed reasonable for "real-time vision." Gemini immediately rate-limited us. Dropped to 5fps — still too aggressive for multimodal streaming. 3fps was borderline.
+                    </p>
+                    <p>
+                        We settled on <strong>2fps</strong>. Two frames per second sounds absurdly slow, but it turns out that for a vision agent that's identifying objects, reading text, and analyzing scenes, 2fps provides more than enough visual information. The user is typically holding their camera steady anyway. And at 2fps, we never hit Gemini rate limits, even during rapid-fire Q&A sessions.
+                    </p>
+
+                    <h3>Lesson 5: Fresh Audio Player Per Turn Prevents Playback Bugs</h3>
+                    <p>
+                        Early on, we reused a single <code>AudioPlayer</code> instance across multiple AI responses. This caused bizarre issues on Android — audio from the previous turn would sometimes bleed into the current one, or the player would enter a corrupted state after being interrupted mid-sentence.
+                    </p>
+                    <p>
+                        The fix was simple but counterintuitive: create a fresh <code>AudioPlayer</code> for every AI response turn, dispose the old one, and let the garbage collector handle cleanup. This added maybe 5ms of overhead but eliminated an entire class of audio bugs.
+                    </p>
+
+                    <h3>The PDF Export Pipeline: From Voice to Document</h3>
+                    <p>
+                        One of our favorite features is the <code>export_document</code> tool. When you're in Tutor mode and the AI just walked you through solving a calculus problem, you can say "export that as a PDF" and Gemini invokes the export tool with the structured content.
+                    </p>
+                    <p>
+                        The pipeline works like this:
+                    </p>
+                    <ol class="blog-list blog-list--numbered">
+                        <li>Gemini calls <code>export_document</code> with title, sections, and content</li>
+                        <li>Backend routes the structured data as an <code>EXPORT</code> WebSocket message</li>
+                        <li>Flutter's <code>ExportService</code> generates a formatted PDF using the <code>pdf</code> package</li>
+                        <li>Native share sheet opens via <code>share_plus</code> — save, email, AirDrop, whatever</li>
+                    </ol>
+                    <p>
+                        The entire flow — from voice command to PDF in your hand — takes under 3 seconds.
+                    </p>
+
+                    <h3>What We'd Do Differently</h3>
+                    <ul class="blog-list">
+                        <li><strong>Start with mode separation earlier.</strong> We originally built a single "do everything" agent and retro-fitted modes. Starting with isolated agents from day one would have saved weeks.</li>
+                        <li><strong>Invest in WebSocket testing infrastructure.</strong> Testing real-time audio/video WebSocket flows is hard. We relied too much on manual testing on physical devices. A mock WebSocket test harness would have caught the SDK migration bug earlier.</li>
+                        <li><strong>Ship the landing page earlier.</strong> Having a public-facing website earlier would have helped us collect feedback and refine the pitch before the submission deadline.</li>
+                    </ul>
+
+                    <h3>What's Next</h3>
+                    <p>
+                        Arqivon is live and deployed. You can <a href="index.html#demo">try it right now</a> — web, Android, or iOS. But this is just the beginning. We're exploring:
+                    </p>
+                    <ul class="blog-list">
+                        <li>Persistent memory across sessions — the agent remembering your learning progress, translation history, and support tickets</li>
+                        <li>Multi-user collaboration — imagine pointing two phones at the same whiteboard and having a shared tutoring session</li>
+                        <li>Offline-first mode — caching common translations and support answers for areas with poor connectivity</li>
+                    </ul>
+
+                    <h3>Try It Yourself</h3>
+                    <p>
+                        Arqivon is open source. Clone it, fork it, break it, improve it.
+                    </p>
+                    <div class="blog-cta-links">
+                        <a href="https://github.com/Medialordofficial/Arqivon" target="_blank" class="btn btn--primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                            View on GitHub
+                        </a>
+                        <a href="index.html#demo" class="btn btn--outline">Try the Live Demo &rarr;</a>
+                    </div>
+
+                    <div class="blog-author">
+                        <div class="blog-author__avatar">EM</div>
+                        <div class="blog-author__info">
+                            <strong>Emmanuel Mfon</strong>
+                            <span>Founder, NotaNovice Group &middot; Builder of Arqivon</span>
+                        </div>
+                    </div>
+                </div>
+            </article>
+
+        </div>
+    </section>
+
+    <!-- ========== FOOTER ========== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__inner">
+                <div class="footer__brand">
+                    <a href="index.html" class="navbar__brand">
+                        <div class="navbar__logo">
+                            <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                                <circle cx="14" cy="14" r="12" stroke="url(#lg-f)" stroke-width="2.5"/>
+                                <circle cx="14" cy="14" r="5" fill="url(#lg-f)"/>
+                                <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#lg-f)" stroke-width="2" stroke-linecap="round"/>
+                                <defs><linearGradient id="lg-f" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7C5CFC"/><stop offset="1" stop-color="#00D4AA"/></linearGradient></defs>
+                            </svg>
+                        </div>
+                        <span class="navbar__name">Arqivon</span>
+                    </a>
+                    <p class="footer__tagline">The AI that sees your world.</p>
+                </div>
+                <div class="footer__links">
+                    <div class="footer__col">
+                        <h4>Product</h4>
+                        <a href="index.html#features">Features</a>
+                        <a href="index.html#modes">Agent Modes</a>
+                        <a href="index.html#how-it-works">How It Works</a>
+                        <a href="index.html#demo">Try Demo</a>
+                    </div>
+                    <div class="footer__col">
+                        <h4>Platform</h4>
+                        <a href="https://arqivon-inc.web.app" target="_blank">Web App</a>
+                        <a href="#">Android (APK)</a>
+                        <a href="#">iOS (TestFlight)</a>
+                    </div>
+                    <div class="footer__col">
+                        <h4>Resources</h4>
+                        <a href="https://github.com/Medialordofficial/Arqivon" target="_blank">GitHub</a>
+                        <a href="https://geminiliveagentchallenge.devpost.com/" target="_blank">Gemini Challenge</a>
+                        <a href="blog.html">Blog</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer__bottom">
+                <p>&copy; 2026 Arqivon by NotaNovice Group. Built for the Google Gemini Live Agent Challenge.</p>
+                <div class="footer__socials">
+                    <a href="https://github.com/Medialordofficial/Arqivon" target="_blank" aria-label="GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    // Navbar scroll
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+        navbar.classList.toggle('navbar--scrolled', window.scrollY > 50);
+    });
+
+    // Mobile menu
+    const hamburger = document.getElementById('hamburger');
+    if (hamburger) {
+        hamburger.addEventListener('click', () => {
+            hamburger.classList.toggle('active');
+            document.body.style.overflow = hamburger.classList.contains('active') ? 'hidden' : '';
+        });
+    }
+    </script>
+</body>
+</html>
