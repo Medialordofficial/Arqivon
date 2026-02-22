@@ -39,8 +39,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initCamera();
-    // Pre-connect WebSocket so the indicator is green when user opens tab
+    // Camera init deferred to when audio+video mode is selected.
+    // WebSocket pre-connect: runs on first frame only (not at app startup
+    // since MainNavigator now lazy-builds this screen).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(liveSessionProvider.notifier).connectOnly();
     });
@@ -443,8 +444,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           label: 'Audio + Video',
                           icon: Icons.videocam_rounded,
                           selected: _inputMode == _LiveInputMode.audioVideo,
-                          onTap: () => setState(
-                              () => _inputMode = _LiveInputMode.audioVideo),
+                          onTap: () {
+                            setState(
+                                () => _inputMode = _LiveInputMode.audioVideo);
+                            // Init camera on first switch to A/V mode.
+                            if (!_cameraReady) _initCamera();
+                          },
                         ),
                       ],
                     ),

@@ -1,37 +1,41 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// Lifecycle:
-///   - Created eagerly in connectOnly() so AI audio plays even before mic starts.
-///   - [start] / [stop] control the microphone only.
-///   - [queueChunk] / [flushAndPlay] / [stopPlayback] control the speaker.
+/// Audio playback is STREAMING — chunks are flushed into small WAV segments
+/// every ~300 ms and queued via [ConcatenatingAudioSource] so the user hears
+/// the AI reply immediately while it's still generating.
+///
+/// The mic stays active during AI playback to allow barge-in (Gemini's native
+/// VAD detects the user speaking and sends an `interrupted` signal).
 class AudioService {
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
   StreamSubscription<Uint8List>? _recordSub;
   final _audioController = StreamController<String>.broadcast();
   bool _isCapturing = false;
-  // When true the recorder keeps running but chunks are NOT forwarded to the
-  // WebSocket (used to silence the mic while the AI is speaking).
-  bool _forwarding = true;
   bool _audioSessionConfigured = false;
 
-  /// PCM chunks buffered from the server between audio packets and turn_complete.
+  /// PCM chunks buffered between periodic flushes.
   final List<Uint8List> _pcmBuffer = [];
 
+  /// Streaming playback queue — small WAV segments are appended as they arrive.
+  final ConcatenatingAudioSource _playlist =
+      ConcatenatingAudioSource(children: []);
+  Timer? _flushTimer;
+  bool _playbackStarted = false;
+
+  /// Callback fired when AI finishes speaking (playback done).
+  VoidCallback? onPlaybackDone;
+
   /// Configure audio session for simultaneous play + record.
-  /// Without this, Android routes playback to earpiece (not speaker) when the
-  /// mic is active, causing "no audio" on many devices.
   Future<void> _ensureAudioSession() async {
     if (_audioSessionConfigured) return;
     try {
@@ -68,11 +72,9 @@ class AudioService {
         noiseSuppress: true,
       ),
     );
-    _forwarding = true;
     _recordSub = stream.listen(
       (chunk) {
-        if (chunk.isNotEmpty && _forwarding)
-          _audioController.add(base64Encode(chunk));
+        if (chunk.isNotEmpty) _audioController.add(base64Encode(chunk));
       },
       onError: (Object e) {
         if (kDebugMode) debugPrint('[Audio] Capture error: $e');
@@ -88,23 +90,22 @@ class AudioService {
     _recordSub = null;
     await _recorder.stop();
     _isCapturing = false;
-    _forwarding = true; // reset for next session
   }
 
-  /// Temporarily stop forwarding mic chunks to the WebSocket (AI is speaking).
-  void pauseForwarding() => _forwarding = false;
+  // ── Streaming Playback ─────────────────────────────────────────────────
 
-  /// Resume forwarding mic chunks (AI finished speaking / interrupted).
-  void resumeForwarding() => _forwarding = true;
-
-  // ── Playback ───────────────────────────────────────────────────────────
-
-  /// Buffer one incoming PCM chunk from the AI.
+  /// Buffer one incoming PCM chunk from the AI and start periodic flushing.
   void queueChunk(String base64Audio) {
     try {
       final decoded = base64Decode(base64Audio);
       _pcmBuffer.add(decoded);
-      if (kDebugMode && _pcmBuffer.length % 5 == 1) {
+      // Kick off a periodic flush timer so audio starts playing ~300 ms after
+      // the first chunk arrives — no need to wait for turn_complete.
+      _flushTimer ??= Timer.periodic(
+        const Duration(milliseconds: 300),
+        (_) => _flushPartial(),
+      );
+      if (kDebugMode && _pcmBuffer.length % 10 == 1) {
         debugPrint(
             '[Audio] Buffered ${_pcmBuffer.length} chunks (latest ${decoded.length} bytes)');
       }
@@ -113,19 +114,12 @@ class AudioService {
     }
   }
 
-  /// Called on turn_complete — combine buffered PCM, wrap in WAV, play.
-  /// Gemini Live API outputs PCM at 24 kHz, 16-bit, mono.
-  Future<void> flushAndPlay() async {
-    if (_pcmBuffer.isEmpty) {
-      if (kDebugMode)
-        debugPrint('[Audio] flushAndPlay: buffer empty — nothing to play');
-      return;
-    }
+  /// Flush any accumulated PCM into a mini WAV segment and append to playlist.
+  Future<void> _flushPartial() async {
+    if (_pcmBuffer.isEmpty) return;
     final totalLen = _pcmBuffer.fold<int>(0, (s, c) => s + c.length);
-    if (kDebugMode) {
-      debugPrint(
-          '[Audio] flushAndPlay: ${_pcmBuffer.length} chunks, $totalLen bytes total');
-    }
+    if (totalLen == 0) return;
+
     final pcm = Uint8List(totalLen);
     var offset = 0;
     for (final chunk in _pcmBuffer) {
@@ -133,60 +127,83 @@ class AudioService {
       offset += chunk.length;
     }
     _pcmBuffer.clear();
-    if (totalLen == 0) return;
+
     final wav =
         _buildWav(pcm, sampleRate: 24000, channels: 1, bitsPerSample: 16);
 
-    await _ensureAudioSession();
-
-    // Primary: write to temp file for reliable cross-device playback.
     try {
-      final dir = await getTemporaryDirectory();
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final filePath = '${dir.path}/arqivon_resp_$ts.wav';
-      final file = File(filePath);
-      await file.writeAsBytes(wav, flush: true);
+      await _playlist.add(_WavBytesSource(wav));
       if (kDebugMode)
-        debugPrint('[Audio] WAV written to $filePath (${wav.length} bytes)');
-      await _player.stop();
-      await _player.setFilePath(file.path);
-      await _player.play();
-      if (kDebugMode)
-        debugPrint('[Audio] Playing ${wav.length} byte WAV from file');
-      // Clean up temp file once playback finishes.
-      _player.playerStateStream
-          .firstWhere((s) => s.processingState == ProcessingState.completed)
-          .then((_) => file.delete())
-          .ignore();
-      return;
+        debugPrint(
+            '[Audio] Queued segment: ${wav.length} bytes (${_playlist.length} in queue)');
     } catch (e) {
-      if (kDebugMode)
-        debugPrint('[Audio] File playback failed: $e — trying in-memory');
+      if (kDebugMode) debugPrint('[Audio] Failed to queue segment: $e');
+      return;
     }
 
-    // Fallback: in-memory StreamAudioSource.
-    try {
-      await _player.stop();
-      await _player.setAudioSource(_WavBytesSource(wav));
-      await _player.play();
-      if (kDebugMode) debugPrint('[Audio] Fallback in-memory playback started');
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audio] All playback methods failed: $e');
+    if (!_playbackStarted) {
+      _playbackStarted = true;
+      await _ensureAudioSession();
+      try {
+        await _player.setAudioSource(_playlist);
+        _player.play();
+        if (kDebugMode) debugPrint('[Audio] Streaming playback started');
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Audio] Playback start failed: $e');
+        _playbackStarted = false;
+      }
     }
   }
 
-  /// Stop playback and discard buffered chunks (e.g. on interrupted).
-  Future<void> stopPlayback() async {
+  /// Called on turn_complete — flush remaining buffer.
+  /// Playback continues from the queue; the provider handles post-playback
+  /// state via [onPlaybackDone].
+  Future<void> flushAndPlay() async {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    // Flush any remaining buffered PCM.
+    await _flushPartial();
+
+    if (!_playbackStarted) {
+      if (kDebugMode) debugPrint('[Audio] flushAndPlay: nothing was queued');
+      onPlaybackDone?.call();
+      return;
+    }
+
     if (kDebugMode)
       debugPrint(
-          '[Audio] stopPlayback — discarding ${_pcmBuffer.length} buffered chunks');
+          '[Audio] turn_complete — ${_playlist.length} segments in queue');
+
+    // Listen for playlist completion, then reset.
+    _player.playerStateStream
+        .firstWhere((s) => s.processingState == ProcessingState.completed)
+        .then((_) => _resetPlayback())
+        .ignore();
+  }
+
+  /// Clean up after playback finishes.
+  void _resetPlayback() {
+    _playbackStarted = false;
+    _playlist.clear();
+    if (kDebugMode) debugPrint('[Audio] Playback complete — queue cleared');
+    onPlaybackDone?.call();
+  }
+
+  /// Stop playback immediately and discard everything (e.g. barge-in).
+  Future<void> stopPlayback() async {
+    _flushTimer?.cancel();
+    _flushTimer = null;
     _pcmBuffer.clear();
+    if (kDebugMode) debugPrint('[Audio] stopPlayback — interrupted');
     try {
       await _player.stop();
+      await _playlist.clear();
     } catch (_) {}
+    _playbackStarted = false;
   }
 
   void dispose() {
+    _flushTimer?.cancel();
     stop();
     _player.dispose();
     _audioController.close();

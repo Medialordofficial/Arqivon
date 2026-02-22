@@ -192,6 +192,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Reuse or create AudioService (player + recorder in one)
     _audio ??= AudioService();
+    // When AI finishes speaking (playback complete), clear responding flag.
+    _audio!.onPlaybackDone = () {
+      final cur = state.valueOrNull ?? const LiveSessionState();
+      if (cur.isResponding) {
+        state = AsyncData(cur.copyWith(isResponding: false));
+      }
+    };
 
     // Only send set_mode when the mode changes so the backend does NOT tear
     // down and rebuild the Gemini Live session on every mic tap.  On the very
@@ -277,9 +284,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'audio':
         if (msg.data != null) {
           _audio?.queueChunk(msg.data!);
-          // Mute the mic while AI is speaking to prevent echo feedback.
+          // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
-            _audio?.pauseForwarding();
             state = AsyncData(current.copyWith(
               isResponding: true,
               clearUserTranscript: true,
@@ -347,20 +353,19 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'turn_complete':
+        // Flush remaining audio to the streaming queue.
+        // isResponding stays true until playback actually finishes
+        // (handled by onPlaybackDone callback).
         _audio?.flushAndPlay();
-        // AI finished speaking — re-enable mic forwarding and clear responding flag.
-        _audio?.resumeForwarding();
         state = AsyncData(current.copyWith(
-          isResponding: false,
           clearTranscript: true,
           clearUserTranscript: true,
         ));
         break;
 
       case 'interrupted':
+        // User barged in — stop playback immediately and clear stale overlays.
         _audio?.stopPlayback();
-        // User interrupted AI — resume mic immediately and clear stale overlays.
-        _audio?.resumeForwarding();
         state = AsyncData(current.copyWith(
           isResponding: false,
           clearTranslation: true,

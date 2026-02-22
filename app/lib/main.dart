@@ -27,9 +27,9 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF0D0820),
-      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
   runApp(const ProviderScope(child: ArqivonApp()));
@@ -90,7 +90,7 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF0D0820),
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -110,7 +110,7 @@ class _SplashScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: Color(0xFF0F172A),
                 letterSpacing: -0.8,
               ),
             ),
@@ -119,7 +119,7 @@ class _SplashScreen extends StatelessWidget {
               'The Living Lens',
               style: TextStyle(
                 fontSize: 13,
-                color: Color(0x99FFFFFF),
+                color: Color(0xFF64748B),
                 letterSpacing: 1.5,
                 fontWeight: FontWeight.w400,
               ),
@@ -164,15 +164,28 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   int _currentIndex = 0;
 
-  void _goLive() => setState(() => _currentIndex = 1);
+  /// Tracks which tabs have been navigated to (lazy init).
+  final Set<int> _activatedTabs = {0}; // Home is always active
+
+  void _goLive() => setState(() {
+        _currentIndex = 1;
+        _activatedTabs.add(1);
+      });
 
   @override
   Widget build(BuildContext context) {
+    // Mark current tab as activated
+    _activatedTabs.add(_currentIndex);
+
     final screens = <Widget>[
       HomeScreen(onGoLive: _goLive),
-      const LiveScreen(),
-      const ArchiveScreen(),
-      const SettingsScreen(),
+      _activatedTabs.contains(1) ? const LiveScreen() : const SizedBox.shrink(),
+      _activatedTabs.contains(2)
+          ? const ArchiveScreen()
+          : const SizedBox.shrink(),
+      _activatedTabs.contains(3)
+          ? const SettingsScreen()
+          : const SizedBox.shrink(),
     ];
 
     return Scaffold(
