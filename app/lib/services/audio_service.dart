@@ -56,12 +56,17 @@ class AudioService {
         androidAudioAttributes: const AndroidAudioAttributes(
           contentType: AndroidAudioContentType.speech,
           flags: AndroidAudioFlags.none,
-          // Use media instead of voiceCommunication to force speaker output
-          usage: AndroidAudioUsage.media,
+          usage: AndroidAudioUsage.voiceCommunication,
         ),
         androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransient,
         androidWillPauseWhenDucked: true,
       ));
+
+      // Force speaker output for voiceCommunication on Android
+      if (Platform.isAndroid) {
+        await AndroidAudioManager().setSpeakerphoneOn(true);
+      }
+
       _audioSessionConfigured = true;
       if (kDebugMode)
         debugPrint('[Audio] Audio session configured (play+record, speaker)');

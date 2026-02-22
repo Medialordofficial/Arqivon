@@ -69,7 +69,7 @@ async def create_ui_action(
 # ── Translator Mode ──────────────────────────────────────────────────────────
 
 async def live_translate(
-    *, source_text: str, source_language: str = "auto",
+    *, source_text: str, translated_text: str = "", source_language: str = "auto",
     target_language: str = "en", formality: str = "neutral",
     db: Any = None, user_id: str = "anonymous",
 ) -> str:
@@ -81,7 +81,7 @@ async def live_translate(
         "source_text": source_text,
         "source_language": source_language,
         "target_language": target_language,
-        "translated_text": source_text,  # model fills via function-call args
+        "translated_text": translated_text,
         "formality": formality,
         "timestamp": datetime.utcnow().isoformat(),
     })
