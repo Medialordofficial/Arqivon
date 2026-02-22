@@ -158,7 +158,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); line-height: 1.2; }
     font-size: 1.15rem;
 }
 .navbar__logo { display: flex; }
-.navbar__logo-img { width: 32px; height: 32px; border-radius: 8px; }
+.navbar__logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
 .navbar__name { font-family: var(--font-display); }
 .navbar__links { display: flex; gap: 32px; }
 .navbar__link {
