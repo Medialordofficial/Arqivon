@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -11,347 +10,395 @@ import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// Audio playback is STREAMING — chunks are flushed into small WAV segments
-/// every ~300 ms and queued via [ConcatenatingAudioSource] so the user hears
-/// the AI reply immediately while it's still generating.
+/// Recording uses [AudioRecorder] from the `record` package.
+/// Playback creates a **fresh [AudioPlayer]** for every AI response turn,
+/// eliminating stale player state that caused the mic to go silent after
+/// the first turn on Android.
 ///
 /// The mic stays active during AI playback to allow barge-in (Gemini's native
 /// VAD detects the user speaking and sends an `interrupted` signal).
 class AudioService {
+  // ── Recording ──────────────────────────────────────────────────────
   final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer _player = AudioPlayer();
   StreamSubscription<Uint8List>? _recordSub;
-  final _audioController = StreamController<String>.broadcast();
+  final StreamController<String> _audioController =
+      StreamController<String>.broadcast();
   bool _isCapturing = false;
-  bool _audioSessionConfigured = false;
+  bool _disposed = false;
 
-  /// PCM chunks buffered between periodic flushes.
-  final List<Uint8List> _pcmBuffer = [];
-
-  /// Streaming playback queue — small WAV segments are appended as they arrive.
-  final ConcatenatingAudioSource _playlist =
-      ConcatenatingAudioSource(children: []);
-  final List<String> _tempFiles = [];
-  Timer? _flushTimer;
+  // ── Playback (fresh per turn) ──────────────────────────────────────
+  AudioPlayer? _turnPlayer;
+  ConcatenatingAudioSource? _turnPlaylist;
+  StreamSubscription<PlayerState>? _playbackSub;
   bool _playbackStarted = false;
-  StreamSubscription? _playbackSub;
 
-  /// Callback fired when AI finishes speaking (playback done).
+  // PCM accumulation buffer – flushed periodically into WAV temp files.
+  final List<int> _pcmBuffer = [];
+  Timer? _flushTimer;
+  static const int _flushIntervalMs = 250;
+  static const int _minFlushBytes = 2400; // ~50 ms @ 24 kHz 16-bit mono
+  int _chunkIndex = 0;
+  final List<String> _tempFiles = [];
+
+  /// Called when the AI turn's playback finishes (or if no audio was queued).
   VoidCallback? onPlaybackDone;
 
-  /// Configure audio session for simultaneous play + record.
-  Future<void> _ensureAudioSession() async {
-    if (_audioSessionConfigured) return;
-    try {
-      final session = await AudioSession.instance;
-      await session.configure(AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-        avAudioSessionCategoryOptions:
-            AVAudioSessionCategoryOptions.allowBluetooth |
-                AVAudioSessionCategoryOptions.defaultToSpeaker,
-        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-        avAudioSessionRouteSharingPolicy:
-            AVAudioSessionRouteSharingPolicy.defaultPolicy,
-        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-        androidAudioAttributes: const AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.speech,
-          flags: AndroidAudioFlags.none,
-          usage: AndroidAudioUsage.voiceCommunication,
-        ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransient,
-        androidWillPauseWhenDucked: true,
-      ));
+  bool _sessionConfigured = false;
 
-      // Force speaker output for voiceCommunication on Android
-      if (Platform.isAndroid) {
-        await AndroidAudioManager().setSpeakerphoneOn(true);
-      }
-
-      _audioSessionConfigured = true;
-      if (kDebugMode)
-        debugPrint('[Audio] Audio session configured (play+record, speaker)');
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audio] Audio session config failed: $e');
-    }
-  }
-
-  // ── Recording ──────────────────────────────────────────────────────────
-
+  // ── Public getters ─────────────────────────────────────────────────
   Stream<String> get audioStream => _audioController.stream;
   bool get isCapturing => _isCapturing;
 
-  Future<void> start() async {
-    if (_isCapturing) return;
-    await _ensureAudioSession();
-    final hasPerm = await _recorder.hasPermission();
-    if (!hasPerm) {
-      if (kDebugMode) debugPrint('[Audio] Microphone permission denied');
-      return;
-    }
-    final stream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-        autoGain: true,
-        echoCancel: true,
-        noiseSuppress: true,
+  // ── Audio Session ──────────────────────────────────────────────────
+
+  Future<void> _ensureAudioSession() async {
+    if (_sessionConfigured) return;
+    final session = await AudioSession.instance;
+    await session.configure(AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+      avAudioSessionCategoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth,
+      avAudioSessionMode: AVAudioSessionMode.voiceChat,
+      // Use `media` usage to avoid Android's VoIP echo-canceller path which
+      // can silently kill the recorder when the player stops/starts.
+      androidAudioAttributes: const AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.speech,
+        usage: AndroidAudioUsage.media,
       ),
-    );
+      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      androidWillPauseWhenDucked: false,
+    ));
+    _sessionConfigured = true;
+    debugPrint('[AudioService] audio session configured');
+  }
+
+  // ── Recording ─────────────────────────────────────────────────────
+
+  /// Start microphone capture. Safe to call multiple times – silently returns
+  /// if already capturing.
+  Future<void> start() async {
+    if (_isCapturing || _disposed) return;
+    await _ensureAudioSession();
+
+    // Always stop first for a clean slate.
+    try {
+      await _recorder.stop();
+    } catch (_) {}
+
+    final stream = await _recorder.startStream(const RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: 16000,
+      numChannels: 1,
+      echoCancel: true,
+      noiseSuppress: true,
+      autoGain: true,
+    ));
+
+    _isCapturing = true;
+    _recordSub?.cancel();
     _recordSub = stream.listen(
-      (chunk) {
-        if (chunk.isNotEmpty) _audioController.add(base64Encode(chunk));
+      (data) {
+        if (!_audioController.isClosed) {
+          _audioController.add(base64Encode(data));
+        }
       },
-      onError: (Object e) {
-        if (kDebugMode) debugPrint('[Audio] Capture error: $e');
+      onError: (e) {
+        debugPrint('[AudioService] recorder error: $e');
       },
       onDone: () {
-        // Android may silently kill the recorder during playback due to
-        // audio-focus changes.  Auto-restart so the next turn works.
-        if (kDebugMode) {
-          debugPrint('[Audio] Capture stream ended — auto-restarting');
-        }
+        debugPrint('[AudioService] recorder stream ended — will auto-restart');
         _isCapturing = false;
-        if (!_audioController.isClosed) {
-          start(); // re-open recorder
+        _recordSub = null;
+        // Auto-restart after a brief delay unless we were disposed.
+        if (!_disposed && !_audioController.isClosed) {
+          Future.delayed(const Duration(milliseconds: 120), () {
+            if (!_disposed && !_isCapturing) {
+              debugPrint('[AudioService] auto-restarting recorder');
+              start();
+            }
+          });
         }
       },
     );
-    _isCapturing = true;
-    if (kDebugMode) debugPrint('[Audio] Capture started');
+    debugPrint('[AudioService] recorder started');
   }
 
+  /// Stop microphone capture.
   Future<void> stop() async {
-    if (!_isCapturing) return;
-    await _recordSub?.cancel();
-    _recordSub = null;
-    await _recorder.stop();
     _isCapturing = false;
-  }
-
-  // ── Streaming Playback ─────────────────────────────────────────────────
-
-  /// Buffer one incoming PCM chunk from the AI and start periodic flushing.
-  void queueChunk(String base64Audio) {
+    _recordSub?.cancel();
+    _recordSub = null;
     try {
-      final decoded = base64Decode(base64Audio);
-      _pcmBuffer.add(decoded);
-      // Kick off a periodic flush timer so audio starts playing ~300 ms after
-      // the first chunk arrives — no need to wait for turn_complete.
-      _flushTimer ??= Timer.periodic(
-        const Duration(milliseconds: 300),
-        (_) => _flushPartial(),
-      );
-      if (kDebugMode && _pcmBuffer.length % 10 == 1) {
-        debugPrint(
-            '[Audio] Buffered ${_pcmBuffer.length} chunks (latest ${decoded.length} bytes)');
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audio] Bad chunk: $e');
+      await _recorder.stop();
+    } catch (_) {}
+    debugPrint('[AudioService] recorder stopped');
+  }
+
+  /// Explicitly restart the recorder if it died (e.g. after audio focus
+  /// changes on Android).  Called by the provider after each AI turn.
+  Future<void> ensureRecording() async {
+    if (!_isCapturing && !_disposed) {
+      debugPrint('[AudioService] ensureRecording — restarting mic');
+      await start();
     }
   }
 
-  /// Flush any accumulated PCM into a mini WAV segment and append to playlist.
-  Future<void> _flushPartial() async {
-    if (_pcmBuffer.isEmpty) return;
-    final totalLen = _pcmBuffer.fold<int>(0, (s, c) => s + c.length);
-    if (totalLen == 0) return;
+  // ── Playback ──────────────────────────────────────────────────────
 
-    final pcm = Uint8List(totalLen);
-    var offset = 0;
-    for (final chunk in _pcmBuffer) {
-      pcm.setRange(offset, offset + chunk.length, chunk);
-      offset += chunk.length;
-    }
+  /// Queue a base64-encoded PCM chunk from the AI into the playback buffer.
+  void queueChunk(String base64Audio) {
+    final bytes = base64Decode(base64Audio);
+    _pcmBuffer.addAll(bytes);
+
+    // Debounce: flush after a short idle window so we accumulate small chunks
+    // into a larger WAV.
+    _flushTimer?.cancel();
+    _flushTimer =
+        Timer(const Duration(milliseconds: _flushIntervalMs), _flushPartial);
+  }
+
+  /// Write buffered PCM to a temp WAV file, add it to the turn's playlist,
+  /// and start (or resume) the player.
+  Future<void> _flushPartial() async {
+    if (_pcmBuffer.length < _minFlushBytes) return;
+
+    final pcm = Uint8List.fromList(_pcmBuffer);
     _pcmBuffer.clear();
 
-    final wav =
-        _buildWav(pcm, sampleRate: 24000, channels: 1, bitsPerSample: 16);
+    final dir = await getTemporaryDirectory();
+    final filePath = '${dir.path}/ai_chunk_${_chunkIndex++}.wav';
+    final wav = _buildWav(pcm, sampleRate: 24000);
+    await File(filePath).writeAsBytes(wav, flush: true);
+    _tempFiles.add(filePath);
 
-    try {
-      final dir = await getTemporaryDirectory();
-      final ts = DateTime.now().microsecondsSinceEpoch;
-      final filePath = '${dir.path}/arqivon_resp_chunk_$ts.wav';
-      final file = File(filePath);
-      await file.writeAsBytes(wav, flush: true);
-      _tempFiles.add(filePath);
+    // Lazily create a brand-new player + playlist for this turn.
+    _turnPlayer ??= AudioPlayer();
+    _turnPlaylist ??= ConcatenatingAudioSource(
+      useLazyPreparation: true,
+      children: [],
+    );
 
-      await _playlist.add(AudioSource.uri(Uri.file(filePath)));
-      if (kDebugMode)
-        debugPrint(
-            '[Audio] Queued segment: ${wav.length} bytes (${_playlist.length} in queue)');
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audio] Failed to queue segment: $e');
-      return;
-    }
+    await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
 
     if (!_playbackStarted) {
       _playbackStarted = true;
-      await _ensureAudioSession();
       try {
-        await _player.setAudioSource(_playlist);
-        _player.play();
-        if (kDebugMode) debugPrint('[Audio] Streaming playback started');
+        await _turnPlayer!.setAudioSource(_turnPlaylist!);
+        _turnPlayer!.play();
+        debugPrint('[AudioService] turn playback started');
       } catch (e) {
-        if (kDebugMode) debugPrint('[Audio] Playback start failed: $e');
+        debugPrint('[AudioService] turn playback start error: $e');
         _playbackStarted = false;
       }
-    } else if (_player.processingState == ProcessingState.completed) {
-      // The player finished the previous chunks before this one arrived.
-      // We need to seek to the new chunk and resume playing.
+    } else if (_turnPlayer!.processingState == ProcessingState.completed) {
+      // Player reached end before the new chunk was added — seek to it.
       try {
-        await _player.seek(Duration.zero, index: _playlist.length - 1);
-        _player.play();
-        if (kDebugMode) debugPrint('[Audio] Resumed streaming playback');
+        final idx = _turnPlaylist!.length - 1;
+        await _turnPlayer!.seek(Duration.zero, index: idx);
+        _turnPlayer!.play();
+        debugPrint('[AudioService] resumed playback at index $idx');
       } catch (e) {
-        if (kDebugMode) debugPrint('[Audio] Failed to resume playback: $e');
+        debugPrint('[AudioService] seek-to-new-chunk error: $e');
       }
     }
   }
 
-  /// Called on turn_complete — flush remaining buffer.
-  /// Playback continues from the queue; the provider handles post-playback
-  /// state via [onPlaybackDone].
+  /// Called on `turn_complete` — flush any remaining PCM, then wait for the
+  /// turn player to finish before calling [onPlaybackDone].
   Future<void> flushAndPlay() async {
     _flushTimer?.cancel();
-    _flushTimer = null;
-    // Flush any remaining buffered PCM.
-    await _flushPartial();
 
-    if (!_playbackStarted) {
-      if (kDebugMode) debugPrint('[Audio] flushAndPlay: nothing was queued');
-      onPlaybackDone?.call();
-      return;
+    // Flush remaining PCM.
+    if (_pcmBuffer.isNotEmpty) {
+      final pcm = Uint8List.fromList(_pcmBuffer);
+      _pcmBuffer.clear();
+
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/ai_chunk_${_chunkIndex++}.wav';
+      final wav = _buildWav(pcm, sampleRate: 24000);
+      await File(filePath).writeAsBytes(wav, flush: true);
+      _tempFiles.add(filePath);
+
+      _turnPlayer ??= AudioPlayer();
+      _turnPlaylist ??= ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: [],
+      );
+      await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
+
+      if (!_playbackStarted) {
+        _playbackStarted = true;
+        try {
+          await _turnPlayer!.setAudioSource(_turnPlaylist!);
+          _turnPlayer!.play();
+        } catch (e) {
+          debugPrint('[AudioService] flush play error: $e');
+          _playbackStarted = false;
+        }
+      } else if (_turnPlayer!.processingState == ProcessingState.completed) {
+        try {
+          final idx = _turnPlaylist!.length - 1;
+          await _turnPlayer!.seek(Duration.zero, index: idx);
+          _turnPlayer!.play();
+        } catch (e) {
+          debugPrint('[AudioService] flush seek error: $e');
+        }
+      }
     }
 
-    if (kDebugMode)
-      debugPrint(
-          '[Audio] turn_complete — ${_playlist.length} segments in queue');
+    // Listen for playback completion, then dispose the turn player.
+    if (_turnPlayer != null) {
+      // Cancel any previous listener.
+      _playbackSub?.cancel();
 
-    // Listen for playlist completion, then reset.
-    _playbackSub?.cancel();
-    _playbackSub = _player.playerStateStream.listen((s) {
-      if (s.processingState == ProcessingState.completed) {
-        _playbackSub?.cancel();
-        _playbackSub = null;
-        _resetPlayback();
+      // Check if already completed *before* subscribing.
+      if (_turnPlayer!.processingState == ProcessingState.completed) {
+        _disposeTurnPlayer();
+        return;
       }
+
+      _playbackSub = _turnPlayer!.playerStateStream.listen((s) {
+        if (s.processingState == ProcessingState.completed) {
+          _playbackSub?.cancel();
+          _playbackSub = null;
+          _disposeTurnPlayer();
+        }
+      });
+    } else {
+      // No audio arrived this turn — fire done immediately.
+      debugPrint('[AudioService] no audio this turn, firing onPlaybackDone');
+      onPlaybackDone?.call();
+    }
+  }
+
+  /// Tear down the current turn's player and playlist, then notify caller.
+  void _disposeTurnPlayer() {
+    _playbackStarted = false;
+    final player = _turnPlayer;
+    final playlist = _turnPlaylist;
+    final files = List<String>.from(_tempFiles);
+    _turnPlayer = null;
+    _turnPlaylist = null;
+    _tempFiles.clear();
+
+    // Run disposal in a microtask to avoid re-entrance inside the player
+    // state listener callback.
+    scheduleMicrotask(() async {
+      try {
+        await player?.stop();
+      } catch (_) {}
+      try {
+        await player?.dispose();
+      } catch (_) {}
+      // Clear the ConcatenatingAudioSource children (optional but tidy).
+      try {
+        await playlist?.clear();
+      } catch (_) {}
+
+      for (final path in files) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+      }
+
+      debugPrint(
+          '[AudioService] turn player disposed — calling onPlaybackDone');
+      onPlaybackDone?.call();
     });
   }
 
-  /// Clean up after playback finishes.
-  Future<void> _resetPlayback() async {
+  /// Stop playback immediately (barge-in from user).
+  Future<void> stopPlayback() async {
+    _flushTimer?.cancel();
+    _pcmBuffer.clear();
+    _playbackSub?.cancel();
+    _playbackSub = null;
     _playbackStarted = false;
 
-    // CRITICAL: fully stop the player so it releases audio focus and the
-    // echo-canceller stops referencing the stale output.  Without this the
-    // recorder is silently clipped on the next turn.
-    try {
-      await _player.stop();
-    } catch (_) {}
+    final player = _turnPlayer;
+    _turnPlayer = null;
+    _turnPlaylist = null;
 
     try {
-      await _playlist.clear();
+      await player?.stop();
+    } catch (_) {}
+    try {
+      await player?.dispose();
     } catch (_) {}
 
     for (final path in _tempFiles) {
-      File(path).delete().ignore();
+      try {
+        await File(path).delete();
+      } catch (_) {}
     }
     _tempFiles.clear();
-
-    // Re-ensure speaker mode — player.stop() may reset Android routing.
-    if (Platform.isAndroid) {
-      try {
-        await AndroidAudioManager().setSpeakerphoneOn(true);
-      } catch (_) {}
-    }
-
-    if (kDebugMode)
-      debugPrint('[Audio] Playback complete — player stopped, queue cleared');
-    onPlaybackDone?.call();
+    debugPrint('[AudioService] playback stopped (barge-in)');
   }
 
-  /// Stop playback immediately and discard everything (e.g. barge-in).
-  Future<void> stopPlayback() async {
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    _playbackSub?.cancel();
-    _playbackSub = null;
-    _pcmBuffer.clear();
-    if (kDebugMode) debugPrint('[Audio] stopPlayback — interrupted');
-    try {
-      await _player.stop();
-      await _playlist.clear();
-      for (final path in _tempFiles) {
-        File(path).delete().ignore();
+  // ── WAV builder ───────────────────────────────────────────────────
+
+  /// Build a minimal WAV (RIFF) container around raw PCM-16 mono data.
+  Uint8List _buildWav(Uint8List pcm, {int sampleRate = 24000}) {
+    final byteRate = sampleRate * 2; // 16-bit mono
+    final totalDataLen = pcm.length;
+    final totalLen = 36 + totalDataLen;
+
+    final header = ByteData(44);
+    void writeStr(int offset, String s) {
+      for (var i = 0; i < s.length; i++) {
+        header.setUint8(offset + i, s.codeUnitAt(i));
       }
-      _tempFiles.clear();
-    } catch (_) {}
-    _playbackStarted = false;
-
-    // Re-ensure speaker mode — player.stop() may reset Android routing.
-    if (Platform.isAndroid) {
-      try {
-        await AndroidAudioManager().setSpeakerphoneOn(true);
-      } catch (_) {}
     }
+
+    writeStr(0, 'RIFF');
+    header.setUint32(4, totalLen, Endian.little);
+    writeStr(8, 'WAVE');
+
+    // fmt sub-chunk
+    writeStr(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little); // sub-chunk size
+    header.setUint16(20, 1, Endian.little); // PCM format
+    header.setUint16(22, 1, Endian.little); // mono
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(28, byteRate, Endian.little);
+    header.setUint16(32, 2, Endian.little); // block align
+    header.setUint16(34, 16, Endian.little); // bits per sample
+
+    // data sub-chunk
+    writeStr(36, 'data');
+    header.setUint32(40, totalDataLen, Endian.little);
+
+    final wav = Uint8List(44 + pcm.length);
+    wav.setRange(0, 44, header.buffer.asUint8List());
+    wav.setRange(44, 44 + pcm.length, pcm);
+    return wav;
   }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────
 
   void dispose() {
+    _disposed = true;
     _flushTimer?.cancel();
+    _recordSub?.cancel();
     _playbackSub?.cancel();
-    stop();
-    _player.dispose();
     _audioController.close();
-  }
+    _recorder.dispose();
 
-  // ── WAV builder ────────────────────────────────────────────────────────
+    try {
+      _turnPlayer?.stop();
+    } catch (_) {}
+    try {
+      _turnPlayer?.dispose();
+    } catch (_) {}
 
-  static Uint8List _buildWav(
-    Uint8List pcm, {
-    required int sampleRate,
-    required int channels,
-    required int bitsPerSample,
-  }) {
-    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
-    final blockAlign = channels * bitsPerSample ~/ 8;
-    final dataSize = pcm.length;
-    final bd = ByteData(44 + dataSize);
-    var p = 0;
-    void str(String s) {
-      for (final c in s.codeUnits) {
-        bd.setUint8(p++, c);
-      }
+    for (final path in _tempFiles) {
+      try {
+        File(path).deleteSync();
+      } catch (_) {}
     }
-
-    void u32(int v) {
-      bd.setUint32(p, v, Endian.little);
-      p += 4;
-    }
-
-    void u16(int v) {
-      bd.setUint16(p, v, Endian.little);
-      p += 2;
-    }
-
-    str('RIFF');
-    u32(36 + dataSize);
-    str('WAVE');
-    str('fmt ');
-    u32(16);
-    u16(1);
-    u16(channels);
-    u32(sampleRate);
-    u32(byteRate);
-    u16(blockAlign);
-    u16(bitsPerSample);
-    str('data');
-    u32(dataSize);
-    final result = bd.buffer.asUint8List();
-    result.setRange(44, 44 + dataSize, pcm);
-    return result;
   }
 }
 
-// Backwards-compat alias so existing references compile unchanged.
+/// Alias so the provider can reference the service by either name.
 typedef AudioCaptureService = AudioService;

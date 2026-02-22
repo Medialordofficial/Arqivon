@@ -192,11 +192,17 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Reuse or create AudioService (player + recorder in one)
     _audio ??= AudioService();
-    // When AI finishes speaking (playback complete), clear responding flag.
+    // When AI finishes speaking (playback complete), clear responding flag
+    // and ensure the recorder is still alive for the next turn.
     _audio!.onPlaybackDone = () {
       final cur = state.valueOrNull ?? const LiveSessionState();
       if (cur.isResponding) {
         state = AsyncData(cur.copyWith(isResponding: false));
+      }
+      // CRITICAL: explicitly restart recorder if it died during playback.
+      // Android may kill the mic when audio focus changes.
+      if (cur.isStreaming) {
+        _audio?.ensureRecording();
       }
     };
 
