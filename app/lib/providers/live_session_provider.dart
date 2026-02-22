@@ -13,6 +13,9 @@ import 'auth_provider.dart';
 class LiveSessionState {
   final WsConnectionState connectionState;
   final bool isStreaming;
+
+  /// True while Gemini is streaming audio back to the user.
+  final bool isResponding;
   final AgentMode mode;
   final String? transcript;
   final SmartAction? currentAction;
@@ -35,6 +38,7 @@ class LiveSessionState {
   const LiveSessionState({
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
+    this.isResponding = false,
     this.mode = AgentMode.general,
     this.transcript,
     this.currentAction,
@@ -52,6 +56,7 @@ class LiveSessionState {
   LiveSessionState copyWith({
     WsConnectionState? connectionState,
     bool? isStreaming,
+    bool? isResponding,
     AgentMode? mode,
     String? transcript,
     SmartAction? currentAction,
@@ -71,6 +76,7 @@ class LiveSessionState {
     return LiveSessionState(
       connectionState: connectionState ?? this.connectionState,
       isStreaming: isStreaming ?? this.isStreaming,
+      isResponding: isResponding ?? this.isResponding,
       mode: mode ?? this.mode,
       transcript: transcript ?? this.transcript,
       currentAction: clearAction ? null : (currentAction ?? this.currentAction),
@@ -97,6 +103,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   StreamSubscription? _msgSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _audioSub;
+  // Track which mode was last sent to the backend so we avoid triggering an
+  // unnecessary Gemini session restart on every mic tap.
+  AgentMode? _lastSentMode;
 
   @override
   Future<LiveSessionState> build() async {
@@ -153,6 +162,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // NOTE: do NOT send set_mode here — that forces a Gemini reconnect before
     // the user has started speaking and causes the second set_mode from
     // startSession() to race against it, resulting in silence.
+    // Reset mode tracking so first startSession() will send the correct mode.
+    _lastSentMode = null;
   }
 
   Future<void> startSession() async {
@@ -175,8 +186,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // Reuse or create AudioService (player + recorder in one)
     _audio ??= AudioService();
 
-    // Send mode immediately
-    _ws!.send(WsInbound(type: 'set_mode', mode: current.mode.wsValue));
+    // Only send set_mode when the mode changes so the backend does NOT tear
+    // down and rebuild the Gemini Live session on every mic tap.  On the very
+    // first tap after connectOnly() the mode will differ (null vs actual), so
+    // we always send it at least once per connection.
+    if (_lastSentMode != current.mode) {
+      _ws!.send(WsInbound(type: 'set_mode', mode: current.mode.wsValue));
+      _lastSentMode = current.mode;
+    }
 
     // If translator, send language prefs
     if (current.mode == AgentMode.translator) {
@@ -213,9 +230,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(
       (state.valueOrNull ?? const LiveSessionState()).copyWith(
         isStreaming: false,
+        isResponding: false,
       ),
     );
     // Re-establish the WS so the green indicator stays on.
+    // Keep _lastSentMode intact so if user re-taps mic (same mode) we do not
+    // send another set_mode and force an unnecessary Gemini reconnect.
     unawaited(connectOnly());
   }
 
@@ -248,7 +268,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     switch (msg.type) {
       case 'audio':
-        if (msg.data != null) _audio?.queueChunk(msg.data!);
+        if (msg.data != null) {
+          _audio?.queueChunk(msg.data!);
+          // Mute the mic while AI is speaking to prevent echo feedback.
+          if (!current.isResponding) {
+            _audio?.pauseForwarding();
+            state = AsyncData(current.copyWith(isResponding: true));
+          }
+        }
         break;
 
       case 'transcript':
@@ -307,12 +334,20 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'turn_complete':
         _audio?.flushAndPlay();
+        // AI finished speaking — re-enable mic forwarding and clear responding flag.
+        _audio?.resumeForwarding();
+        state =
+            AsyncData(current.copyWith(isResponding: false, transcript: null));
         break;
 
       case 'interrupted':
         _audio?.stopPlayback();
-        // Clear stale overlays on interruption for smoother UX
-        state = AsyncData(current.copyWith(clearTranslation: true));
+        // User interrupted AI — resume mic immediately and clear stale overlays.
+        _audio?.resumeForwarding();
+        state = AsyncData(current.copyWith(
+          isResponding: false,
+          clearTranslation: true,
+        ));
         break;
 
       case 'status':

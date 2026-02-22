@@ -11,7 +11,6 @@ import '../providers/live_session_provider.dart';
 import '../services/websocket_service.dart';
 import '../widgets/live_wave.dart';
 import '../widgets/connection_indicator.dart';
-import '../widgets/glassmorphic_card.dart';
 import '../widgets/mode_selector.dart';
 import '../widgets/smart_action_card.dart';
 import '../widgets/support_topic_tracker.dart';
@@ -143,6 +142,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     final sessionAsync = ref.watch(liveSessionProvider);
     final session = sessionAsync.valueOrNull;
     final isStreaming = session?.isStreaming ?? false;
+    final isResponding = session?.isResponding ?? false;
     final connectionState =
         session?.connectionState ?? WsConnectionState.disconnected;
     final currentAction = session?.currentAction;
@@ -343,8 +343,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
             child: Align(
               alignment: const Alignment(0, -0.20),
               child: LiveWave(
-                isListening: isStreaming,
-                isResponding: false,
+                isListening: isStreaming && !isResponding,
+                isResponding: isResponding,
                 color: mode.color,
                 size: 270,
               ),
@@ -376,14 +376,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   )
                 else
                   Text(
-                    isStreaming
-                        ? 'Listening…'
-                        : 'Go ahead, I\'m ready to assist',
+                    isResponding
+                        ? 'Responding…'
+                        : isStreaming
+                            ? 'Listening…'
+                            : 'Go ahead, I\'m ready to assist',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
+                      color: isResponding
+                          ? Colors.white.withValues(alpha: 0.85)
+                          : Colors.white.withValues(alpha: 0.55),
                       fontSize: 16,
-                      fontWeight: FontWeight.w400,
+                      fontWeight:
+                          isResponding ? FontWeight.w500 : FontWeight.w400,
                       letterSpacing: 0.1,
                     ),
                   ),
@@ -403,8 +408,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 if (!isStreaming)
                   Container(
                     margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(30),
@@ -451,8 +456,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               final current = _cameraController?.description;
                               final next = cameras.firstWhere(
                                 (c) =>
-                                    c.lensDirection !=
-                                    current?.lensDirection,
+                                    c.lensDirection != current?.lensDirection,
                                 orElse: () => cameras.first,
                               );
                               await _cameraController?.dispose();
@@ -464,8 +468,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               await _cameraController!.initialize();
                               if (mounted) setState(() {});
                             }
-                          : () => setState(
-                              () => _showTextInput = !_showTextInput),
+                          : () =>
+                              setState(() => _showTextInput = !_showTextInput),
                     ),
 
                     // ── Main mic / stop button ──────────────────────
@@ -477,22 +481,34 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                         height: 72,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: isStreaming
-                              ? null
-                              : const LinearGradient(
+                          gradient: isResponding
+                              ? const LinearGradient(
                                   colors: [
-                                    Color(0xFF7C3AED),
-                                    Color(0xFF5B5FEF),
+                                    Color(0xFF00BCD4),
+                                    Color(0xFF7C3AED)
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
-                                ),
-                          color: isStreaming ? Colors.red : null,
+                                )
+                              : isStreaming
+                                  ? null
+                                  : const LinearGradient(
+                                      colors: [
+                                        Color(0xFF7C3AED),
+                                        Color(0xFF5B5FEF),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                          color:
+                              !isResponding && isStreaming ? Colors.red : null,
                           boxShadow: [
                             BoxShadow(
-                              color: (isStreaming
-                                      ? Colors.red
-                                      : const Color(0xFF5B5FEF))
+                              color: (isResponding
+                                      ? const Color(0xFF00BCD4)
+                                      : isStreaming
+                                          ? Colors.red
+                                          : const Color(0xFF5B5FEF))
                                   .withValues(alpha: 0.50),
                               blurRadius: 28,
                               spreadRadius: 6,
@@ -500,9 +516,11 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           ],
                         ),
                         child: Icon(
-                          isStreaming
-                              ? Icons.stop_rounded
-                              : Icons.mic_rounded,
+                          isResponding
+                              ? Icons.record_voice_over_rounded
+                              : isStreaming
+                                  ? Icons.stop_rounded
+                                  : Icons.mic_rounded,
                           size: 32,
                           color: Colors.white,
                         ),
@@ -542,13 +560,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                             decoration: InputDecoration(
                               hintText: _hintTextForMode(mode),
                               hintStyle: TextStyle(
-                                  color:
-                                      Colors.white.withValues(alpha: 0.35),
+                                  color: Colors.white.withValues(alpha: 0.35),
                                   fontSize: 15),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 14),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onSubmitted: (_) => _sendTextMessage(),
                           ),

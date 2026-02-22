@@ -174,13 +174,23 @@ class _OrbPainter extends CustomPainter {
     final orbR = baseR * (1.0 + 0.04 * active);
 
     // ── 1. Ambient outer glow — largest, very soft ────────────────────
-    _paintGlow(canvas, cx, cy, orbR * 1.95,
+    _paintGlow(
+        canvas,
+        cx,
+        cy,
+        orbR * 1.95,
         _purpleEdge.withValues(alpha: 0.08 + 0.06 * active),
-        _purpleEdge.withValues(alpha: 0.0), blurSigma: orbR * 0.6);
+        _purpleEdge.withValues(alpha: 0.0),
+        blurSigma: orbR * 0.6);
 
-    _paintGlow(canvas, cx, cy, orbR * 1.58,
+    _paintGlow(
+        canvas,
+        cx,
+        cy,
+        orbR * 1.58,
         _indigoBod.withValues(alpha: 0.14 + 0.10 * active),
-        _indigoBod.withValues(alpha: 0.0), blurSigma: orbR * 0.4);
+        _indigoBod.withValues(alpha: 0.0),
+        blurSigma: orbR * 0.4);
 
     // ── 2. Ripple rings (visible when active) ─────────────────────────
     _paintRipple(canvas, cx, cy, orbR, ripple1, active);
@@ -246,8 +256,7 @@ class _OrbPainter extends CustomPainter {
         ],
         [0.0, 0.18, 0.5, 0.75, 1.0],
       )
-      ..maskFilter =
-          MaskFilter.blur(BlurStyle.normal, orbR * 0.04);
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, orbR * 0.04);
     canvas.drawCircle(Offset(cx, cy), orbR - orbR * 0.02, rimPaint);
 
     // ── 6. Inner micro glow center ────────────────────────────────────
@@ -306,4 +315,3 @@ class _OrbPainter extends CustomPainter {
       o.ripple2 != ripple2 ||
       o.ripple3 != ripple3;
 }
-

@@ -18,6 +18,9 @@ class AudioService {
   StreamSubscription<Uint8List>? _recordSub;
   final _audioController = StreamController<String>.broadcast();
   bool _isCapturing = false;
+  // When true the recorder keeps running but chunks are NOT forwarded to the
+  // WebSocket (used to silence the mic while the AI is speaking).
+  bool _forwarding = true;
 
   /// PCM chunks buffered from the server between audio packets and turn_complete.
   final List<Uint8List> _pcmBuffer = [];
@@ -44,9 +47,11 @@ class AudioService {
         noiseSuppress: true,
       ),
     );
+    _forwarding = true;
     _recordSub = stream.listen(
       (chunk) {
-        if (chunk.isNotEmpty) _audioController.add(base64Encode(chunk));
+        if (chunk.isNotEmpty && _forwarding)
+          _audioController.add(base64Encode(chunk));
       },
       onError: (Object e) {
         if (kDebugMode) debugPrint('[Audio] Capture error: $e');
@@ -62,7 +67,14 @@ class AudioService {
     _recordSub = null;
     await _recorder.stop();
     _isCapturing = false;
+    _forwarding = true; // reset for next session
   }
+
+  /// Temporarily stop forwarding mic chunks to the WebSocket (AI is speaking).
+  void pauseForwarding() => _forwarding = false;
+
+  /// Resume forwarding mic chunks (AI finished speaking / interrupted).
+  void resumeForwarding() => _forwarding = true;
 
   // ── Playback ───────────────────────────────────────────────────────────
 

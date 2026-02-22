@@ -223,6 +223,19 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
         system_instruction=prompt,
         tools=[types.Tool(function_declarations=declarations)],
         response_modalities=["AUDIO"],
+        # Explicitly declare the input audio format so Gemini VAD works correctly.
+        # The Flutter client streams PCM 16-bit mono at 16 kHz.
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                disabled=False,
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                prefix_padding_ms=300,
+                silence_duration_ms=800,
+            )
+        ),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
     )
     live_ctx = genai_client.aio.live.connect(
         model=settings.gemini_model,
@@ -316,6 +329,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
                 # Mode switching
                 if msg.type == InboundType.SET_MODE and msg.mode:
+                    if msg.mode == current_mode:
+                        # Already in this mode — just acknowledge, no reconnect needed.
+                        await _send_json(websocket, OutboundMessage(
+                            type=OutboundType.MODE_CHANGED,
+                            text=msg.mode,
+                            payload={"mode": msg.mode},
+                        ))
+                        continue
                     try:
                         await _reconnect_session(msg.mode, source_lang, target_lang)
                         await _send_json(websocket, OutboundMessage(
@@ -335,6 +356,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 if msg.type == InboundType.SET_LANGUAGE:
                     sl = msg.source_lang or source_lang
                     tl = msg.target_lang or target_lang
+                    if sl == source_lang and tl == target_lang:
+                        # No change — skip reconnect.
+                        continue
                     try:
                         await _reconnect_session(current_mode, sl, tl)
                         await _send_json(websocket, OutboundMessage(
@@ -395,6 +419,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         await _send_json(websocket, OutboundMessage(
                                             type=OutboundType.TRANSCRIPT, text=part.text,
                                         ))
+                            # Transcribe user & model speech when available
+                            if sc.input_transcription:
+                                txt = getattr(sc.input_transcription, 'text', None)
+                                if txt:
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.TRANSCRIPT, text=txt,
+                                    ))
+                            if sc.output_transcription:
+                                txt = getattr(sc.output_transcription, 'text', None)
+                                if txt:
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.TRANSCRIPT, text=txt,
+                                    ))
                             if sc.turn_complete:
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:
