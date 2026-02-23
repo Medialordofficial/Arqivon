@@ -320,7 +320,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         decoration: BoxDecoration(
                           color: cs.error.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: cs.error.withValues(alpha: 0.4)),
+                          border: Border.all(
+                              color: cs.error.withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           children: [
@@ -453,7 +454,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: _SocialBtn(
                               onTap: _loading ? null : _signInWithApple,
                               icon: Icon(Icons.apple_rounded,
-                                  size: 22, color: isDark ? Colors.white : Colors.black),
+                                  size: 22,
+                                  color: isDark ? Colors.white : Colors.black),
                               label: 'Apple',
                             ),
                           ),
@@ -617,9 +619,12 @@ class _GoogleIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final centerColor = isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9);
+    final centerColor =
+        isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9);
     return SizedBox(
-        width: 22, height: 22, child: CustomPaint(painter: _GooglePainter(centerColor: centerColor)));
+        width: 22,
+        height: 22,
+        child: CustomPaint(painter: _GooglePainter(centerColor: centerColor)));
   }
 }
 

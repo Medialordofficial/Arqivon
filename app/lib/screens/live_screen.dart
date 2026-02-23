@@ -602,7 +602,11 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               if (mounted) {
                                 setState(() {});
                                 // Resume frame capture if streaming
-                                final isCurrentlyStreaming = ref.read(liveSessionProvider).valueOrNull?.isStreaming ?? false;
+                                final isCurrentlyStreaming = ref
+                                        .read(liveSessionProvider)
+                                        .valueOrNull
+                                        ?.isStreaming ??
+                                    false;
                                 if (isCurrentlyStreaming) _startFrameCapture();
                               }
                             }
@@ -694,8 +698,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       decoration: BoxDecoration(
-                        color:
-                            Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(30),
                         border: Border.all(
                             color: Theme.of(context).dividerColor, width: 1),
@@ -709,7 +714,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               maxLength: 500,
                               maxLines: 1,
                               style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
                                   fontSize: 15),
                               decoration: InputDecoration(
                                 hintText: _hintTextForMode(mode),

@@ -54,6 +54,5 @@ class SessionModel {
     );
   }
 
-  Duration? get duration =>
-      endedAt?.difference(startedAt);
+  Duration? get duration => endedAt?.difference(startedAt);
 }
