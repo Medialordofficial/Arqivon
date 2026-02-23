@@ -49,15 +49,6 @@ class ArqivonTheme {
   static const Color darkText = Color(0xFFF1F5F9);
   static const Color darkSubtext = Color(0xFF94A3B8);
 
-  // ── Backwards-compat aliases (keep old names compiling) ──────────────
-  static const Color espresso = primary;
-  static const Color coffeeBrown = primaryDark;
-  static const Color caramel = accent;
-  static const Color latte = primaryLight;
-  static const Color cream = background;
-  static const Color inkBrown = textPrimary;
-  static const Color warmGrey = textSecondary;
-
   // ── Mode colors ───────────────────────────────────────────────────────
   static const Color modeGeneral = Color(0xFF5B5FEF);
   static const Color modeTranslator = Color(0xFF0EA5E9);
@@ -69,7 +60,7 @@ class ArqivonTheme {
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     useMaterial3: true,
-    colorScheme: ColorScheme.light(
+    colorScheme: const ColorScheme.light(
       primary: primary,
       onPrimary: Colors.white,
       primaryContainer: primaryLight,
@@ -111,7 +102,7 @@ class ArqivonTheme {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: borderColor),
+        side: const BorderSide(color: borderColor),
       ),
       margin: EdgeInsets.zero,
     ),
@@ -229,19 +220,19 @@ class ArqivonTheme {
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
     useMaterial3: true,
-    colorScheme: ColorScheme.dark(
-      primary: const Color(0xFF818CF8),
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF818CF8),
       onPrimary: darkBg,
-      primaryContainer: const Color(0xFF312E81),
-      onPrimaryContainer: const Color(0xFFC7D2FE),
-      secondary: const Color(0xFF38BDF8),
+      primaryContainer: Color(0xFF312E81),
+      onPrimaryContainer: Color(0xFFC7D2FE),
+      secondary: Color(0xFF38BDF8),
       onSecondary: darkBg,
-      tertiary: const Color(0xFF2DD4BF),
+      tertiary: Color(0xFF2DD4BF),
       surface: darkCard,
       onSurface: darkText,
       surfaceContainerHighest: darkSurface,
-      outline: const Color(0xFF334155),
-      error: const Color(0xFFFCA5A5),
+      outline: Color(0xFF334155),
+      error: Color(0xFFFCA5A5),
       onError: darkBg,
     ),
     scaffoldBackgroundColor: darkBg,
@@ -277,7 +268,7 @@ class ArqivonTheme {
         if (states.contains(WidgetState.selected)) {
           return const IconThemeData(color: Color(0xFF818CF8));
         }
-        return IconThemeData(color: darkSubtext);
+        return const IconThemeData(color: darkSubtext);
       }),
     ),
   );

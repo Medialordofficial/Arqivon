@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+
+import '../config/logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -18,6 +20,8 @@ import 'package:record/record.dart';
 /// The mic stays active during AI playback to allow barge-in (Gemini's native
 /// VAD detects the user speaking and sends an `interrupted` signal).
 class AudioService {
+  static final _log = AppLogger('AudioService');
+
   // ── Recording ──────────────────────────────────────────────────────
   final AudioRecorder _recorder = AudioRecorder();
   StreamSubscription<Uint8List>? _recordSub;
@@ -70,7 +74,7 @@ class AudioService {
       androidWillPauseWhenDucked: false,
     ));
     _sessionConfigured = true;
-    debugPrint('[AudioService] audio session configured');
+    _log.info('audio session configured');
   }
 
   // ── Recording ─────────────────────────────────────────────────────
@@ -105,35 +109,34 @@ class AudioService {
         (data) {
           _recordChunkCount++;
           if (_recordChunkCount % 100 == 1) {
-            print(
-                '[AudioService] recorder data chunk #$_recordChunkCount (${data.length} bytes)');
+            _log.fine(
+                'recorder data chunk #$_recordChunkCount (${data.length} bytes)');
           }
           if (!_audioController.isClosed) {
             _audioController.add(base64Encode(data));
           }
         },
         onError: (e) {
-          print('[AudioService] recorder error: $e');
+          _log.severe('recorder error', e);
         },
         onDone: () {
-          print('[AudioService] recorder stream ended — will auto-restart');
+          _log.warning('recorder stream ended — will auto-restart');
           _isCapturing = false;
           _recordSub = null;
           // Auto-restart after a brief delay unless we were disposed.
           if (!_disposed && !_audioController.isClosed) {
             Future.delayed(const Duration(milliseconds: 120), () {
               if (!_disposed && !_isCapturing) {
-                print('[AudioService] auto-restarting recorder');
+                _log.info('auto-restarting recorder');
                 start();
               }
             });
           }
         },
       );
-      print('[AudioService] recorder started');
+      _log.info('recorder started');
     } catch (e) {
-      print(
-          '[AudioService] recorder startStream FAILED: $e — will retry in 500ms');
+      _log.severe('recorder startStream FAILED — will retry in 500ms', e);
       _isCapturing = false;
       // Retry after a delay — audio focus may not be released yet
       if (!_disposed) {
@@ -154,7 +157,7 @@ class AudioService {
     try {
       await _recorder.stop();
     } catch (_) {}
-    debugPrint('[AudioService] recorder stopped');
+    _log.info('recorder stopped');
   }
 
   /// Force-restart the recorder after AI playback finishes.
@@ -165,7 +168,7 @@ class AudioService {
   /// The only reliable fix is to tear down and recreate the stream.
   Future<void> ensureRecording() async {
     if (_disposed) return;
-    print('[AudioService] ensureRecording — force-restarting recorder');
+    _log.info('ensureRecording — force-restarting recorder');
     // Tear down existing stream regardless of _isCapturing flag
     _isCapturing = false;
     _recordSub?.cancel();
@@ -218,9 +221,9 @@ class AudioService {
       try {
         await _turnPlayer!.setAudioSource(_turnPlaylist!);
         _turnPlayer!.play();
-        debugPrint('[AudioService] turn playback started');
+        _log.info('turn playback started');
       } catch (e) {
-        debugPrint('[AudioService] turn playback start error: $e');
+        _log.severe('turn playback start error', e);
         _playbackStarted = false;
       }
     } else if (_turnPlayer!.processingState == ProcessingState.completed) {
@@ -229,9 +232,9 @@ class AudioService {
         final idx = _turnPlaylist!.length - 1;
         await _turnPlayer!.seek(Duration.zero, index: idx);
         _turnPlayer!.play();
-        debugPrint('[AudioService] resumed playback at index $idx');
+        _log.info('resumed playback at index $idx');
       } catch (e) {
-        debugPrint('[AudioService] seek-to-new-chunk error: $e');
+        _log.severe('seek-to-new-chunk error', e);
       }
     }
   }
@@ -240,8 +243,8 @@ class AudioService {
   /// turn player to finish before calling [onPlaybackDone].
   Future<void> flushAndPlay() async {
     _flushTimer?.cancel();
-    print(
-        '[AudioService] flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}');
+    _log.info(
+        'flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}');
 
     // Flush remaining PCM.
     if (_pcmBuffer.isNotEmpty) {
@@ -267,7 +270,7 @@ class AudioService {
           await _turnPlayer!.setAudioSource(_turnPlaylist!);
           _turnPlayer!.play();
         } catch (e) {
-          debugPrint('[AudioService] flush play error: $e');
+          _log.severe('flush play error', e);
           _playbackStarted = false;
         }
       } else if (_turnPlayer!.processingState == ProcessingState.completed) {
@@ -276,7 +279,7 @@ class AudioService {
           await _turnPlayer!.seek(Duration.zero, index: idx);
           _turnPlayer!.play();
         } catch (e) {
-          debugPrint('[AudioService] flush seek error: $e');
+          _log.severe('flush seek error', e);
         }
       }
     }
@@ -301,7 +304,7 @@ class AudioService {
       });
     } else {
       // No audio arrived this turn — fire done immediately.
-      debugPrint('[AudioService] no audio this turn, firing onPlaybackDone');
+      _log.info('no audio this turn, firing onPlaybackDone');
       onPlaybackDone?.call();
     }
   }
@@ -336,9 +339,7 @@ class AudioService {
         } catch (_) {}
       }
 
-      debugPrint(
-          '[AudioService] turn player disposed — calling onPlaybackDone');
-      print('[AudioService] turn player disposed — calling onPlaybackDone');
+      _log.info('turn player disposed — calling onPlaybackDone');
       onPlaybackDone?.call();
     });
   }
@@ -368,7 +369,7 @@ class AudioService {
       } catch (_) {}
     }
     _tempFiles.clear();
-    debugPrint('[AudioService] playback stopped (barge-in)');
+    _log.info('playback stopped (barge-in)');
   }
 
   // ── WAV builder ───────────────────────────────────────────────────

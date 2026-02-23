@@ -3,12 +3,16 @@ import 'dart:convert';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../config/constants.dart';
+import '../config/logger.dart';
 import '../main.dart';
 import '../models/agent_mode.dart';
 import '../providers/live_session_provider.dart';
+import '../services/action_handler_service.dart';
 import '../services/websocket_service.dart';
 import '../widgets/live_wave.dart';
 import '../widgets/connection_indicator.dart';
@@ -33,6 +37,8 @@ class LiveScreen extends ConsumerStatefulWidget {
 
 class _LiveScreenState extends ConsumerState<LiveScreen>
     with WidgetsBindingObserver {
+  static final _log = AppLogger('LiveScreen');
+
   CameraController? _cameraController;
   Timer? _frameTimer;
   bool _cameraReady = false;
@@ -91,7 +97,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       await _cameraController!.initialize();
       if (mounted) setState(() => _cameraReady = true);
     } catch (e) {
-      debugPrint('[Camera] Init error: $e');
+      _log.severe('Camera init error', e);
     }
   }
 
@@ -131,6 +137,34 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       _stopFrameCapture();
       await notifier.stopSession();
     } else {
+      // Check microphone permission before starting
+      final micStatus = await Permission.microphone.request();
+      if (!micStatus.isGranted) {
+        if (mounted) {
+          final openSettings = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Microphone Required'),
+              content: const Text(
+                'Arqivon needs microphone access to have a voice conversation. '
+                'Please grant microphone permission in Settings.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
+          );
+          if (openSettings == true) openAppSettings();
+        }
+        return;
+      }
       await notifier.startSession();
       // Only stream video frames in A/V mode
       if (_inputMode == _LiveInputMode.audioVideo) {
@@ -160,6 +194,28 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(liveSessionProvider);
+
+    // Show error SnackBar when session enters AsyncError state.
+    ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
+      if (next is AsyncError && prev is! AsyncError) {
+        final errMsg = next.error?.toString() ?? 'Unknown error';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errMsg),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Theme.of(context).colorScheme.onError,
+              onPressed: () {
+                ref.read(liveSessionProvider.notifier).connectOnly();
+              },
+            ),
+          ),
+        );
+      }
+    });
+
     final session = sessionAsync.valueOrNull;
     final isStreaming = session?.isStreaming ?? false;
     final isResponding = session?.isResponding ?? false;
@@ -188,9 +244,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               child: CameraPreview(_cameraController!),
             )
           else
-            // Clean white background
+            // Theme-aware background
             Container(
-              color: Colors.white,
+              color: Theme.of(context).scaffoldBackgroundColor,
             ),
 
           // ── Gradient scrim (camera mode only) ─────────────────────
@@ -226,7 +282,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    Colors.white.withValues(alpha: 0.95),
+                    Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0.95),
                   ],
                 ),
               ),
@@ -247,7 +305,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.8),
+                      color: Colors.red.withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -320,12 +378,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 action: currentAction,
                 onDismiss: () =>
                     ref.read(liveSessionProvider.notifier).dismissAction(),
-                onPrimaryAction: () {
+                onPrimaryAction: () async {
+                  HapticFeedback.mediumImpact();
                   ref.read(liveSessionProvider.notifier).dismissAction();
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('${currentAction.actionType} executed'),
-                    behavior: SnackBarBehavior.floating,
-                  ));
+                  final result = await ActionHandlerService.execute(
+                    currentAction,
+                    context,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(result),
+                      behavior: SnackBarBehavior.floating,
+                    ));
+                  }
                 },
               ),
             ),
@@ -373,7 +438,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: const Color(0xFF64748B).withValues(alpha: 0.70),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.50),
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
                   fontStyle: FontStyle.italic,
@@ -410,8 +478,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     textAlign: TextAlign.center,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
                       height: 1.35,
@@ -428,8 +496,14 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isResponding
-                          ? const Color(0xFF0F172A).withValues(alpha: 0.85)
-                          : const Color(0xFF64748B).withValues(alpha: 0.70),
+                          ? Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.85)
+                          : Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.50),
                       fontSize: 16,
                       fontWeight:
                           isResponding ? FontWeight.w500 : FontWeight.w400,
@@ -455,11 +529,16 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                          color:
-                              const Color(0xFF0F172A).withValues(alpha: 0.10),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.10),
                           width: 1),
                     ),
                     child: Row(
@@ -493,11 +572,14 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Camera flip (A/V mode) or keyboard toggle
+                    // Camera flip (A/V mode) or mode indicator
                     _controlButton(
                       icon: _inputMode == _LiveInputMode.audioVideo
                           ? Icons.flip_camera_ios_rounded
-                          : Icons.keyboard_rounded,
+                          : mode.icon,
+                      semanticLabel: _inputMode == _LiveInputMode.audioVideo
+                          ? 'Flip camera'
+                          : '${mode.label} mode',
                       onPressed: _inputMode == _LiveInputMode.audioVideo
                           ? () async {
                               final cameras = await availableCameras();
@@ -517,69 +599,82 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               await _cameraController!.initialize();
                               if (mounted) setState(() {});
                             }
-                          : () =>
-                              setState(() => _showTextInput = !_showTextInput),
+                          : null, // mode icon is decorative in audio-only
                     ),
 
                     // ── Main mic / stop button ──────────────────────
-                    GestureDetector(
-                      onTap: _toggleSession,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: isResponding
-                              ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF00BCD4),
-                                    Color(0xFF7C3AED)
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : isStreaming
-                                  ? null
-                                  : const LinearGradient(
-                                      colors: [
-                                        Color(0xFF7C3AED),
-                                        Color(0xFF5B5FEF),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                          color:
-                              !isResponding && isStreaming ? Colors.red : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isResponding
-                                      ? const Color(0xFF00BCD4)
-                                      : isStreaming
-                                          ? Colors.red
-                                          : const Color(0xFF5B5FEF))
-                                  .withValues(alpha: 0.50),
-                              blurRadius: 28,
-                              spreadRadius: 6,
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          isResponding
-                              ? Icons.record_voice_over_rounded
-                              : isStreaming
-                                  ? Icons.stop_rounded
-                                  : Icons.mic_rounded,
-                          size: 32,
-                          color: Colors.white,
+                    Semantics(
+                      label:
+                          isStreaming ? 'Stop session' : 'Start live session',
+                      button: true,
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticFeedback.heavyImpact();
+                          _toggleSession();
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: isResponding
+                                ? const LinearGradient(
+                                    colors: [
+                                      Color(0xFF00BCD4),
+                                      Color(0xFF7C3AED)
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : isStreaming
+                                    ? null
+                                    : const LinearGradient(
+                                        colors: [
+                                          Color(0xFF7C3AED),
+                                          Color(0xFF5B5FEF),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                            color: !isResponding && isStreaming
+                                ? Colors.red
+                                : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: (isResponding
+                                        ? const Color(0xFF00BCD4)
+                                        : isStreaming
+                                            ? Colors.red
+                                            : const Color(0xFF5B5FEF))
+                                    .withValues(alpha: 0.50),
+                                blurRadius: 28,
+                                spreadRadius: 6,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            isResponding
+                                ? Icons.record_voice_over_rounded
+                                : isStreaming
+                                    ? Icons.stop_rounded
+                                    : Icons.mic_rounded,
+                            size: 32,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
 
-                    // Placeholder side button (maintains layout symmetry)
+                    // Keyboard toggle (right side)
                     _controlButton(
-                      icon: Icons.more_horiz_rounded,
-                      onPressed: null,
+                      icon: Icons.keyboard_rounded,
+                      semanticLabel:
+                          _showTextInput ? 'Hide keyboard' : 'Show keyboard',
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        setState(() => _showTextInput = !_showTextInput);
+                      },
                     ),
                   ],
                 ),
@@ -592,10 +687,11 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(30),
-                      border:
-                          Border.all(color: const Color(0xFFE2E8F0), width: 1),
+                      border: Border.all(
+                          color: Theme.of(context).dividerColor, width: 1),
                     ),
                     child: Row(
                       children: [
@@ -603,13 +699,16 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                         Expanded(
                           child: TextField(
                             controller: _textController,
-                            style: const TextStyle(
-                                color: Color(0xFF0F172A), fontSize: 15),
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: 15),
                             decoration: InputDecoration(
                               hintText: _hintTextForMode(mode),
                               hintStyle: TextStyle(
-                                  color: const Color(0xFF64748B)
-                                      .withValues(alpha: 0.50),
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.40),
                                   fontSize: 15),
                               border: InputBorder.none,
                               isDense: true,
@@ -621,8 +720,11 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                         ),
                         IconButton(
                           onPressed: _sendTextMessage,
-                          icon: const Icon(Icons.arrow_upward_rounded,
-                              color: Color(0xFF64748B)),
+                          icon: Icon(Icons.arrow_upward_rounded,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.5)),
                           iconSize: 22,
                         ),
                       ],
@@ -653,21 +755,27 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   Widget _controlButton({
     required IconData icon,
     VoidCallback? onPressed,
+    String? semanticLabel,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: onPressed != null
-            ? const Color(0xFF0F172A).withOpacity(0.08)
-            : const Color(0xFF0F172A).withOpacity(0.04),
-      ),
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(icon,
-            color: onPressed != null
-                ? const Color(0xFF0F172A)
-                : const Color(0xFF94A3B8)),
-        iconSize: 28,
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Semantics(
+      label: semanticLabel,
+      button: onPressed != null,
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: onPressed != null
+              ? onSurface.withValues(alpha: 0.08)
+              : onSurface.withValues(alpha: 0.04),
+        ),
+        child: IconButton(
+          onPressed: onPressed,
+          icon: Icon(icon,
+              color: onPressed != null
+                  ? onSurface
+                  : onSurface.withValues(alpha: 0.4)),
+          iconSize: 28,
+        ),
       ),
     );
   }
@@ -695,7 +803,9 @@ class _InputModeChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF5B5FEF) : Colors.transparent,
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
@@ -703,14 +813,24 @@ class _InputModeChip extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 16,
-                color: selected ? Colors.white : const Color(0xFF64748B)),
+                color: selected
+                    ? Colors.white
+                    : Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? Colors.white : const Color(0xFF64748B),
+                color: selected
+                    ? Colors.white
+                    : Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
               ),
             ),
           ],

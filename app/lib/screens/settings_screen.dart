@@ -1,16 +1,27 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/agent_mode.dart';
+import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/glassmorphic_card.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _authLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final authState = ref.watch(authStateProvider);
     final user = authState.valueOrNull;
@@ -30,13 +41,15 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: const Color(0xFF3E1F0D).withOpacity(0.3),
+                    backgroundColor:
+                        ArqivonTheme.primary.withValues(alpha: 0.15),
                     backgroundImage: user?.photoURL != null
                         ? NetworkImage(user!.photoURL!)
                         : null,
                     child: user?.photoURL == null
-                        ? const Icon(Icons.person_rounded,
-                            color: Color(0xFF3E1F0D), size: 28)
+                        ? Icon(Icons.person_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 28)
                         : null,
                   ),
                   const SizedBox(width: 16),
@@ -59,7 +72,7 @@ class SettingsScreen extends ConsumerWidget {
                             color: Theme.of(context)
                                 .colorScheme
                                 .onSurface
-                                .withOpacity(0.5),
+                                .withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -85,7 +98,7 @@ class SettingsScreen extends ConsumerWidget {
                             : Theme.of(context)
                                 .colorScheme
                                 .onSurface
-                                .withOpacity(0.3)),
+                                .withValues(alpha: 0.3)),
                     title: Text(mode.label),
                     subtitle: Text(mode.description,
                         style: TextStyle(
@@ -93,14 +106,15 @@ class SettingsScreen extends ConsumerWidget {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(0.4),
+                              .withValues(alpha: 0.4),
                         )),
                     trailing: isSelected
                         ? Icon(Icons.check_circle_rounded, color: mode.color)
                         : null,
-                    onTap: () => ref
-                        .read(settingsProvider.notifier)
-                        .setDefaultMode(mode),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref.read(settingsProvider.notifier).setDefaultMode(mode);
+                    },
                   );
                 }).toList(),
               ),
@@ -144,25 +158,27 @@ class SettingsScreen extends ConsumerWidget {
                   SwitchListTile(
                     title: const Text('Dark Mode'),
                     subtitle: Text(
-                      settings.isDarkMode ? 'Glassmorphism Dark' : 'Light',
+                      settings.isDarkMode ? 'Dark' : 'Light',
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context)
                             .colorScheme
                             .onSurface
-                            .withOpacity(0.5),
+                            .withValues(alpha: 0.5),
                       ),
                     ),
                     secondary: Icon(
                       settings.isDarkMode
                           ? Icons.dark_mode_rounded
                           : Icons.light_mode_rounded,
-                      color: const Color(0xFF3E1F0D),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                     value: settings.isDarkMode,
-                    onChanged: (_) =>
-                        ref.read(settingsProvider.notifier).toggleTheme(),
-                    activeThumbColor: const Color(0xFF3E1F0D),
+                    onChanged: (_) {
+                      HapticFeedback.lightImpact();
+                      ref.read(settingsProvider.notifier).toggleTheme();
+                    },
+                    activeThumbColor: Theme.of(context).colorScheme.primary,
                     contentPadding: EdgeInsets.zero,
                   ),
                 ],
@@ -182,19 +198,21 @@ class SettingsScreen extends ConsumerWidget {
                     leading: Icon(
                       Icons.record_voice_over_rounded,
                       color: isSelected
-                          ? const Color(0xFF3E1F0D)
+                          ? Theme.of(context).colorScheme.primary
                           : Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(0.3),
+                              .withValues(alpha: 0.3),
                     ),
                     title: Text(voice),
                     trailing: isSelected
-                        ? const Icon(Icons.check_circle_rounded,
-                            color: Color(0xFF3E1F0D))
+                        ? Icon(Icons.check_circle_rounded,
+                            color: Theme.of(context).colorScheme.primary)
                         : null,
-                    onTap: () =>
-                        ref.read(settingsProvider.notifier).setVoice(voice),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref.read(settingsProvider.notifier).setVoice(voice);
+                    },
                   );
                 }).toList(),
               ),
@@ -205,34 +223,82 @@ class SettingsScreen extends ConsumerWidget {
             GlassmorphicCard(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-              child: user != null
-                  ? ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.logout_rounded,
-                          color: Color(0xFFEF4444)),
-                      title: const Text('Sign Out',
-                          style: TextStyle(color: Color(0xFFEF4444))),
-                      onTap: () async {
-                        await ref.read(authServiceProvider).signOut();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Signed out'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      },
+              child: _authLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
                     )
-                  : ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.login_rounded,
-                          color: Color(0xFF3E1F0D)),
-                      title: const Text('Sign in with Google'),
-                      onTap: () async {
-                        await ref.read(authServiceProvider).signInWithGoogle();
-                      },
-                    ),
+                  : user != null
+                      ? Column(
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.logout_rounded,
+                                  color: Color(0xFFEF4444)),
+                              title: const Text('Sign Out',
+                                  style: TextStyle(color: Color(0xFFEF4444))),
+                              onTap: () async {
+                                setState(() => _authLoading = true);
+                                try {
+                                  await ref.read(authServiceProvider).signOut();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Signed out'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => _authLoading = false);
+                                  }
+                                }
+                              },
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.delete_forever_rounded,
+                                  color: Color(0xFFEF4444)),
+                              title: const Text('Delete Account',
+                                  style: TextStyle(color: Color(0xFFEF4444))),
+                              subtitle: Text(
+                                'Permanently remove your account and data',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.4),
+                                ),
+                              ),
+                              onTap: () => _confirmDeleteAccount(context),
+                            ),
+                          ],
+                        )
+                      : ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.login_rounded,
+                              color: Theme.of(context).colorScheme.primary),
+                          title: const Text('Sign in with Google'),
+                          onTap: () async {
+                            setState(() => _authLoading = true);
+                            try {
+                              await ref
+                                  .read(authServiceProvider)
+                                  .signInWithGoogle();
+                            } finally {
+                              if (mounted) setState(() => _authLoading = false);
+                            }
+                          },
+                        ),
             ),
 
             // ── About ──────────────────────────────────────────────
@@ -273,7 +339,7 @@ class SettingsScreen extends ConsumerWidget {
                               color: Theme.of(context)
                                   .colorScheme
                                   .onSurface
-                                  .withOpacity(0.6),
+                                  .withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -289,7 +355,51 @@ class SettingsScreen extends ConsumerWidget {
                       color: Theme.of(context)
                           .colorScheme
                           .onSurface
-                          .withOpacity(0.4),
+                          .withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Legal ──────────────────────────────────────────────
+            _sectionHeader(context, 'LEGAL'),
+            GlassmorphicCard(
+              margin: const EdgeInsets.only(bottom: 32),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: Column(
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.privacy_tip_rounded,
+                        color: Theme.of(context).colorScheme.primary),
+                    title: const Text('Privacy Policy'),
+                    trailing: Icon(Icons.open_in_new_rounded,
+                        size: 18,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.3)),
+                    onTap: () => launchUrl(
+                      Uri.parse('https://arqivon.com/privacy'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.description_rounded,
+                        color: Theme.of(context).colorScheme.primary),
+                    title: const Text('Terms of Service'),
+                    trailing: Icon(Icons.open_in_new_rounded,
+                        size: 18,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.3)),
+                    onTap: () => launchUrl(
+                      Uri.parse('https://arqivon.com/terms'),
+                      mode: LaunchMode.externalApplication,
                     ),
                   ),
                 ],
@@ -299,6 +409,67 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+          'This will permanently delete your account and all associated data. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFEF4444),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _authLoading = true);
+    try {
+      await ref.read(authServiceProvider).deleteAccount();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account deleted'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.code == 'requires-recent-login'
+                ? 'Please sign in again before deleting your account'
+                : 'Failed to delete account: ${e.message}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete account: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
   }
 
   Widget _languageDropdown({
@@ -317,7 +488,10 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           Icon(Icons.language_rounded,
               size: 20,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.5)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(label, style: const TextStyle(fontSize: 14)),
@@ -351,7 +525,7 @@ class SettingsScreen extends ConsumerWidget {
           fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.5,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
         ),
       ),
     );

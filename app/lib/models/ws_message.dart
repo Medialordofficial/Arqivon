@@ -6,6 +6,7 @@ class WsInbound {
   final String? mode;
   final String? sourceLang;
   final String? targetLang;
+  final String? voice;
 
   const WsInbound({
     required this.type,
@@ -14,6 +15,7 @@ class WsInbound {
     this.mode,
     this.sourceLang,
     this.targetLang,
+    this.voice,
   });
 
   Map<String, dynamic> toJson() => {
@@ -23,6 +25,7 @@ class WsInbound {
         if (mode != null) 'mode': mode,
         if (sourceLang != null) 'source_lang': sourceLang,
         if (targetLang != null) 'target_lang': targetLang,
+        if (voice != null) 'voice': voice,
         'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
       };
 }

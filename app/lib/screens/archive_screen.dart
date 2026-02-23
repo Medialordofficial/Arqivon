@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
@@ -6,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/glassmorphic_card.dart';
 import '../widgets/session_tile.dart';
+import 'session_detail_screen.dart';
 
 /// Provider tracking the active mode filter (null = show all).
 final modeFilterProvider = StateProvider<AgentMode?>((ref) => null);
@@ -93,7 +95,7 @@ class ArchiveScreen extends ConsumerWidget {
                               color: Theme.of(context)
                                   .colorScheme
                                   .onSurface
-                                  .withOpacity(0.5),
+                                  .withValues(alpha: 0.5),
                             ),
                           ),
                         ),
@@ -108,35 +110,74 @@ class ArchiveScreen extends ConsumerWidget {
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurface
-                                    .withOpacity(0.4),
+                                    .withValues(alpha: 0.4),
                               ),
                             ),
                           ),
                         )
                       else
                         Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 100),
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: sessions.length,
-                            itemBuilder: (context, index) {
-                              final session = sessions[index];
-                              return SessionTile(
-                                session: session,
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Reloading context: ${session.title}'),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                },
-                                onDelete: () => ref
-                                    .read(sessionListProvider.notifier)
-                                    .deleteSession(session.id),
-                              );
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              ref.read(sessionListProvider.notifier).refresh();
+                              // Wait briefly so the indicator feels natural
+                              await Future.delayed(
+                                  const Duration(milliseconds: 600));
                             },
+                            child: ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 100),
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              itemCount: sessions.length,
+                              itemBuilder: (context, index) {
+                                final session = sessions[index];
+                                return SessionTile(
+                                  session: session,
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => SessionDetailScreen(
+                                          session: session,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  onDelete: () async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Delete session?'),
+                                        content: const Text(
+                                          'This will permanently remove this session. This action cannot be undone.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(true),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                            ),
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed == true) {
+                                      ref
+                                          .read(sessionListProvider.notifier)
+                                          .deleteSession(session.id);
+                                    }
+                                  },
+                                );
+                              },
+                            ),
                           ),
                         ),
                     ],
@@ -168,8 +209,10 @@ class ArchiveScreen extends ConsumerWidget {
                 'Your multimodal sessions are securely stored and only accessible to you.',
                 style: TextStyle(
                   fontSize: 13,
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -197,15 +240,20 @@ class ArchiveScreen extends ConsumerWidget {
           children: [
             Icon(Icons.archive_outlined,
                 size: 64,
-                color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.2)),
             const SizedBox(height: 16),
             Text(
               'No sessions yet',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.5),
               ),
             ),
             const SizedBox(height: 8),
@@ -213,7 +261,10 @@ class ArchiveScreen extends ConsumerWidget {
               'Start a Live session and it will appear here.',
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.4),
               ),
               textAlign: TextAlign.center,
             ),
@@ -299,10 +350,11 @@ class _FilterChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          color:
+              isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? color : color.withOpacity(0.3),
+            color: isSelected ? color : color.withValues(alpha: 0.3),
             width: isSelected ? 1.5 : 1.0,
           ),
         ),
@@ -310,14 +362,15 @@ class _FilterChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
-                size: 14, color: isSelected ? color : color.withOpacity(0.6)),
+                size: 14,
+                color: isSelected ? color : color.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? color : color.withOpacity(0.6),
+                color: isSelected ? color : color.withValues(alpha: 0.6),
               ),
             ),
             if (count > 0) ...[
@@ -325,7 +378,7 @@ class _FilterChip extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: isSelected ? color : color.withOpacity(0.15),
+                  color: isSelected ? color : color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

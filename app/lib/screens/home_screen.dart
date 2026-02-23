@@ -1,12 +1,14 @@
-// Light design — production grade.
+// Design — supports dark + light theme.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
 import '../providers/auth_provider.dart';
+import '../providers/live_session_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   final VoidCallback? onGoLive;
@@ -16,19 +18,21 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).valueOrNull;
     final topPad = MediaQuery.of(context).padding.top;
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.surface,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── Compact sticky header ────────────────────────────────
+          // ── Compact sticky header ───────────────────────────────────
           SliverAppBar(
             pinned: true,
             expandedHeight: 0,
             toolbarHeight: 64 + topPad,
             elevation: 0,
-            backgroundColor: Colors.white,
+            backgroundColor: cs.surface,
             surfaceTintColor: Colors.transparent,
             automaticallyImplyLeading: false,
             flexibleSpace: Padding(
@@ -43,14 +47,16 @@ class HomeScreen extends ConsumerWidget {
                       backgroundImage: user.photoURL != null
                           ? NetworkImage(user.photoURL!)
                           : null,
-                      backgroundColor: const Color(0xFFF1F5F9),
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E2640)
+                          : const Color(0xFFF1F5F9),
                       child: user.photoURL == null
                           ? Text(
                               (user.displayName?.isNotEmpty == true)
                                   ? user.displayName![0].toUpperCase()
                                   : '?',
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
+                              style: TextStyle(
+                                color: cs.onSurface,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
                               ),
@@ -61,12 +67,14 @@ class HomeScreen extends ConsumerWidget {
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF1F5F9),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E2640)
+                            : const Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person_rounded,
-                          color: Color(0xFF64748B), size: 22),
+                      child: Icon(Icons.person_rounded,
+                          color: cs.onSurface.withValues(alpha: 0.5), size: 22),
                     ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -76,9 +84,9 @@ class HomeScreen extends ConsumerWidget {
                       children: [
                         Text(
                           user != null ? 'Welcome back,' : 'Hello,',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: cs.onSurface.withValues(alpha: 0.5),
                             letterSpacing: 0.2,
                           ),
                         ),
@@ -86,21 +94,17 @@ class HomeScreen extends ConsumerWidget {
                           user != null
                               ? (user.displayName?.split(' ').first ?? 'there')
                               : 'Arqivon',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
+                            color: cs.onSurface,
                             letterSpacing: -0.4,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.notifications_none_rounded,
-                        color: Color(0xFF64748B), size: 24),
-                  ),
+                  // Clean right side — no dead buttons
                 ],
               ),
             ),
@@ -121,16 +125,16 @@ class HomeScreen extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF60A5FA), // light vibrant blue
+                    color: Color(0xFF60A5FA),
                     letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'All four run live — audio and video, no uploads.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF64748B),
+                    color: cs.onSurface.withValues(alpha: 0.5),
                     height: 1.4,
                   ),
                 ),
@@ -143,14 +147,24 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.auto_awesome_rounded,
                       label: AgentMode.general.label,
-                      accentColor: const Color(0xFF3B82F6),
-                      onTap: onGoLive,
+                      accentColor: AgentMode.general.color,
+                      onTap: () {
+                        ref
+                            .read(liveSessionProvider.notifier)
+                            .setMode(AgentMode.general);
+                        onGoLive?.call();
+                      },
                     ),
                     _CircularModeCard(
                       icon: Icons.translate_rounded,
                       label: AgentMode.translator.label,
-                      accentColor: const Color(0xFF0EA5E9),
-                      onTap: onGoLive,
+                      accentColor: AgentMode.translator.color,
+                      onTap: () {
+                        ref
+                            .read(liveSessionProvider.notifier)
+                            .setMode(AgentMode.translator);
+                        onGoLive?.call();
+                      },
                     ),
                   ],
                 ),
@@ -161,14 +175,24 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.school_rounded,
                       label: AgentMode.tutor.label,
-                      accentColor: const Color(0xFF818CF8),
-                      onTap: onGoLive,
+                      accentColor: AgentMode.tutor.color,
+                      onTap: () {
+                        ref
+                            .read(liveSessionProvider.notifier)
+                            .setMode(AgentMode.tutor);
+                        onGoLive?.call();
+                      },
                     ),
                     _CircularModeCard(
                       icon: Icons.headset_mic_rounded,
                       label: AgentMode.support.label,
-                      accentColor: const Color(0xFF22D3EE),
-                      onTap: onGoLive,
+                      accentColor: AgentMode.support.color,
+                      onTap: () {
+                        ref
+                            .read(liveSessionProvider.notifier)
+                            .setMode(AgentMode.support);
+                        onGoLive?.call();
+                      },
                     ),
                   ],
                 ),
@@ -195,69 +219,76 @@ class _GoLiveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 70,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFF0055FF), // deep electric blue
-              Color(0xFF0099FF), // vivid sky blue
-              Color(0xFF00C6FF), // bright cyan-blue
-            ],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF0070FF).withValues(alpha: 0.50),
-              blurRadius: 28,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child:
-                  const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 14),
-            const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Go Live',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                Text(
-                  'Tap to start your session',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
-                ),
+    return Semantics(
+      label: 'Go Live. Tap to start your session',
+      button: true,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          onTap?.call();
+        },
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF0055FF), // deep electric blue
+                Color(0xFF0099FF), // vivid sky blue
+                Color(0xFF00C6FF), // bright cyan-blue
               ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
-            const SizedBox(width: 20),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                color: Colors.white54, size: 16),
-          ],
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0070FF).withValues(alpha: 0.50),
+                blurRadius: 28,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.mic_rounded,
+                    color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Go Live',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  Text(
+                    'Tap to start your session',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 20),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: Colors.white54, size: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -280,54 +311,65 @@ class _CircularModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                center: const Alignment(-0.3, -0.3),
-                radius: 1.0,
-                colors: [
-                  accentColor.withValues(alpha: 0.12),
-                  const Color(0xFFF1F5F9),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      label: '$label mode',
+      button: true,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap?.call();
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  center: const Alignment(-0.3, -0.3),
+                  radius: 1.0,
+                  colors: [
+                    accentColor.withValues(alpha: 0.12),
+                    isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9),
+                  ],
+                ),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.25),
+                  width: 2.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.10),
+                    blurRadius: 28,
+                    spreadRadius: 4,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
               ),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.25),
-                width: 2.5,
+              child: Icon(icon, color: accentColor, size: 40),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.85),
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.10),
-                  blurRadius: 28,
-                  spreadRadius: 4,
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
-            child: Icon(icon, color: accentColor, size: 40),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            label,
-            style: TextStyle(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.85),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -666,8 +708,11 @@ class _StepDescriptionCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   step.description,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
                     fontSize: 13,
                     height: 1.45,
                   ),

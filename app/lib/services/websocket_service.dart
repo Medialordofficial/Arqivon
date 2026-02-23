@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../config/constants.dart';
+import '../config/logger.dart';
 import '../models/ws_message.dart';
 
 /// Connection states exposed to providers.
@@ -13,9 +13,14 @@ enum WsConnectionState { disconnected, connecting, connected, reconnecting }
 
 /// Production-grade WebSocket service with heartbeat & exponential backoff.
 class WebSocketService {
-  WebSocketService({required this.userId});
+  WebSocketService({required this.userId, this.authToken});
+
+  static final _log = AppLogger('WS');
 
   final String userId;
+
+  /// Firebase ID token for backend authentication.
+  String? authToken;
 
   WebSocketChannel? _channel;
   Timer? _heartbeatTimer;
@@ -44,7 +49,7 @@ class WebSocketService {
     _setState(WsConnectionState.connecting);
 
     try {
-      final uri = Uri.parse(AppConstants.wsUrl(userId));
+      final uri = Uri.parse(AppConstants.wsUrl(userId, token: authToken));
       _channel = WebSocketChannel.connect(uri);
       await _channel!.ready;
 
@@ -54,7 +59,7 @@ class WebSocketService {
       _startHeartbeat();
       _listenToMessages();
     } catch (e) {
-      debugPrint('[WS] Connection failed: $e');
+      _log.severe('Connection failed', e);
       _scheduleReconnect();
     }
   }
@@ -66,20 +71,8 @@ class WebSocketService {
     try {
       _channel!.sink.add(jsonEncode(message.toJson()));
     } catch (e) {
-      debugPrint('[WS] Send error: $e');
+      _log.severe('Send error', e);
     }
-  }
-
-  void sendAudio(String base64Audio) {
-    send(const WsInbound(type: 'audio').copyWith(data: base64Audio));
-  }
-
-  void sendVideo(String base64Frame) {
-    send(WsInbound(type: 'video', data: base64Frame));
-  }
-
-  void sendText(String text) {
-    send(WsInbound(type: 'text', text: text));
   }
 
   void sendPing() {
@@ -112,18 +105,22 @@ class WebSocketService {
     _channel?.stream.listen(
       (raw) {
         try {
-          final json = jsonDecode(raw as String) as Map<String, dynamic>;
+          if (raw is! String) {
+            _log.warning('Ignoring non-text WebSocket frame');
+            return;
+          }
+          final json = jsonDecode(raw) as Map<String, dynamic>;
           final msg = WsOutbound.fromJson(json);
           _messageController.add(msg);
         } catch (e) {
-          debugPrint('[WS] Parse error: $e');
+          _log.severe('Parse error', e);
         }
       },
       onDone: () {
         if (!_intentionalClose) _scheduleReconnect();
       },
       onError: (e) {
-        debugPrint('[WS] Stream error: $e');
+        _log.severe('Stream error', e);
         if (!_intentionalClose) _scheduleReconnect();
       },
     );
@@ -147,8 +144,8 @@ class WebSocketService {
     _setState(WsConnectionState.reconnecting);
     _reconnectAttempt++;
     final delay = _backoff(_reconnectAttempt);
-    debugPrint(
-        '[WS] Reconnecting in ${delay.inMilliseconds}ms (attempt $_reconnectAttempt)');
+    _log.info(
+        'Reconnecting in ${delay.inMilliseconds}ms (attempt $_reconnectAttempt)');
 
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(delay, () => connect());
@@ -166,13 +163,4 @@ class WebSocketService {
     _state = s;
     _stateController.add(s);
   }
-}
-
-/// Tiny extension so WsInbound can be "copied" with data.
-extension _WsInboundCopy on WsInbound {
-  WsInbound copyWith({String? type, String? data, String? text}) => WsInbound(
-        type: type ?? this.type,
-        data: data ?? this.data,
-        text: text ?? this.text,
-      );
 }

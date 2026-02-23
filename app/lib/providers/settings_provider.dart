@@ -4,6 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/agent_mode.dart';
 
+/// Eagerly-resolved SharedPreferences instance.
+/// Overridden in ProviderScope from main() so it's available synchronously.
+final sharedPrefsProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError('sharedPrefsProvider must be overridden in main()');
+});
+
 /// App settings state.
 class AppSettings {
   final ThemeMode themeMode;
@@ -76,18 +82,15 @@ const Map<String, String> availableLanguages = {
 class SettingsNotifier extends Notifier<AppSettings> {
   @override
   AppSettings build() {
-    _load();
-    return const AppSettings();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
+    // Load synchronously from the eagerly-resolved SharedPreferences
+    // to avoid a dark → light theme flicker on startup.
+    final prefs = ref.read(sharedPrefsProvider);
     final isDark = prefs.getBool('dark_mode') ?? true;
     final voice = prefs.getString('voice') ?? 'Aoede';
     final modeName = prefs.getString('default_mode') ?? 'general';
     final srcLang = prefs.getString('source_lang') ?? 'auto';
     final tgtLang = prefs.getString('target_lang') ?? 'en';
-    state = AppSettings(
+    return AppSettings(
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       selectedVoice: voice,
       defaultMode: AgentMode.values.firstWhere(
@@ -103,31 +106,31 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final newMode =
         state.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     state = state.copyWith(themeMode: newMode);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     await prefs.setBool('dark_mode', newMode == ThemeMode.dark);
   }
 
   Future<void> setVoice(String voice) async {
     state = state.copyWith(selectedVoice: voice);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     await prefs.setString('voice', voice);
   }
 
   Future<void> setDefaultMode(AgentMode mode) async {
     state = state.copyWith(defaultMode: mode);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     await prefs.setString('default_mode', mode.name);
   }
 
   Future<void> setSourceLang(String lang) async {
     state = state.copyWith(sourceLang: lang);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     await prefs.setString('source_lang', lang);
   }
 
   Future<void> setTargetLang(String lang) async {
     state = state.copyWith(targetLang: lang);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     await prefs.setString('target_lang', lang);
   }
 }

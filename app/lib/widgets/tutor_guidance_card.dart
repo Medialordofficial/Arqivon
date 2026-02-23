@@ -78,6 +78,7 @@ class TutorGuidanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _toolColor;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final hasProgress = step.totalSteps > 0 && step.progressPct > 0;
 
     return GlassmorphicCard(
@@ -95,7 +96,7 @@ class TutorGuidanceCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(_toolIcon, color: color, size: 20),
@@ -104,7 +105,7 @@ class TutorGuidanceCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -121,7 +122,8 @@ class TutorGuidanceCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   step.subject!,
-                  style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  style: TextStyle(
+                      fontSize: 12, color: onSurface.withValues(alpha: 0.54)),
                 ),
               ],
               const Spacer(),
@@ -139,8 +141,8 @@ class TutorGuidanceCard extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 8),
                   child: InkWell(
                     onTap: onDismiss,
-                    child: const Icon(Icons.close,
-                        size: 16, color: Colors.white38),
+                    child: Icon(Icons.close,
+                        size: 16, color: onSurface.withValues(alpha: 0.38)),
                   ),
                 ),
             ],
@@ -153,7 +155,7 @@ class TutorGuidanceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: step.progressPct.clamp(0.0, 1.0),
-                backgroundColor: Colors.white.withOpacity(0.1),
+                backgroundColor: onSurface.withValues(alpha: 0.1),
                 color: color,
                 minHeight: 4,
               ),
@@ -165,10 +167,10 @@ class TutorGuidanceCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               step.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: onSurface,
               ),
             ),
           ],
@@ -180,10 +182,9 @@ class TutorGuidanceCard extends StatelessWidget {
               step.explanation,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.white.withOpacity(0.8),
+                color: onSurface.withValues(alpha: 0.8),
                 height: 1.4,
               ),
-              maxLines: 6,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -192,10 +193,10 @@ class TutorGuidanceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withOpacity(0.1),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3)),
+                border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,8 +207,10 @@ class TutorGuidanceCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       step.hintText!,
-                      style: const TextStyle(
-                          fontSize: 13, color: Colors.white70, height: 1.3),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: onSurface.withValues(alpha: 0.7),
+                          height: 1.3),
                     ),
                   ),
                 ],
@@ -232,9 +235,9 @@ class TutorGuidanceCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Correct: ${step.correctAnswer}',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12,
-                  color: Colors.white54,
+                  color: onSurface.withValues(alpha: 0.54),
                   fontStyle: FontStyle.italic),
             ),
           ],
@@ -242,7 +245,8 @@ class TutorGuidanceCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Next: ${step.nextStepHint}',
-              style: const TextStyle(fontSize: 12, color: Colors.white38),
+              style: TextStyle(
+                  fontSize: 12, color: onSurface.withValues(alpha: 0.38)),
             ),
           ],
           if (step.concept != null) ...[
@@ -250,12 +254,13 @@ class TutorGuidanceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
+                color: onSurface.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 'Concept: ${step.concept}',
-                style: const TextStyle(fontSize: 11, color: Colors.white54),
+                style: TextStyle(
+                    fontSize: 11, color: onSurface.withValues(alpha: 0.54)),
               ),
             ),
           ],
@@ -273,7 +278,7 @@ class TutorGuidanceCard extends StatelessWidget {
                         height: 22,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(11),
                         ),
                         child: Text(
@@ -291,7 +296,7 @@ class TutorGuidanceCard extends StatelessWidget {
                           entry.value,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.white.withOpacity(0.8),
+                            color: onSurface.withValues(alpha: 0.8),
                             height: 1.3,
                           ),
                         ),
@@ -306,10 +311,10 @@ class TutorGuidanceCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withOpacity(0.12),
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,10 +331,10 @@ class TutorGuidanceCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     step.finalAnswer!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: onSurface,
                     ),
                   ),
                 ],
@@ -363,7 +368,7 @@ class TutorGuidanceCard extends StatelessWidget {
                           ex,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.white.withOpacity(0.75),
+                            color: onSurface.withValues(alpha: 0.75),
                             height: 1.3,
                           ),
                         ),
@@ -382,13 +387,14 @@ class TutorGuidanceCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
+                          color: onSurface.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           t,
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.white54),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: onSurface.withValues(alpha: 0.54)),
                         ),
                       ))
                   .toList(),

@@ -5,9 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../config/logger.dart';
+
 /// Firebase Auth service supporting Email, Google, and Apple sign-in.
 class AuthService {
   AuthService();
+
+  static final _log = AppLogger('Auth');
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -27,10 +31,10 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      debugPrint('[Auth] Account created: ${result.user?.email}');
+      _log.info('Account created: ${result.user?.email}');
       return result.user;
     } catch (e) {
-      debugPrint('[Auth] Create account error: $e');
+      _log.severe('Create account error', e);
       rethrow;
     }
   }
@@ -42,10 +46,10 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      debugPrint('[Auth] Signed in: ${result.user?.email}');
+      _log.info('Signed in: ${result.user?.email}');
       return result.user;
     } catch (e) {
-      debugPrint('[Auth] Email sign-in error: $e');
+      _log.severe('Email sign-in error', e);
       rethrow;
     }
   }
@@ -68,10 +72,10 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
       final result = await _auth.signInWithCredential(credential);
-      debugPrint('[Auth] Google signed in: ${result.user?.displayName}');
+      _log.info('Google signed in: ${result.user?.displayName}');
       return result.user;
     } catch (e) {
-      debugPrint('[Auth] Google sign-in error: $e');
+      _log.severe('Google sign-in error', e);
       rethrow;
     }
   }
@@ -104,10 +108,10 @@ class AuthService {
         await result.user?.reload();
       }
 
-      debugPrint('[Auth] Apple signed in: ${result.user?.displayName}');
+      _log.info('Apple signed in: ${result.user?.displayName}');
       return result.user;
     } catch (e) {
-      debugPrint('[Auth] Apple sign-in error: $e');
+      _log.severe('Apple sign-in error', e);
       rethrow;
     }
   }
@@ -127,6 +131,23 @@ class AuthService {
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _auth.signOut();
-    debugPrint('[Auth] Signed out');
+    _log.info('Signed out');
+  }
+
+  // ── Delete Account ────────────────────────────────────────────────
+
+  /// Permanently delete the current user account.
+  /// Throws if the user needs to re-authenticate first.
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user signed in');
+    try {
+      await user.delete();
+      await _googleSignIn.signOut();
+      _log.info('Account deleted');
+    } catch (e) {
+      _log.severe('Delete account error', e);
+      rethrow;
+    }
   }
 }

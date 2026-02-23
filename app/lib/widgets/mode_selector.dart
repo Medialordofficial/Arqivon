@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/agent_mode.dart';
 
@@ -17,6 +18,7 @@ class ModeSelectorStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return SizedBox(
       height: 40,
       child: ListView.separated(
@@ -28,43 +30,56 @@ class ModeSelectorStrip extends StatelessWidget {
           final mode = AgentMode.values[index];
           final isSelected = mode == selectedMode;
 
-          return GestureDetector(
-            onTap: () => onModeSelected(mode),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? mode.color.withOpacity(0.15)
-                    : const Color(0xFF0F172A).withOpacity(0.05),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
+          return Semantics(
+            label: '${mode.label} mode${isSelected ? ", selected" : ""}',
+            button: true,
+            selected: isSelected,
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onModeSelected(mode);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
                   color: isSelected
-                      ? mode.color.withOpacity(0.5)
-                      : const Color(0xFF0F172A).withOpacity(0.10),
-                  width: isSelected ? 1.5 : 1,
+                      ? mode.color.withValues(alpha: 0.15)
+                      : onSurface.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? mode.color.withValues(alpha: 0.5)
+                        : onSurface.withValues(alpha: 0.10),
+                    width: isSelected ? 1.5 : 1,
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    mode.icon,
-                    size: 16,
-                    color: isSelected ? mode.color : const Color(0xFF64748B),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    mode.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? mode.color : const Color(0xFF64748B),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      mode.icon,
+                      size: 16,
+                      color: isSelected
+                          ? mode.color
+                          : onSurface.withValues(alpha: 0.5),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      mode.label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected
+                            ? mode.color
+                            : onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );

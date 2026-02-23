@@ -8,7 +8,12 @@ class AppConstants {
   static const String wsScheme = 'wss';
   static const String wsHost = _host;
   static const int wsPort = 443;
-  static String wsUrl(String userId) => '$wsScheme://$_host/ws/$userId';
+  static String wsUrl(String userId, {String? token}) {
+    final base = '$wsScheme://$_host/ws/$userId';
+    if (token != null) return '$base?token=$token';
+    return base;
+  }
+
   static String httpBase = 'https://$_host';
 
   // Audio

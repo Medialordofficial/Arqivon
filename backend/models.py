@@ -36,6 +36,7 @@ class InboundMessage(BaseModel):
     data: str | None = None          # base64-encoded binary or plain text
     text: str | None = None          # used only for type=text
     mode: str | None = None          # for SET_MODE messages
+    voice: str | None = None         # AI voice selection (Aoede, Puck, etc.)
     source_lang: str | None = None   # for SET_LANGUAGE (translator)
     target_lang: str | None = None   # for SET_LANGUAGE (translator)
     timestamp: float = Field(default_factory=lambda: datetime.utcnow().timestamp())

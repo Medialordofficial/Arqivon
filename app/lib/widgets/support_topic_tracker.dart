@@ -16,6 +16,7 @@ class SupportTopicTracker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return GlassmorphicCard(
       blur: 20,
       opacity: 0.18,
@@ -46,10 +47,10 @@ class SupportTopicTracker extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             currentTopic.topic,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: onSurface,
             ),
           ),
           if (currentTopic.reason.isNotEmpty) ...[
@@ -58,7 +59,7 @@ class SupportTopicTracker extends StatelessWidget {
               currentTopic.reason,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withOpacity(0.5),
+                color: onSurface.withValues(alpha: 0.5),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -81,12 +82,13 @@ class SupportTopicTracker extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: isCurrent
-                          ? AgentMode.support.color.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.08),
+                          ? AgentMode.support.color.withValues(alpha: 0.2)
+                          : onSurface.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                       border: isCurrent
                           ? Border.all(
-                              color: AgentMode.support.color.withOpacity(0.4))
+                              color: AgentMode.support.color
+                                  .withValues(alpha: 0.4))
                           : null,
                     ),
                     child: Text(
@@ -97,7 +99,7 @@ class SupportTopicTracker extends StatelessWidget {
                             isCurrent ? FontWeight.w700 : FontWeight.w500,
                         color: isCurrent
                             ? AgentMode.support.color
-                            : Colors.white54,
+                            : onSurface.withValues(alpha: 0.54),
                       ),
                     ),
                   );

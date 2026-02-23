@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
 import '../models/smart_action.dart';
 import '../models/ws_message.dart';
+import '../config/logger.dart';
 import '../services/audio_service.dart';
 import '../services/websocket_service.dart';
 import 'auth_provider.dart';
+import 'settings_provider.dart';
 
 /// Exposed live session state.
 class LiveSessionState {
@@ -43,7 +46,7 @@ class LiveSessionState {
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
     this.isResponding = false,
-    this.mode = AgentMode.general,
+    this.mode = AgentMode.general, // overridden in build() with user default
     this.transcript,
     this.userTranscript,
     this.currentAction,
@@ -112,6 +115,8 @@ class LiveSessionState {
 
 /// The core Live session provider managing WebSocket + audio pipeline.
 class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
+  static final _log = AppLogger('LiveSession');
+
   WebSocketService? _ws;
   AudioCaptureService? _audio;
   StreamSubscription? _msgSub;
@@ -126,7 +131,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   @override
   Future<LiveSessionState> build() async {
     ref.onDispose(_cleanup);
-    return const LiveSessionState();
+    final settings = ref.read(settingsProvider);
+    return LiveSessionState(mode: settings.defaultMode);
   }
 
   // ── Mode Management ───────────────────────────────────────────────────
@@ -137,7 +143,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // Only tell the backend if the user is actively streaming; changing modes
     // while idle should not trigger a Gemini reconnect on the backend.
     if (current.isStreaming) {
-      _ws?.send(WsInbound(type: 'set_mode', mode: newMode.wsValue));
+      final selectedVoice = ref.read(settingsProvider).selectedVoice;
+      _ws?.send(WsInbound(
+        type: 'set_mode',
+        mode: newMode.wsValue,
+        voice: selectedVoice,
+      ));
     }
   }
 
@@ -162,9 +173,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   Future<void> connectOnly() async {
     final current = state.valueOrNull ?? const LiveSessionState();
     if (current.connectionState == WsConnectionState.connected ||
-        current.connectionState == WsConnectionState.connecting) return;
+        current.connectionState == WsConnectionState.connecting) {
+      return;
+    }
     final userId = ref.read(userIdProvider);
-    _ws = WebSocketService(userId: userId);
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    _ws = WebSocketService(userId: userId, authToken: token);
     _stateSub?.cancel();
     _msgSub?.cancel();
     _stateSub = _ws!.stateStream.listen((s) {
@@ -188,7 +202,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Reuse existing WS if already connected via connectOnly()
     if (_ws == null || current.connectionState != WsConnectionState.connected) {
-      _ws = WebSocketService(userId: userId);
+      // Dispose old WS to prevent resource leaks before creating a new one.
+      _ws?.dispose();
+      _ws = WebSocketService(
+          userId: userId,
+          authToken: await FirebaseAuth.instance.currentUser?.getIdToken());
       _stateSub?.cancel();
       _msgSub?.cancel();
       _stateSub = _ws!.stateStream.listen((s) {
@@ -204,7 +222,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // When AI finishes speaking (playback complete), clear responding flag
     // and ensure the recorder is still alive for the next turn.
     _audio!.onPlaybackDone = () {
-      print('[ARQIVO] onPlaybackDone fired');
+      _log.info('onPlaybackDone fired');
       final cur = state.valueOrNull ?? const LiveSessionState();
       if (cur.isResponding) {
         state = AsyncData(cur.copyWith(isResponding: false));
@@ -212,7 +230,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       // CRITICAL: explicitly restart recorder if it died during playback.
       // Android may kill the mic when audio focus changes.
       if (cur.isStreaming) {
-        print('[ARQIVO] calling ensureRecording after playback done');
+        _log.info('calling ensureRecording after playback done');
         _audio?.ensureRecording();
       }
     };
@@ -221,8 +239,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // down and rebuild the Gemini Live session on every mic tap.  On the very
     // first tap after connectOnly() the mode will differ (null vs actual), so
     // we always send it at least once per connection.
+    final selectedVoice = ref.read(settingsProvider).selectedVoice;
     if (_lastSentMode != current.mode) {
-      _ws!.send(WsInbound(type: 'set_mode', mode: current.mode.wsValue));
+      _ws!.send(WsInbound(
+        type: 'set_mode',
+        mode: current.mode.wsValue,
+        voice: selectedVoice,
+      ));
       _lastSentMode = current.mode;
     }
 
@@ -245,15 +268,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audioSub = _audio!.audioStream.listen((b64) {
       _audioChunksSent++;
       if (_audioChunksSent % 50 == 1) {
-        print(
-            '[ARQIVO] audio chunk #$_audioChunksSent → WS (state=${_ws?.state})');
+        _log.fine('audio chunk #$_audioChunksSent → WS (state=${_ws?.state})');
       }
       _ws?.send(WsInbound(type: 'audio', data: b64));
     }, onDone: () {
-      print(
-          '[ARQIVO] *** audioStream DONE — subscription ended! chunks=$_audioChunksSent');
+      _log.warning(
+          'audioStream DONE — subscription ended! chunks=$_audioChunksSent');
     }, onError: (e) {
-      print('[ARQIVO] *** audioStream ERROR: $e');
+      _log.severe('audioStream ERROR', e);
     });
 
     state = AsyncData(current.copyWith(
@@ -320,8 +342,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
-            print(
-                '[ARQIVO] first audio chunk received — setting isResponding=true');
+            _log.info('first audio chunk received — setting isResponding=true');
             state = AsyncData(current.copyWith(
               isResponding: true,
               clearUserTranscript: true,
@@ -399,7 +420,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Flush remaining audio to the streaming queue.
         // isResponding stays true until playback actually finishes
         // (handled by onPlaybackDone callback).
-        print('[ARQIVO] turn_complete received from backend');
+        _log.info('turn_complete received from backend');
         _audio?.flushAndPlay();
         state = AsyncData(current.copyWith(
           clearTranscript: true,
@@ -409,7 +430,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'interrupted':
         // User barged in — stop playback immediately and clear stale overlays.
-        print('[ARQIVO] interrupted received from backend');
+        _log.info('interrupted received from backend');
         _audio?.stopPlayback();
         state = AsyncData(current.copyWith(
           isResponding: false,

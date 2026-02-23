@@ -39,6 +39,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return GlassmorphicCard(
       blur: 25,
       opacity: 0.22,
@@ -54,7 +55,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withOpacity(0.2),
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.picture_as_pdf_rounded,
@@ -64,7 +65,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6).withOpacity(0.15),
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
@@ -81,8 +82,8 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
               if (widget.onDismiss != null)
                 InkWell(
                   onTap: widget.onDismiss,
-                  child:
-                      const Icon(Icons.close, size: 16, color: Colors.white38),
+                  child: Icon(Icons.close,
+                      size: 16, color: onSurface.withValues(alpha: 0.38)),
                 ),
             ],
           ),
@@ -91,10 +92,10 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
           // Title
           Text(
             widget.doc.title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: onSurface,
             ),
           ),
           const SizedBox(height: 6),
@@ -106,7 +107,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
                 : widget.doc.content,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.white.withOpacity(0.65),
+              color: onSurface.withValues(alpha: 0.65),
               height: 1.4,
             ),
             maxLines: 4,

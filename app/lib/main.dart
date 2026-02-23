@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'config/logger.dart';
 import 'config/theme.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
@@ -13,26 +18,54 @@ import 'screens/archive_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
+import 'widgets/offline_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   // Initialise Firebase and SharedPreferences in parallel before the first
   // frame — both are fast on-device and this removes the loading splash delay.
-  await Future.wait([
+  final results = await Future.wait([
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
     SharedPreferences.getInstance(),
   ]);
+  final prefs = results[1] as SharedPreferences;
+
+  // ── Firebase Crashlytics ─────────────────────────────────────────
+  // Catch Flutter framework errors (widget build, layout, paint).
+  FlutterError.onError = (errorDetails) {
+    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+  };
+
+  // Catch async Dart errors not handled by Flutter framework.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
+  // Disable crash collection in debug builds to avoid noise.
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+    kReleaseMode,
+  );
+
+  // Structured logging — replaces raw print() everywhere.
+  AppLogger.init();
+
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.white,
-      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  runApp(const ProviderScope(child: ArqivonApp()));
+
+  runApp(ProviderScope(
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+    ],
+    child: const ArqivonApp(),
+  ));
 }
 
 class ArqivonApp extends ConsumerWidget {
@@ -41,6 +74,17 @@ class ArqivonApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(settingsProvider).themeMode;
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: isDark ? const Color(0xFF0B0F1A) : Colors.white,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+    ));
 
     return MaterialApp(
       title: 'Arqivon',
@@ -53,18 +97,47 @@ class ArqivonApp extends ConsumerWidget {
   }
 }
 
-/// Shows [LoginScreen] when not authenticated, [MainNavigator] otherwise.
+/// Shows onboarding → [LoginScreen] → [MainNavigator] based on state.
 /// Waits for Firebase to finish initialising before rendering auth state.
-class AuthGate extends ConsumerWidget {
+class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends ConsumerState<AuthGate> {
+  bool _onboardingDone = true; // default true until we load prefs
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final done = prefs.getBool('onboarding_complete') ?? false;
+    if (mounted) setState(() => _onboardingDone = done);
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_complete', true);
+    if (mounted) setState(() => _onboardingDone = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show onboarding on first launch
+    if (!_onboardingDone) {
+      return OnboardingScreen(onComplete: _completeOnboarding);
+    }
+
     // Wait for Firebase to init — shows branded splash until ready.
     final firebaseAsync = ref.watch(firebaseInitProvider);
 
     return firebaseAsync.when(
-      // Firebase was already initialised in main() — this state is instant.
       loading: () => const _SplashScreen(),
       error: (e, _) => Scaffold(
         body: Center(child: Text('Startup error: $e')),
@@ -89,14 +162,15 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.white,
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: cs.surface,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // App icon
-            SizedBox(
+            const SizedBox(
               width: 100,
               height: 100,
               child: Image(
@@ -104,22 +178,22 @@ class _SplashScreen extends StatelessWidget {
                 errorBuilder: _iconFallback,
               ),
             ),
-            SizedBox(height: 28),
+            const SizedBox(height: 28),
             Text(
               'Arqivon',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
+                color: cs.onSurface,
                 letterSpacing: -0.8,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
               'The Living Lens',
               style: TextStyle(
                 fontSize: 13,
-                color: Color(0xFF64748B),
+                color: cs.onSurface.withValues(alpha: 0.5),
                 letterSpacing: 1.5,
                 fontWeight: FontWeight.w400,
               ),
@@ -215,7 +289,17 @@ class _MainNavigatorState extends State<MainNavigator> {
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: screens),
+      body: Stack(
+        children: [
+          IndexedStack(index: _currentIndex, children: screens),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: OfflineBanner(),
+          ),
+        ],
+      ),
       extendBody: true,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

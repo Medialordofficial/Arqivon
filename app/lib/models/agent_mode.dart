@@ -51,7 +51,7 @@ enum AgentMode {
       case AgentMode.general:
         return const Color(0xFF5B5FEF);
       case AgentMode.translator:
-        return const Color(0xFFF59E0B);
+        return const Color(0xFF0EA5E9);
       case AgentMode.tutor:
         return const Color(0xFF10B981);
       case AgentMode.support:

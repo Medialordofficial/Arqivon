@@ -42,19 +42,22 @@ class SessionTile extends StatelessWidget {
           child: Row(
             children: [
               // Left icon – mode-colored
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      session.mode.color,
-                      session.mode.color.withOpacity(0.6),
-                    ],
+              Hero(
+                tag: 'session_icon_${session.id}',
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        session.mode.color,
+                        session.mode.color.withValues(alpha: 0.6),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  child: Icon(session.mode.icon, color: Colors.white, size: 24),
                 ),
-                child: Icon(session.mode.icon, color: Colors.white, size: 24),
               ),
               const SizedBox(width: 14),
               // Info
@@ -77,7 +80,7 @@ class SessionTile extends StatelessWidget {
                         color: Theme.of(context)
                             .colorScheme
                             .onSurface
-                            .withOpacity(0.5),
+                            .withValues(alpha: 0.5),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -98,8 +101,10 @@ class SessionTile extends StatelessWidget {
               if (onDelete != null)
                 IconButton(
                   icon: Icon(Icons.delete_outline,
-                      color:
-                          Theme.of(context).colorScheme.error.withOpacity(0.7)),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .error
+                          .withValues(alpha: 0.7)),
                   onPressed: onDelete,
                   iconSize: 20,
                 ),
@@ -116,7 +121,7 @@ class SessionTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.1),
+        color: c.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

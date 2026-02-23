@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
+import '../config/logger.dart';
 import '../models/session_model.dart';
 
 /// Firestore operations for sessions and user memories.
 class FirestoreService {
   FirestoreService();
+
+  static final _log = AppLogger('Firestore');
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -26,7 +28,7 @@ class FirestoreService {
           .map((d) => SessionModel.fromFirestore({...d.data(), 'id': d.id}))
           .toList();
     } catch (e) {
-      debugPrint('[Firestore] getSessions error: $e');
+      _log.severe('getSessions error', e);
       return [];
     }
   }
@@ -53,7 +55,7 @@ class FirestoreService {
           .get();
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
     } catch (e) {
-      debugPrint('[Firestore] getMemories error: $e');
+      _log.severe('getMemories error', e);
       return [];
     }
   }

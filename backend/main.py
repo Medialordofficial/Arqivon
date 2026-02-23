@@ -28,7 +28,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 import firebase_admin
-from firebase_admin import credentials, firestore as fb_firestore, storage
+from firebase_admin import credentials, firestore as fb_firestore, storage, auth as fb_auth
 
 from google import genai
 from google.genai import types
@@ -275,16 +275,30 @@ async def health():
 
 
 @app.get("/api/sessions/{user_id}")
-async def list_sessions(user_id: str):
+async def list_sessions(user_id: str, token: str | None = None):
+    # Authenticate via Bearer token query param
+    if not token:
+        raise HTTPException(401, "Missing auth token")
+    try:
+        decoded = fb_auth.verify_id_token(token)
+        if decoded.get("uid") != user_id:
+            raise HTTPException(403, "UID mismatch")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(401, f"Invalid token: {exc}")
+
     if db is None:
         raise HTTPException(503, "Firestore unavailable")
-    docs = (
-        db.collection("users")
-        .document(user_id)
-        .collection("sessions")
-        .order_by("started_at", direction=fb_firestore.Query.DESCENDING)
-        .limit(50)
-        .stream()
+    docs = await asyncio.to_thread(
+        lambda: list(
+            db.collection("users")
+            .document(user_id)
+            .collection("sessions")
+            .order_by("started_at", direction=fb_firestore.Query.DESCENDING)
+            .limit(50)
+            .stream()
+        )
     )
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
@@ -302,13 +316,15 @@ async def _save_session(user_id: str, record: SessionRecord) -> None:
     if db is None:
         return
     try:
-        (
-            db.collection("users")
-            .document(user_id)
-            .collection("sessions")
-            .document(record.session_id)
-            .set(record.model_dump(), merge=True)
-        )
+        def _sync_save():
+            (
+                db.collection("users")
+                .document(user_id)
+                .collection("sessions")
+                .document(record.session_id)
+                .set(record.model_dump(), merge=True)
+            )
+        await asyncio.to_thread(_sync_save)
         logger.info("Session %s saved for user %s", record.session_id, user_id)
     except Exception as exc:
         logger.error("Failed to save session: %s", exc)
@@ -319,7 +335,7 @@ def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:
     return delay + random.uniform(0, delay * 0.1)
 
 
-async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
+async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede"):
     """Build a LiveConnectConfig for the given mode and open a session."""
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS[AgentMode.GENERAL])
     # Inject language context for translator mode
@@ -330,6 +346,10 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
             f"The target translation language is '{target_lang}'."
         )
 
+    # Validate voice name against known Gemini voices
+    valid_voices = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
+    voice_name = voice if voice in valid_voices else "Aoede"
+
     declarations = get_tool_declarations(mode)
     config = types.LiveConnectConfig(
         system_instruction=prompt,
@@ -338,7 +358,7 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name="Aoede",
+                    voice_name=voice_name,
                 ),
             ),
         ),
@@ -370,6 +390,21 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str):
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    # ── Authenticate ──────────────────────────────────────────────────
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4401, reason="Missing auth token")
+        return
+    try:
+        decoded = fb_auth.verify_id_token(token)
+        if decoded.get("uid") != user_id:
+            await websocket.close(code=4403, reason="UID mismatch")
+            return
+    except Exception as exc:
+        logger.warning("Token verification failed for %s: %s", user_id, exc)
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
     await websocket.accept()
     session_id = str(uuid.uuid4())
     logger.info("Client connected: user=%s session=%s", user_id, session_id)
@@ -378,6 +413,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     current_mode: str = AgentMode.GENERAL
     source_lang: str = "auto"
     target_lang: str = "en"
+    current_voice: str = "Aoede"
+    conversation_transcript: list[str] = []  # accumulate user speech for summary
 
     session_record = SessionRecord(
         session_id=session_id,
@@ -395,8 +432,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     while attempt < settings.ws_max_reconnect_attempts and not cancel_event.is_set():
         try:
-            live_ctx, session = await _connect_gemini(current_mode, source_lang, target_lang)
-            logger.info("Gemini session established mode=%s (attempt %d)", current_mode, attempt + 1)
+            live_ctx, session = await _connect_gemini(current_mode, source_lang, target_lang, current_voice)
+            logger.info("Gemini session established mode=%s voice=%s (attempt %d)", current_mode, current_voice, attempt + 1)
             await _send_json(websocket, OutboundMessage(type=OutboundType.STATUS, text="connected"))
             break
         except Exception as exc:
@@ -417,11 +454,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         return
 
     # ── Reconnect helper (for mode switches) ──────────────────────────────
-    async def _reconnect_session(new_mode: str, sl: str, tl: str):
-        nonlocal live_ctx, session, current_mode, source_lang, target_lang
+    async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede"):
+        nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice
         current_mode = new_mode
         source_lang = sl
         target_lang = tl
+        current_voice = voice
         session_record.mode = new_mode
         session_record.source_lang = sl
         session_record.target_lang = tl
@@ -432,8 +470,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception:
                 pass
         # Open new
-        live_ctx, session = await _connect_gemini(new_mode, sl, tl)
-        logger.info("Reconnected Gemini in mode=%s", new_mode)
+        live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice)
+        logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
 
     # ── Client → Gemini ───────────────────────────────────────────────────
 
@@ -459,8 +497,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
                 # Mode switching
                 if msg.type == InboundType.SET_MODE and msg.mode:
-                    if msg.mode == current_mode:
-                        # Already in this mode — just acknowledge, no reconnect needed.
+                    voice = msg.voice or current_voice
+                    if msg.mode == current_mode and voice == current_voice:
+                        # Already in this mode with same voice — just acknowledge, no reconnect needed.
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
@@ -468,7 +507,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         ))
                         continue
                     try:
-                        await _reconnect_session(msg.mode, source_lang, target_lang)
+                        await _reconnect_session(msg.mode, source_lang, target_lang, voice)
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
@@ -490,7 +529,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         # No change — skip reconnect.
                         continue
                     try:
-                        await _reconnect_session(current_mode, sl, tl)
+                        await _reconnect_session(current_mode, sl, tl, current_voice)
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.STATUS,
                             text=f"language:{sl}→{tl}",
@@ -535,11 +574,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Gemini → Client ───────────────────────────────────────────────────
 
     async def receive_from_gemini() -> None:
+        max_inner_retries = 5
+        inner_retry_count = 0
         try:
             while not cancel_event.is_set():
                 try:
                     logger.info("Waiting for next Gemini turn... (client_audio_count=%d)", client_audio_count)
                     turn = session.receive()
+                    inner_retry_count = 0  # Reset on successful receive
                     async for response in turn:
                         # Model audio / text
                         if response.server_content is not None:
@@ -562,6 +604,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             if sc.input_transcription:
                                 txt = getattr(sc.input_transcription, 'text', None)
                                 if txt:
+                                    conversation_transcript.append(txt)
                                     await _send_json(websocket, OutboundMessage(
                                         type=OutboundType.USER_TRANSCRIPT, text=txt,
                                     ))
@@ -709,8 +752,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 except Exception as inner_exc:
                     if cancel_event.is_set():
                         break
-                    logger.error("Gemini receive error: %s", inner_exc)
-                    await asyncio.sleep(0.5)
+                    inner_retry_count += 1
+                    logger.error("Gemini receive error (%d/%d): %s",
+                                 inner_retry_count, max_inner_retries, inner_exc)
+                    if inner_retry_count >= max_inner_retries:
+                        logger.error("Max Gemini receive retries exceeded — giving up")
+                        await _send_json(websocket, OutboundMessage(
+                            type=OutboundType.ERROR,
+                            text="AI connection lost after retries",
+                        ))
+                        break
+                    await asyncio.sleep(0.5 * inner_retry_count)
         except Exception as exc:
             logger.error("receive_from_gemini fatal: %s", exc)
         finally:
@@ -745,6 +797,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         }
         if session_record.title == "Live Session":
             session_record.title = mode_titles.get(current_mode, "Live Session")
+
+        # ── Generate AI summary from conversation transcript ──────────
+        if conversation_transcript and len(conversation_transcript) >= 2:
+            try:
+                transcript_text = "\n".join(conversation_transcript[-50:])  # last 50 utterances
+                summary_prompt = (
+                    "Summarize this voice conversation in 1-2 concise sentences. "
+                    "Focus on key topics discussed and any decisions or outcomes. "
+                    "Do NOT use quotes or say 'the user said'. Just state what was "
+                    "discussed.\n\n"
+                    f"Mode: {current_mode}\n"
+                    f"Conversation transcript:\n{transcript_text}"
+                )
+                summary_response = await genai_client.aio.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=summary_prompt,
+                )
+                if summary_response.text:
+                    session_record.summary = summary_response.text.strip()
+                    logger.info("AI summary generated: %s", session_record.summary[:100])
+            except Exception as summary_err:
+                logger.warning("Failed to generate session summary: %s", summary_err)
+
         await _save_session(user_id, session_record)
         if live_ctx is not None:
             try:
