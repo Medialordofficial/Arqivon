@@ -36,12 +36,12 @@ void main() async {
   // ── Firebase Crashlytics ─────────────────────────────────────────
   // Catch Flutter framework errors (widget build, layout, paint).
   FlutterError.onError = (errorDetails) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+    FirebaseCrashlytics.instance.recordFlutterError(errorDetails);
   };
 
   // Catch async Dart errors not handled by Flutter framework.
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
     return true;
   };
 
@@ -78,21 +78,23 @@ class ArqivonApp extends ConsumerWidget {
         (themeMode == ThemeMode.system &&
             MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      systemNavigationBarColor: isDark ? const Color(0xFF0B0F1A) : Colors.white,
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
-    ));
-
-    return MaterialApp(
-      title: 'Arqivon',
-      debugShowCheckedModeBanner: false,
-      themeMode: themeMode,
-      theme: ArqivonTheme.lightTheme,
-      darkTheme: ArqivonTheme.darkTheme,
-      home: const AuthGate(),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor:
+            isDark ? const Color(0xFF0B0F1A) : Colors.white,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+      ),
+      child: MaterialApp(
+        title: 'Arqivon',
+        debugShowCheckedModeBanner: false,
+        themeMode: themeMode,
+        theme: ArqivonTheme.lightTheme,
+        darkTheme: ArqivonTheme.darkTheme,
+        home: const AuthGate(),
+      ),
     );
   }
 }
@@ -107,7 +109,8 @@ class AuthGate extends ConsumerStatefulWidget {
 }
 
 class _AuthGateState extends ConsumerState<AuthGate> {
-  bool _onboardingDone = true; // default true until we load prefs
+  /// Start as null (unknown) — show splash until prefs are loaded.
+  bool? _onboardingDone;
 
   @override
   void initState() {
@@ -116,7 +119,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   }
 
   Future<void> _checkOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(sharedPrefsProvider);
     final done = prefs.getBool('onboarding_complete') ?? false;
     if (mounted) setState(() => _onboardingDone = done);
   }
@@ -129,8 +132,13 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    // Show splash until onboarding status is loaded from SharedPreferences
+    if (_onboardingDone == null) {
+      return const _SplashScreen();
+    }
+
     // Show onboarding on first launch
-    if (!_onboardingDone) {
+    if (!_onboardingDone!) {
       return OnboardingScreen(onComplete: _completeOnboarding);
     }
 

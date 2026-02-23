@@ -590,6 +590,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                     c.lensDirection != current?.lensDirection,
                                 orElse: () => cameras.first,
                               );
+                              // Pause frame capture to prevent race condition
+                              _stopFrameCapture();
                               await _cameraController?.dispose();
                               _cameraController = CameraController(
                                 next,
@@ -597,7 +599,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                 enableAudio: false,
                               );
                               await _cameraController!.initialize();
-                              if (mounted) setState(() {});
+                              if (mounted) {
+                                setState(() {});
+                                // Resume frame capture if streaming
+                                final isCurrentlyStreaming = ref.read(liveSessionProvider).valueOrNull?.isStreaming ?? false;
+                                if (isCurrentlyStreaming) _startFrameCapture();
+                              }
                             }
                           : null, // mode icon is decorative in audio-only
                     ),
@@ -682,54 +689,63 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 const SizedBox(height: 14),
 
                 // ── Text input field ─────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    decoration: BoxDecoration(
-                      color:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: Theme.of(context).dividerColor, width: 1),
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 15),
-                            decoration: InputDecoration(
-                              hintText: _hintTextForMode(mode),
-                              hintStyle: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.40),
+                AnimatedCrossFade(
+                  firstChild: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                            color: Theme.of(context).dividerColor, width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 18),
+                          Expanded(
+                            child: TextField(
+                              controller: _textController,
+                              maxLength: 500,
+                              maxLines: 1,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface,
                                   fontSize: 15),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 14),
+                              decoration: InputDecoration(
+                                hintText: _hintTextForMode(mode),
+                                hintStyle: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.40),
+                                    fontSize: 15),
+                                border: InputBorder.none,
+                                isDense: true,
+                                counterText: '',
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              onSubmitted: (_) => _sendTextMessage(),
                             ),
-                            onSubmitted: (_) => _sendTextMessage(),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: _sendTextMessage,
-                          icon: Icon(Icons.arrow_upward_rounded,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.5)),
-                          iconSize: 22,
-                        ),
-                      ],
+                          IconButton(
+                            onPressed: _sendTextMessage,
+                            icon: Icon(Icons.arrow_upward_rounded,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.5)),
+                            iconSize: 22,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+                  secondChild: const SizedBox.shrink(),
+                  crossFadeState: _showTextInput
+                      ? CrossFadeState.showFirst
+                      : CrossFadeState.showSecond,
+                  duration: const Duration(milliseconds: 200),
                 ),
               ],
             ),

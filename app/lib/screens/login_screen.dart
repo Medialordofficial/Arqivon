@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../config/theme.dart';
+import '../config/logger.dart';
 import '../providers/auth_provider.dart';
 
 /// Sign-in / create-account screen — dark Indigo design.
@@ -14,6 +14,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  static final _log = AppLogger('LoginScreen');
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -47,7 +48,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _friendlyError(e.code));
-    } catch (_) {
+    } catch (e) {
+      _log.warning('Email auth failed', e);
       setState(() => _errorMessage = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -55,21 +57,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() { _loading = true; _errorMessage = null; });
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
     try {
       await ref.read(authServiceProvider).signInWithGoogle();
-    } catch (_) {
-      setState(() => _errorMessage = 'Google sign-in failed. Please try again.');
+    } catch (e) {
+      _log.warning('Google sign-in failed', e);
+      setState(
+          () => _errorMessage = 'Google sign-in failed. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _signInWithApple() async {
-    setState(() { _loading = true; _errorMessage = null; });
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
     try {
       await ref.read(authServiceProvider).signInWithApple();
-    } catch (_) {
+    } catch (e) {
+      _log.warning('Apple sign-in failed', e);
       setState(() => _errorMessage = 'Apple sign-in failed. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -79,7 +90,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _resetPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      setState(() => _errorMessage = 'Enter your email first, then tap Forgot.');
+      setState(
+          () => _errorMessage = 'Enter your email first, then tap Forgot.');
       return;
     }
     try {
@@ -92,7 +104,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         );
       }
-    } catch (_) {
+    } catch (e) {
+      _log.warning('Password reset failed', e);
       setState(() => _errorMessage = 'Could not send reset email.');
     }
   }
@@ -111,17 +124,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final appleAvailable = ref.read(authServiceProvider).isAppleSignInAvailable;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F1A),
+      backgroundColor: isDark ? const Color(0xFF0B0F1A) : cs.surface,
       resizeToAvoidBottomInset: true,
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF0B0F1A), Color(0xFF131929), Color(0xFF1A1F35)],
-          ),
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0B0F1A),
+                    Color(0xFF131929),
+                    Color(0xFF1A1F35)
+                  ],
+                )
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [cs.surface, cs.surfaceContainerHighest],
+                ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
@@ -151,7 +176,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF5B5FEF).withValues(alpha: 0.4),
+                                  color: const Color(0xFF5B5FEF)
+                                      .withValues(alpha: 0.4),
                                   blurRadius: 24,
                                   offset: const Offset(0, 8),
                                 ),
@@ -171,21 +197,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
+                          Text(
                             'Arqivon',
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                              color: cs.onSurface,
                               letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                             'Your real-time AI assistant',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Color(0xFF94A3B8),
+                              color: cs.onSurface.withValues(alpha: 0.5),
                             ),
                           ),
                         ],
@@ -197,19 +223,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     // ── Title ─────────────────────────────────────────
                     Text(
                       _isLogin ? 'Welcome back' : 'Create account',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: cs.onSurface,
                         letterSpacing: -0.4,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isLogin ? 'Sign in to continue' : 'Start using Arqivon today',
-                      style: const TextStyle(
+                      _isLogin
+                          ? 'Sign in to continue'
+                          : 'Start using Arqivon today',
+                      style: TextStyle(
                         fontSize: 14,
-                        color: Color(0xFF64748B),
+                        color: cs.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
 
@@ -223,7 +251,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Email is required';
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Email is required';
+                        }
                         if (!v.contains('@')) return 'Enter a valid email';
                         return null;
                       },
@@ -245,13 +275,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
                           size: 20,
-                          color: const Color(0xFF64748B),
+                          color: cs.onSurface.withValues(alpha: 0.5),
                         ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
+                        onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword),
                       ),
                       validator: (v) {
-                        if (v == null || v.isEmpty) return 'Password is required';
+                        if (v == null || v.isEmpty) {
+                          return 'Password is required';
+                        }
                         if (v.length < 6) return 'At least 6 characters';
                         return null;
                       },
@@ -263,14 +295,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         alignment: Alignment.centerRight,
                         child: GestureDetector(
                           onTap: _resetPassword,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Text(
                               'Forgot password?',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF818CF8),
+                                color: cs.primary,
                               ),
                             ),
                           ),
@@ -286,21 +318,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2D1515),
+                          color: cs.error.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF7F1D1D)),
+                          border: Border.all(color: cs.error.withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline,
-                                size: 18, color: Color(0xFFFCA5A5)),
+                            Icon(Icons.error_outline,
+                                size: 18, color: cs.error),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 _errorMessage!,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFFFCA5A5),
+                                    color: cs.error,
                                     fontWeight: FontWeight.w500),
                               ),
                             ),
@@ -317,7 +349,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: FilledButton(
                         onPressed: _loading ? null : _submitEmail,
                         style: FilledButton.styleFrom(
-                          backgroundColor: ArqivonTheme.primary,
+                          backgroundColor: cs.primary,
                           disabledBackgroundColor: const Color(0xFF2D3256),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
@@ -350,8 +382,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           _isLogin
                               ? "Don't have an account?"
                               : 'Already have an account?',
-                          style: const TextStyle(
-                              fontSize: 14, color: Color(0xFF64748B)),
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: cs.onSurface.withValues(alpha: 0.5)),
                         ),
                         const SizedBox(width: 2),
                         GestureDetector(
@@ -364,10 +397,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 horizontal: 4, vertical: 8),
                             child: Text(
                               _isLogin ? 'Sign Up' : 'Sign In',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF818CF8),
+                                color: cs.primary,
                               ),
                             ),
                           ),
@@ -382,20 +415,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       children: [
                         Expanded(
                           child: Divider(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: cs.onSurface.withValues(alpha: 0.1),
                               thickness: 1),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
                             'or',
                             style: TextStyle(
-                                fontSize: 13, color: Color(0xFF475569)),
+                                fontSize: 13,
+                                color: cs.onSurface.withValues(alpha: 0.35)),
                           ),
                         ),
                         Expanded(
                           child: Divider(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: cs.onSurface.withValues(alpha: 0.1),
                               thickness: 1),
                         ),
                       ],
@@ -418,8 +452,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Expanded(
                             child: _SocialBtn(
                               onTap: _loading ? null : _signInWithApple,
-                              icon: const Icon(Icons.apple_rounded,
-                                  size: 22, color: Colors.white),
+                              icon: Icon(Icons.apple_rounded,
+                                  size: 22, color: isDark ? Colors.white : Colors.black),
                               label: 'Apple',
                             ),
                           ),
@@ -439,7 +473,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-// ── Dark input field ──────────────────────────────────────────────────────────
+// ── Theme-aware input field ───────────────────────────────────────────────────
 class _DarkField extends StatelessWidget {
   const _DarkField({
     required this.controller,
@@ -465,6 +499,13 @@ class _DarkField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final fillColor =
+        isDark ? const Color(0xFF1E2640) : cs.surfaceContainerHighest;
+    final borderColor = isDark ? const Color(0xFF2D3A5A) : cs.outline;
+    final hintColor = cs.onSurface.withValues(alpha: 0.5);
+
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -472,26 +513,26 @@ class _DarkField extends StatelessWidget {
       textInputAction: textInputAction,
       onFieldSubmitted: onSubmitted,
       validator: validator,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 16,
-        color: Colors.white,
+        color: cs.onSurface,
         fontWeight: FontWeight.w500,
       ),
-      cursorColor: ArqivonTheme.primary,
+      cursorColor: cs.primary,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
           fontSize: 14,
-          color: Color(0xFF64748B),
+          color: hintColor,
         ),
-        floatingLabelStyle: const TextStyle(
+        floatingLabelStyle: TextStyle(
           fontSize: 13,
-          color: Color(0xFF818CF8),
+          color: cs.primary,
         ),
-        prefixIcon: Icon(icon, size: 20, color: const Color(0xFF64748B)),
+        prefixIcon: Icon(icon, size: 20, color: hintColor),
         suffixIcon: suffix,
         filled: true,
-        fillColor: const Color(0xFF1E2640),
+        fillColor: fillColor,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         border: OutlineInputBorder(
@@ -500,22 +541,21 @@ class _DarkField extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF2D3A5A), width: 1),
+          borderSide: BorderSide(color: borderColor, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: ArqivonTheme.primary, width: 1.5),
+          borderSide: BorderSide(color: cs.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1),
+          borderSide: BorderSide(color: cs.error, width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+          borderSide: BorderSide(color: cs.error, width: 1.5),
         ),
-        errorStyle: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 12),
+        errorStyle: TextStyle(color: cs.error, fontSize: 12),
       ),
     );
   }
@@ -535,14 +575,20 @@ class _SocialBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final bgColor =
+        isDark ? const Color(0xFF1E2640) : cs.surfaceContainerHighest;
+    final borderColor = isDark ? const Color(0xFF2D3A5A) : cs.outline;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 52,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E2640),
+          color: bgColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF2D3A5A), width: 1),
+          border: Border.all(color: borderColor, width: 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -551,10 +597,10 @@ class _SocialBtn extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: cs.onSurface,
               ),
             ),
           ],
@@ -569,28 +615,34 @@ class _GoogleIcon extends StatelessWidget {
   const _GoogleIcon();
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: 22, height: 22, child: CustomPaint(painter: _GooglePainter()));
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final centerColor = isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9);
+    return SizedBox(
+        width: 22, height: 22, child: CustomPaint(painter: _GooglePainter(centerColor: centerColor)));
+  }
 }
 
 class _GooglePainter extends CustomPainter {
+  _GooglePainter({required this.centerColor});
+  final Color centerColor;
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
     final center = Offset(w / 2, h / 2);
     final radius = w / 2;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -0.52,
-        1.82, true, Paint()..color = const Color(0xFF4285F4));
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 1.30,
-        1.18, true, Paint()..color = const Color(0xFF34A853));
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 2.48,
-        1.00, true, Paint()..color = const Color(0xFFFBBC05));
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 3.48,
-        1.34, true, Paint()..color = const Color(0xFFEA4335));
-    canvas.drawCircle(center, radius * 0.60, Paint()..color = const Color(0xFF1E2640));
-    canvas.drawRect(
-        Rect.fromLTWH(w * 0.48, h * 0.38, w * 0.52, h * 0.24),
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), -0.52, 1.82,
+        true, Paint()..color = const Color(0xFF4285F4));
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 1.30, 1.18,
+        true, Paint()..color = const Color(0xFF34A853));
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 2.48, 1.00,
+        true, Paint()..color = const Color(0xFFFBBC05));
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 3.48, 1.34,
+        true, Paint()..color = const Color(0xFFEA4335));
+    canvas.drawCircle(center, radius * 0.60, Paint()..color = centerColor);
+    canvas.drawRect(Rect.fromLTWH(w * 0.48, h * 0.38, w * 0.52, h * 0.24),
         Paint()..color = const Color(0xFF4285F4));
   }
 

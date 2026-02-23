@@ -119,10 +119,7 @@ class ArchiveScreen extends ConsumerWidget {
                         Expanded(
                           child: RefreshIndicator(
                             onRefresh: () async {
-                              ref.read(sessionListProvider.notifier).refresh();
-                              // Wait briefly so the indicator feels natural
-                              await Future.delayed(
-                                  const Duration(milliseconds: 600));
+                              await ref.read(sessionListProvider.notifier).refresh();
                             },
                             child: ListView.builder(
                               padding: const EdgeInsets.only(bottom: 100),

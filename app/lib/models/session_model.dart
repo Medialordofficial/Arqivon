@@ -42,9 +42,9 @@ class SessionModel {
       startedAt: DateTime.fromMillisecondsSinceEpoch(
         ((data['started_at'] as num?) ?? 0).toInt() * 1000,
       ),
-      endedAt: data['ended_at'] != null
+      endedAt: data['ended_at'] is num
           ? DateTime.fromMillisecondsSinceEpoch(
-              ((data['ended_at'] as num)).toInt() * 1000,
+              (data['ended_at'] as num).toInt() * 1000,
             )
           : null,
       turnCount: (data['turn_count'] as num?)?.toInt() ?? 0,

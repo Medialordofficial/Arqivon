@@ -9,9 +9,10 @@ Provides mode-specific tool sets for:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from google.genai import types
@@ -32,7 +33,7 @@ async def analyze_live_frame(
     return json.dumps({
         "status": "analyzed",
         "description": frame_description or "Frame received and analyzed.",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -45,8 +46,9 @@ async def upsert_firestore_memory(
             db.collection("users").document(user_id)
             .collection("memories").document(topic)
         )
-        doc_ref.set(
-            {"details": details, "updated_at": datetime.utcnow().isoformat(), "userId": user_id},
+        await asyncio.to_thread(
+            doc_ref.set,
+            {"details": details, "updated_at": datetime.now(timezone.utc).isoformat(), "userId": user_id},
             merge=True,
         )
         return json.dumps({"status": "saved", "topic": topic})
@@ -83,7 +85,7 @@ async def live_translate(
         "target_language": target_language,
         "translated_text": translated_text,
         "formality": formality,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -95,7 +97,7 @@ async def detect_language(
     return json.dumps({
         "status": "detected",
         "sample": text_sample[:80],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -106,11 +108,12 @@ async def translation_card(
     """Create a saveable translation card shown to the user."""
     logger.info("Tool: translation_card user=%s", user_id)
     if db is not None:
-        db.collection("users").document(user_id).collection("translations").add({
-            "original": original, "translated": translated,
-            "source_lang": source_lang, "target_lang": target_lang,
-            "created_at": datetime.utcnow().isoformat(),
-        })
+        await asyncio.to_thread(
+            db.collection("users").document(user_id).collection("translations").add,
+            {"original": original, "translated": translated,
+             "source_lang": source_lang, "target_lang": target_lang,
+             "created_at": datetime.now(timezone.utc).isoformat()},
+        )
     return json.dumps({"status": "card_created", "original": original, "translated": translated})
 
 
@@ -130,12 +133,13 @@ async def export_document(
         "content": content,
         "format": format,
         "sections": sections or [],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     if db is not None:
-        db.collection("users").document(user_id).collection("exports").add({
-            **doc_data, "userId": user_id,
-        })
+        await asyncio.to_thread(
+            db.collection("users").document(user_id).collection("exports").add,
+            {**doc_data, "userId": user_id},
+        )
     return json.dumps({"status": "export_ready", **doc_data})
 
 
@@ -150,7 +154,7 @@ async def analyze_homework(
     return json.dumps({
         "status": "analyzed", "subject": subject,
         "description": description, "difficulty": difficulty,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -171,12 +175,13 @@ async def solve_problem(
         "solution_steps": solution_steps,
         "final_answer": final_answer,
         "explanation": explanation,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     if db is not None:
-        db.collection("users").document(user_id).collection("solutions").add({
-            **result, "userId": user_id,
-        })
+        await asyncio.to_thread(
+            db.collection("users").document(user_id).collection("solutions").add,
+            {**result, "userId": user_id},
+        )
     return json.dumps(result)
 
 
@@ -196,7 +201,7 @@ async def explain_concept(
         "examples": examples or [],
         "related_topics": related_topics or [],
         "difficulty_level": difficulty_level,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -250,10 +255,11 @@ async def switch_topic(
     """Track topic changes during a customer support conversation."""
     logger.info("Tool: switch_topic topic=%s user=%s", new_topic, user_id)
     if db is not None:
-        db.collection("users").document(user_id).collection("support_topics").add({
-            "topic": new_topic, "reason": reason,
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        await asyncio.to_thread(
+            db.collection("users").document(user_id).collection("support_topics").add,
+            {"topic": new_topic, "reason": reason,
+             "timestamp": datetime.now(timezone.utc).isoformat()},
+        )
     return json.dumps({"status": "topic_switched", "new_topic": new_topic})
 
 
@@ -276,10 +282,11 @@ async def log_resolution(
     """Log how an issue was resolved."""
     logger.info("Tool: log_resolution user=%s", user_id)
     if db is not None:
-        db.collection("users").document(user_id).collection("resolutions").add({
-            "resolution": resolution, "satisfaction": satisfaction,
-            "follow_up": follow_up, "timestamp": datetime.utcnow().isoformat(),
-        })
+        await asyncio.to_thread(
+            db.collection("users").document(user_id).collection("resolutions").add,
+            {"resolution": resolution, "satisfaction": satisfaction,
+             "follow_up": follow_up, "timestamp": datetime.now(timezone.utc).isoformat()},
+        )
     return json.dumps({"status": "logged", "resolution": resolution})
 
 

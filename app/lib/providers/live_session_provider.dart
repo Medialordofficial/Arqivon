@@ -176,24 +176,38 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         current.connectionState == WsConnectionState.connecting) {
       return;
     }
-    final userId = ref.read(userIdProvider);
-    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-    _ws = WebSocketService(userId: userId, authToken: token);
-    _stateSub?.cancel();
-    _msgSub?.cancel();
-    _stateSub = _ws!.stateStream.listen((s) {
-      final cur = state.valueOrNull ?? const LiveSessionState();
-      state = AsyncData(cur.copyWith(connectionState: s));
-    });
-    _msgSub = _ws!.messageStream.listen(_handleServerMessage);
-    await _ws!.connect();
-    // Create player eagerly so AI audio plays even before mic is started.
-    _audio ??= AudioService();
-    // NOTE: do NOT send set_mode here — that forces a Gemini reconnect before
-    // the user has started speaking and causes the second set_mode from
-    // startSession() to race against it, resulting in silence.
-    // Reset mode tracking so first startSession() will send the correct mode.
-    _lastSentMode = null;
+    try {
+      final userId = ref.read(userIdProvider);
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      _ws = WebSocketService(
+        userId: userId,
+        authToken: token,
+        tokenRefresher: () async =>
+            FirebaseAuth.instance.currentUser?.getIdToken(true),
+      );
+      _stateSub?.cancel();
+      _msgSub?.cancel();
+      _stateSub = _ws!.stateStream.listen((s) {
+        final cur = state.valueOrNull ?? const LiveSessionState();
+        state = AsyncData(cur.copyWith(connectionState: s));
+      });
+      _msgSub = _ws!.messageStream.listen(_handleServerMessage);
+      await _ws!.connect();
+      // Create player eagerly so AI audio plays even before mic is started.
+      _audio ??= AudioService();
+      // NOTE: do NOT send set_mode here — that forces a Gemini reconnect before
+      // the user has started speaking and causes the second set_mode from
+      // startSession() to race against it, resulting in silence.
+      // Reset mode tracking so first startSession() will send the correct mode.
+      _lastSentMode = null;
+    } catch (e, st) {
+      _log.severe('connectOnly failed', e, st);
+      state = AsyncData(
+        (state.valueOrNull ?? const LiveSessionState()).copyWith(
+          connectionState: WsConnectionState.disconnected,
+        ),
+      );
+    }
   }
 
   Future<void> startSession() async {

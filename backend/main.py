@@ -21,7 +21,7 @@ import random
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -252,8 +252,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://arqivon-backend-653546103163.us-central1.run.app",
-        "http://localhost",
-        "http://localhost:8080",
+        "https://arqivon.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -270,7 +269,7 @@ async def health():
         "model": settings.gemini_model,
         "firebase": db is not None,
         "modes": [m.value for m in AgentMode],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -480,11 +479,32 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     async def receive_from_client() -> None:
         nonlocal current_mode, source_lang, target_lang, client_audio_count
         msg_count = 0
+        # Rate limiting: max messages per window (audio excluded — it's streaming)
+        RATE_LIMIT = 60  # non-audio messages per window
+        RATE_WINDOW = 10.0  # seconds
+        rate_timestamps: list[float] = []
         try:
             while not cancel_event.is_set():
                 raw = await websocket.receive_text()
                 msg = InboundMessage.model_validate_json(raw)
                 msg_count += 1
+
+                # Rate-limit non-audio messages
+                if msg.type != InboundType.AUDIO:
+                    now = asyncio.get_event_loop().time()
+                    rate_timestamps.append(now)
+                    # Prune old timestamps
+                    cutoff = now - RATE_WINDOW
+                    rate_timestamps[:] = [t for t in rate_timestamps if t > cutoff]
+                    if len(rate_timestamps) > RATE_LIMIT:
+                        logger.warning("Rate limit exceeded for user=%s (%d msgs in %.0fs)",
+                                       user_id, len(rate_timestamps), RATE_WINDOW)
+                        await _send_json(websocket, OutboundMessage(
+                            type=OutboundType.ERROR,
+                            text="Too many messages. Please slow down.",
+                        ))
+                        continue
+
                 # Log every message type so we can diagnose silent drops
                 if msg.type != InboundType.PING and msg.type != InboundType.AUDIO:
                     logger.info("WS msg #%d type=%s", msg_count, msg.type)
@@ -560,7 +580,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         ),
                         turn_complete=True,
                     )
-                    session_record.turn_count += 1
                 elif msg.type == InboundType.END_TURN:
                     await session.send_client_content(turns=None, turn_complete=True)
 
@@ -611,7 +630,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             # output_transcription is intentionally ignored — see
                             # config comment above.
                             if sc.turn_complete:
-                                logger.info(">>> turn_complete from Gemini — sending to client (audio_chunks_from_client=%d)", client_audio_count)
+                                session_record.turn_count += 1
+                                logger.info(">>> turn_complete from Gemini — sending to client (audio_chunks_from_client=%d, turns=%d)", client_audio_count, session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:
                                 logger.info(">>> interrupted from Gemini — sending to client")
@@ -788,7 +808,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             return_exceptions=True,
         )
     finally:
-        session_record.ended_at = datetime.utcnow().timestamp()
+        session_record.ended_at = datetime.now(timezone.utc).timestamp()
         # Auto-title based on mode
         mode_titles = {
             AgentMode.TRANSLATOR: "Translation Session",

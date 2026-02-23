@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../models/session_model.dart';
-import '../config/theme.dart';
 
 /// Full session detail / replay screen accessible from the Archive.
 class SessionDetailScreen extends StatelessWidget {
@@ -28,10 +27,9 @@ class SessionDetailScreen extends StatelessWidget {
     final endTimeStr = session.endedAt != null
         ? DateFormat('h:mm a').format(session.endedAt!)
         : 'Ongoing';
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: isDark ? ArqivonTheme.darkBg : ArqivonTheme.background,
       appBar: AppBar(
         title: const Text('Session Details'),
         leading: IconButton(
@@ -157,24 +155,21 @@ class SessionDetailScreen extends StatelessWidget {
                   icon: Icons.mic_rounded,
                   value: '${session.turnCount}',
                   label: 'Turns',
-                  color: ArqivonTheme.primary,
-                  isDark: isDark,
+                  color: cs.primary,
                 ),
                 const SizedBox(width: 12),
                 _MetricCard(
                   icon: Icons.timer_outlined,
                   value: _formatDuration(session.duration),
                   label: 'Duration',
-                  color: ArqivonTheme.accent,
-                  isDark: isDark,
+                  color: cs.secondary,
                 ),
                 const SizedBox(width: 12),
                 _MetricCard(
                   icon: Icons.tag_rounded,
                   value: '${session.topics.length}',
                   label: 'Topics',
-                  color: ArqivonTheme.successGreen,
-                  isDark: isDark,
+                  color: cs.tertiary,
                 ),
               ],
             ),
@@ -183,28 +178,22 @@ class SessionDetailScreen extends StatelessWidget {
 
             // ── Summary ───────────────────────────────────────────
             if (session.summary.isNotEmpty) ...[
-              _SectionHeader(title: 'Summary', isDark: isDark),
+              const _SectionHeader(title: 'Summary'),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isDark ? ArqivonTheme.darkCard : Colors.white,
+                  color: cs.surface,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF2A2A3E)
-                        : ArqivonTheme.borderColor,
-                  ),
+                  border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   session.summary,
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.6,
-                    color: isDark
-                        ? ArqivonTheme.darkText
-                        : ArqivonTheme.textPrimary,
+                    color: cs.onSurface,
                   ),
                 ),
               ),
@@ -213,7 +202,7 @@ class SessionDetailScreen extends StatelessWidget {
 
             // ── Topics ─────────────────────────────────────────────
             if (session.topics.isNotEmpty) ...[
-              _SectionHeader(title: 'Topics Covered', isDark: isDark),
+              const _SectionHeader(title: 'Topics Covered'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -247,7 +236,7 @@ class SessionDetailScreen extends StatelessWidget {
 
             // ── Tags ───────────────────────────────────────────────
             if (session.tags.isNotEmpty) ...[
-              _SectionHeader(title: 'Tags', isDark: isDark),
+              const _SectionHeader(title: 'Tags'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -259,9 +248,7 @@ class SessionDetailScreen extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? ArqivonTheme.darkSurface
-                          : const Color(0xFFF1F5F9),
+                      color: cs.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -269,17 +256,13 @@ class SessionDetailScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.label_outline_rounded,
                             size: 14,
-                            color: isDark
-                                ? ArqivonTheme.darkSubtext
-                                : ArqivonTheme.textSecondary),
+                            color: cs.onSurface.withValues(alpha: 0.5)),
                         const SizedBox(width: 4),
                         Text(
                           tag,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark
-                                ? ArqivonTheme.darkSubtext
-                                : ArqivonTheme.textSecondary,
+                            color: cs.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -291,19 +274,15 @@ class SessionDetailScreen extends StatelessWidget {
             ],
 
             // ── Session info card ──────────────────────────────────
-            _SectionHeader(title: 'Session Info', isDark: isDark),
+            const _SectionHeader(title: 'Session Info'),
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isDark ? ArqivonTheme.darkCard : Colors.white,
+                color: cs.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isDark
-                      ? const Color(0xFF2A2A3E)
-                      : ArqivonTheme.borderColor,
-                ),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
@@ -312,26 +291,22 @@ class SessionDetailScreen extends StatelessWidget {
                     value: session.id.length > 12
                         ? '${session.id.substring(0, 12)}…'
                         : session.id,
-                    isDark: isDark,
                   ),
                   const Divider(height: 24),
                   _InfoRow(
                     label: 'Mode',
                     value: session.mode.label,
-                    isDark: isDark,
                   ),
                   const Divider(height: 24),
                   _InfoRow(
                     label: 'Started',
                     value: DateFormat('h:mm:ss a').format(session.startedAt),
-                    isDark: isDark,
                   ),
                   if (session.endedAt != null) ...[
                     const Divider(height: 24),
                     _InfoRow(
                       label: 'Ended',
                       value: DateFormat('h:mm:ss a').format(session.endedAt!),
-                      isDark: isDark,
                     ),
                   ],
                 ],
@@ -382,25 +357,22 @@ class _MetricCard extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
-    required this.isDark,
   });
   final IconData icon;
   final String value;
   final String label;
   final Color color;
-  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: isDark ? ArqivonTheme.darkCard : Colors.white,
+          color: cs.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? const Color(0xFF2A2A3E) : ArqivonTheme.borderColor,
-          ),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -411,8 +383,7 @@ class _MetricCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color:
-                    isDark ? ArqivonTheme.darkText : ArqivonTheme.textPrimary,
+                color: cs.onSurface,
               ),
             ),
             const SizedBox(height: 2),
@@ -420,9 +391,7 @@ class _MetricCard extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: isDark
-                    ? ArqivonTheme.darkSubtext
-                    : ArqivonTheme.textSecondary,
+                color: cs.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -433,9 +402,8 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.isDark});
+  const _SectionHeader({required this.title});
   final String title;
-  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
@@ -445,7 +413,7 @@ class _SectionHeader extends StatelessWidget {
         fontSize: 12,
         fontWeight: FontWeight.w800,
         letterSpacing: 1.5,
-        color: isDark ? ArqivonTheme.darkSubtext : ArqivonTheme.textSecondary,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
       ),
     );
   }
@@ -455,14 +423,13 @@ class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.label,
     required this.value,
-    required this.isDark,
   });
   final String label;
   final String value;
-  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -470,8 +437,7 @@ class _InfoRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 13,
-            color:
-                isDark ? ArqivonTheme.darkSubtext : ArqivonTheme.textSecondary,
+            color: cs.onSurface.withValues(alpha: 0.5),
           ),
         ),
         Text(
@@ -479,7 +445,7 @@ class _InfoRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: isDark ? ArqivonTheme.darkText : ArqivonTheme.textPrimary,
+            color: cs.onSurface,
           ),
         ),
       ],

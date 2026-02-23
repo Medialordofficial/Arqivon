@@ -13,7 +13,11 @@ enum WsConnectionState { disconnected, connecting, connected, reconnecting }
 
 /// Production-grade WebSocket service with heartbeat & exponential backoff.
 class WebSocketService {
-  WebSocketService({required this.userId, this.authToken});
+  WebSocketService({
+    required this.userId,
+    this.authToken,
+    this.tokenRefresher,
+  });
 
   static final _log = AppLogger('WS');
 
@@ -21,6 +25,9 @@ class WebSocketService {
 
   /// Firebase ID token for backend authentication.
   String? authToken;
+
+  /// Async callback to refresh the Firebase ID token before reconnection.
+  final Future<String?> Function()? tokenRefresher;
 
   WebSocketChannel? _channel;
   Timer? _heartbeatTimer;
@@ -49,6 +56,13 @@ class WebSocketService {
     _setState(WsConnectionState.connecting);
 
     try {
+      // Refresh the auth token before every connection attempt so reconnects
+      // after >1 hour don't fail with a stale/expired token.
+      if (tokenRefresher != null) {
+        final freshToken = await tokenRefresher!();
+        if (freshToken != null) authToken = freshToken;
+      }
+
       final uri = Uri.parse(AppConstants.wsUrl(userId, token: authToken));
       _channel = WebSocketChannel.connect(uri);
       await _channel!.ready;

@@ -333,7 +333,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'The Living Lens · v2.0.0',
+                            'The Living Lens · v1.0.0',
                             style: TextStyle(
                               fontSize: 13,
                               color: Theme.of(context)

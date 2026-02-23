@@ -75,7 +75,8 @@ class ExportService {
     );
 
     final dir = await getTemporaryDirectory();
-    final sanitized = doc.title.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+    var sanitized = doc.title.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+    if (sanitized.isEmpty) sanitized = 'arqivon_export';
     final file = File('${dir.path}/$sanitized.pdf');
     await file.writeAsBytes(await pdf.save());
     return file;

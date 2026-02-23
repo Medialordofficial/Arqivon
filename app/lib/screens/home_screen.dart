@@ -120,12 +120,12 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(height: 32),
 
                 // ── Section heading ──────────────────────────────────
-                const Text(
+                Text(
                   'Choose your mode',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF60A5FA),
+                    color: cs.primary,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -426,15 +426,16 @@ class _HowItWorksSectionState extends State<_HowItWorksSection> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'How it works',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF60A5FA),
+            color: cs.primary,
             letterSpacing: -0.3,
           ),
         ),

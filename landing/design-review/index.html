@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arqivon — Design Direction Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050506;--surface:#0E0E11;--surface2:#161619;--border:#222228;
+  --text:#F0F0F5;--text2:#6E6E7A;--accent:#C4956A;--accent2:#8B5E3C;
+}
+html{scroll-behavior:smooth;scroll-padding-top:60px}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+/* ─── UTILITIES ─── */
+.container{max-width:1320px;margin:0 auto;padding:0 40px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+/* ─── COVER ─── */
+.cover{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;position:relative;padding:100px 40px 80px}
+.cover::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:900px;background:radial-gradient(circle,rgba(196,149,106,.07) 0%,transparent 65%);pointer-events:none}
+.cover-badge{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(196,149,106,.15);padding:8px 24px;border-radius:99px;margin-bottom:40px}
+.cover-badge::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%}
+.cover h1{font-family:'Playfair Display',serif;font-size:clamp(3rem,7vw,5.5rem);font-weight:900;line-height:1;letter-spacing:-.03em;margin-bottom:28px}
+.cover h1 em{font-style:italic;color:var(--accent)}
+.cover p{font-size:1.15rem;color:var(--text2);max-width:600px;line-height:1.7;margin-bottom:56px}
+.scroll-cue{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text2);font-size:11px;letter-spacing:.15em;text-transform:uppercase;cursor:pointer}
+.scroll-cue .arrow{width:20px;height:20px;border-right:1.5px solid var(--text2);border-bottom:1.5px solid var(--text2);transform:rotate(45deg);animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(45deg)}50%{transform:translateY(5px) rotate(45deg)}}
+
+/* ─── AUDIT ─── */
+.audit{padding:120px 0;border-top:1px solid var(--border)}
+.section-eyebrow{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
+.section-eyebrow--red{color:#FF453A}
+.section-title{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,3.5vw,2.8rem);font-weight:900;margin-bottom:16px}
+.section-desc{color:var(--text2);max-width:600px;font-size:.95rem;line-height:1.7}
+.audit-header{text-align:center;margin-bottom:64px;display:flex;flex-direction:column;align-items:center}
+.audit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.audit-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;border-left:3px solid #FF453A;transition:transform .2s}
+.audit-card:hover{transform:translateY(-2px)}
+.audit-card h3{font-size:.9rem;font-weight:700;margin-bottom:8px}
+.audit-card p{font-size:.82rem;color:var(--text2);line-height:1.6}
+
+/* ─── STICKY NAV ─── */
+.topnav{position:sticky;top:0;z-index:100;background:rgba(5,5,6,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--border);padding:0}
+.topnav-inner{display:flex;align-items:center;height:52px;gap:6px;overflow-x:auto;scrollbar-width:none}
+.topnav-inner::-webkit-scrollbar{display:none}
+.topnav-logo{font-family:'Playfair Display',serif;font-weight:900;font-size:1rem;color:var(--accent);margin-right:20px;white-space:nowrap}
+.pill{padding:7px 16px;border-radius:99px;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;transition:all .2s;border:1px solid transparent;text-decoration:none}
+.pill:hover{color:var(--text);background:var(--surface2)}
+.pill.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+
+/* ─── CONCEPT SECTION ─── */
+.concept{padding:140px 0 120px;border-top:1px solid var(--border)}
+.concept-header{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start;margin-bottom:80px}
+.concept-num{font-family:'Space Grotesk',monospace;font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.1em;margin-bottom:10px}
+.concept-name{font-family:'Playfair Display',serif;font-size:clamp(2rem,4vw,3.2rem);font-weight:900;line-height:1.05;margin-bottom:8px}
+.concept-tag{font-family:'Playfair Display',serif;font-style:italic;font-size:1.05rem;color:var(--accent);margin-bottom:20px}
+.concept-desc{font-size:.95rem;color:var(--text2);line-height:1.75;margin-bottom:28px}
+.inspo-row{display:flex;flex-wrap:wrap;gap:8px}
+.inspo{font-size:11px;font-weight:600;letter-spacing:.03em;padding:5px 14px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text2)}
+.principles{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px}
+.principles h4{font-size:11px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+.principles li{font-size:.88rem;color:var(--text2);padding:10px 0;border-bottom:1px solid var(--border);line-height:1.5;list-style:none;padding-left:16px;position:relative}
+.principles li::before{content:'';position:absolute;left:0;top:16px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.principles li:last-child{border:none}
+
+/* ─── PHONE GRID ─── */
+.phone-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px}
+.phone-col{display:flex;flex-direction:column;align-items:center}
+.phone-label{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--text2);margin-bottom:20px}
+
+/* ─── PHONE FRAME ─── */
+.phone{width:100%;max-width:280px;aspect-ratio:390/844;border-radius:36px;position:relative;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06);background:#000}
+.phone-bezel{position:absolute;inset:0;border-radius:36px;border:6px solid #1A1A1E;z-index:5;pointer-events:none}
+.phone-island{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:90px;height:24px;background:#000;border-radius:16px;z-index:10}
+.phone-screen{position:absolute;inset:6px;border-radius:30px;overflow:hidden;display:flex;flex-direction:column}
+
+/* Helper for statusbar */
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:14px 24px 0;font-size:11px;font-weight:600;z-index:6;position:relative}
+.statusbar-time{font-weight:700}
+.statusbar-icons{display:flex;gap:4px;align-items:center}
+.statusbar-icons svg{width:14px;height:14px}
+
+/* ─── BOTTOM NAV ─── */
+.bottomnav{display:flex;justify-content:space-around;align-items:center;padding:8px 0 20px;margin-top:auto}
+.bottomnav-item{display:flex;flex-direction:column;align-items:center;gap:3px}
+.bottomnav-item svg{width:20px;height:20px}
+.bottomnav-item span{font-size:9px;font-weight:600}
+
+/* ================================================================
+   CONCEPT 1 — OBSIDIAN LUX (Dark Premium)
+   ================================================================ */
+.c1 .phone-screen{background:#08080D}
+.c1 .phone-bezel{border-color:#18181F}
+
+/* C1 Home */
+.c1-home{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c1-home .greeting{font-size:13px;color:rgba(255,255,255,.35);font-weight:400}
+.c1-home .name{font-size:24px;font-weight:800;color:#F5F5F7;margin-bottom:28px;letter-spacing:-.02em}
+.c1-home .hero-orb-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:28px}
+.c1-home .hero-orb{width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#A78BFA,#7C3AED 45%,#4C1D95 90%);box-shadow:0 0 60px rgba(124,58,237,.4),0 0 120px rgba(124,58,237,.15);position:relative}
+.c1-home .hero-orb::after{content:'';position:absolute;inset:-6px;border-radius:50%;border:1.5px solid rgba(167,139,250,.15);animation:c1pulse 2.5s ease-in-out infinite}
+@keyframes c1pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.12);opacity:.3}}
+.c1-home .hero-orb svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;color:rgba(255,255,255,.9)}
+.c1-home .orb-label{font-size:12px;color:rgba(255,255,255,.3);margin-top:14px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.c1-home .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1}
+.c1-card{border-radius:16px;padding:16px 14px;display:flex;flex-direction:column;gap:8px;border:1px solid rgba(255,255,255,.04);position:relative;overflow:hidden}
+.c1-card::before{content:'';position:absolute;inset:0;opacity:.08;border-radius:16px}
+.c1-card--purple{background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.12)}.c1-card--purple::before{background:linear-gradient(135deg,#7C3AED,#A78BFA)}
+.c1-card--amber{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.12)}.c1-card--amber::before{background:linear-gradient(135deg,#F59E0B,#FBBF24)}
+.c1-card--green{background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.12)}.c1-card--green::before{background:linear-gradient(135deg,#10B981,#34D399)}
+.c1-card--blue{background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.12)}.c1-card--blue::before{background:linear-gradient(135deg,#3B82F6,#60A5FA)}
+.c1-card svg{width:24px;height:24px;position:relative}
+.c1-card .card-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.85);position:relative}
+.c1-card .card-desc{font-size:10px;color:rgba(255,255,255,.3);line-height:1.4;position:relative}
+.c1 .statusbar{color:rgba(255,255,255,.4)}
+.c1 .bottomnav{border-top:1px solid rgba(255,255,255,.06);background:rgba(8,8,13,.9)}
+.c1 .bottomnav-item{color:rgba(255,255,255,.3)}
+.c1 .bottomnav-item.active{color:#A78BFA}
+
+/* C1 Live */
+.c1-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:linear-gradient(180deg,#08080D 0%,#0D0B16 100%)}
+.c1-live .live-badge{position:absolute;top:56px;right:20px;background:rgba(255,69,58,.85);padding:4px 12px;border-radius:10px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;gap:4px}
+.c1-live .live-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#fff;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.c1-live .mode-strip{position:absolute;top:56px;left:20px;display:flex;gap:6px}
+.c1-live .mode-chip{font-size:10px;font-weight:600;padding:4px 10px;border-radius:8px;background:rgba(255,255,255,.05);color:rgba(255,255,255,.35)}
+.c1-live .mode-chip.active{background:rgba(124,58,237,.15);color:#A78BFA}
+.c1-live .big-orb{width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#C4B5FD,#818CF8 35%,#5B5FEF 60%,#3730A3);box-shadow:0 0 80px rgba(129,140,248,.35),0 0 160px rgba(91,95,239,.12);animation:breathe 3s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(1);box-shadow:0 0 80px rgba(129,140,248,.35)}50%{transform:scale(1.06);box-shadow:0 0 100px rgba(129,140,248,.5)}}
+.c1-live .big-orb svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;color:rgba(255,255,255,.7)}
+.c1-live .transcript{font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-top:24px;font-style:italic;max-width:200px}
+.c1-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center;gap:20px}
+.c1-live .mic-btn{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#5B5FEF);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 30px rgba(124,58,237,.45)}
+.c1-live .mic-btn svg{width:24px;height:24px;color:#fff}
+.c1-live .side-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center}
+.c1-live .side-btn svg{width:16px;height:16px;color:rgba(255,255,255,.35)}
+
+/* C1 Archive */
+.c1-archive{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c1-archive .page-title{font-size:22px;font-weight:800;color:#F5F5F7;margin-bottom:4px;letter-spacing:-.01em}
+.c1-archive .page-sub{font-size:12px;color:rgba(255,255,255,.3);margin-bottom:16px}
+.c1-archive .filters{display:flex;gap:6px;margin-bottom:16px;overflow-x:auto}
+.c1-archive .fchip{font-size:10px;font-weight:600;padding:5px 12px;border-radius:8px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.3);white-space:nowrap}
+.c1-archive .fchip.active{background:rgba(124,58,237,.12);color:#A78BFA}
+.c1-archive .session{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.c1-archive .session-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.c1-archive .session-icon svg{width:18px;height:18px}
+.c1-archive .session-title{font-size:13px;font-weight:700;color:rgba(255,255,255,.85)}
+.c1-archive .session-meta{font-size:10px;color:rgba(255,255,255,.25);margin-top:2px}
+
+/* C1 Settings */
+.c1-settings{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c1-settings .page-title{font-size:22px;font-weight:800;color:#F5F5F7;margin-bottom:20px}
+.c1-settings .profile-card{display:flex;align-items:center;gap:14px;padding:16px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:16px;margin-bottom:16px}
+.c1-settings .avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#5B5FEF);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0}
+.c1-settings .user-name{font-size:14px;font-weight:700;color:rgba(255,255,255,.85)}
+.c1-settings .user-email{font-size:11px;color:rgba(255,255,255,.25)}
+.c1-settings .sec-label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.2);margin:14px 0 8px}
+.c1-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:10px;margin-bottom:5px}
+.c1-settings .srow-label{font-size:12px;color:rgba(255,255,255,.55)}
+.c1-settings .srow-value{font-size:11px;color:rgba(255,255,255,.2)}
+.c1-settings .toggle{width:34px;height:20px;border-radius:10px;background:#7C3AED;position:relative}
+.c1-settings .toggle::after{content:'';position:absolute;right:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+
+/* ================================================================
+   CONCEPT 2 — WARM EARTH (Organic/Human)
+   ================================================================ */
+.c2 .phone-screen{background:#FDF8F2}
+.c2 .phone-bezel{border-color:#D4C4B0}
+.c2 .phone-island{background:#2C1810}
+.c2 .statusbar{color:#8B7355}
+
+.c2-home{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c2-home .greeting{font-size:13px;color:#A0917E}
+.c2-home .name{font-family:'Playfair Display',serif;font-size:24px;font-weight:800;color:#2C1810;margin-bottom:24px}
+.c2-home .hero{background:linear-gradient(135deg,#8B5E3C,#6B4226);border-radius:20px;padding:24px 20px;margin-bottom:24px;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(107,66,38,.2)}
+.c2-home .hero-orb{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.c2-home .hero-orb svg{width:28px;height:28px;color:rgba(255,255,255,.9)}
+.c2-home .hero-text h3{font-size:16px;font-weight:800;color:#fff;margin-bottom:4px}
+.c2-home .hero-text p{font-size:11px;color:rgba(255,255,255,.6)}
+.c2-home .sec-label{font-size:11px;font-weight:700;color:#8B5E3C;letter-spacing:.05em;margin-bottom:12px}
+.c2-home .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.c2-mcard{background:#FFF8F0;border:1.5px solid #EDE5DB;border-radius:16px;padding:16px 14px;text-align:center}
+.c2-mcard svg{width:28px;height:28px;margin:0 auto 8px;display:block}
+.c2-mcard .card-title{font-size:12px;font-weight:700;color:#2C1810;margin-bottom:2px}
+.c2-mcard .card-desc{font-size:10px;color:#A0917E;line-height:1.3}
+.c2 .bottomnav{border-top:1.5px solid #EDE5DB;background:#FDF8F2}
+.c2 .bottomnav-item{color:#BEB0A0}
+.c2 .bottomnav-item.active{color:#8B5E3C}
+
+.c2-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:#FDF8F2}
+.c2-live .live-badge{position:absolute;top:56px;right:20px;background:#8B5E3C;padding:4px 12px;border-radius:10px;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;gap:4px}
+.c2-live .live-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#fff;animation:blink 1s infinite}
+.c2-live .big-orb{width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#D4A574,#8B5E3C 50%,#4A2F1C);box-shadow:0 0 60px rgba(139,94,60,.25),0 0 120px rgba(139,94,60,.08)}
+.c2-live .big-orb svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;color:rgba(255,255,255,.8)}
+.c2-live .transcript{font-size:14px;color:#2C1810;font-weight:600;text-align:center;margin-top:24px}
+.c2-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center;gap:20px}
+.c2-live .mic-btn{width:56px;height:56px;border-radius:50%;background:#8B5E3C;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 30px rgba(139,94,60,.35)}
+.c2-live .mic-btn svg{width:24px;height:24px;color:#fff}
+
+.c2-archive{flex:1;display:flex;flex-direction:column;padding:52px 20px 0;background:#FDF8F2}
+.c2-archive .page-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:#2C1810;margin-bottom:16px}
+.c2-archive .session{background:#FFF8F0;border:1.5px solid #EDE5DB;border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.c2-archive .session-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.c2-archive .session-icon svg{width:18px;height:18px}
+.c2-archive .session-title{font-size:13px;font-weight:700;color:#2C1810}
+.c2-archive .session-meta{font-size:10px;color:#A0917E;margin-top:2px}
+
+.c2-settings{flex:1;display:flex;flex-direction:column;padding:52px 20px 0;background:#FDF8F2}
+.c2-settings .page-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:800;color:#2C1810;margin-bottom:20px}
+.c2-settings .card{background:#FFF8F0;border:1.5px solid #EDE5DB;border-radius:14px;padding:4px 14px;margin-bottom:10px}
+.c2-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #EDE5DB}
+.c2-settings .srow:last-child{border:none}
+.c2-settings .srow-label{font-size:12px;color:#2C1810}
+.c2-settings .srow-value{font-size:11px;color:#A0917E}
+.c2-settings .toggle{width:34px;height:20px;border-radius:10px;background:#CCC;position:relative}
+.c2-settings .toggle::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+
+/* ================================================================
+   CONCEPT 3 — GLASS ATELIER (Spatial Computing)
+   ================================================================ */
+.c3 .phone-screen{background:linear-gradient(180deg,#EAEDFF 0%,#DFE3FF 50%,#E8EBFF 100%)}
+.c3 .phone-bezel{border-color:#C8CEEB}
+.c3 .phone-island{background:#1E1E30}
+.c3 .statusbar{color:#6E72A0}
+
+.c3-home{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c3-home .greeting{font-size:13px;color:#8185B0}
+.c3-home .name{font-size:24px;font-weight:800;color:#1A1B3A;margin-bottom:24px}
+.c3-home .hero{background:rgba(255,255,255,.55);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.75);border-radius:24px;padding:24px;text-align:center;margin-bottom:20px;box-shadow:0 4px 24px rgba(0,0,30,.04)}
+.c3-home .hero-orb{width:60px;height:60px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#818CF8,#667EEA,#6D28D9);box-shadow:0 8px 36px rgba(102,126,234,.3);display:flex;align-items:center;justify-content:center}
+.c3-home .hero-orb svg{width:28px;height:28px;color:rgba(255,255,255,.9)}
+.c3-home .hero h3{font-size:16px;font-weight:800;color:#1A1B3A;margin-bottom:4px}
+.c3-home .hero p{font-size:11px;color:#8185B0}
+.c3-home .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.c3-mcard{background:rgba(255,255,255,.45);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.65);border-radius:18px;padding:16px;text-align:center;box-shadow:0 2px 12px rgba(0,0,30,.03)}
+.c3-mcard svg{width:26px;height:26px;margin:0 auto 6px;display:block}
+.c3-mcard .card-title{font-size:12px;font-weight:700;color:#1A1B3A}
+.c3-mcard .card-desc{font-size:9px;color:#8185B0;margin-top:2px}
+.c3 .bottomnav{border-top:1px solid rgba(255,255,255,.6);background:rgba(234,237,255,.85);backdrop-filter:blur(12px)}
+.c3 .bottomnav-item{color:#A0A4C8}
+.c3 .bottomnav-item.active{color:#667EEA}
+
+.c3-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:linear-gradient(180deg,#EAEDFF,#DFE3FF)}
+.c3-live .big-orb{width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#C4B5FD,#818CF8 35%,#667EEA 60%,#4F46E5);box-shadow:0 0 60px rgba(102,126,234,.3),0 0 120px rgba(102,126,234,.1);animation:breathe 3s ease-in-out infinite}
+.c3-live .big-orb svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;color:rgba(255,255,255,.85)}
+.c3-live .transcript{font-size:14px;color:#4A4D7A;text-align:center;margin-top:24px;font-weight:500}
+.c3-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center;gap:16px}
+.c3-live .side-btn{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center}
+.c3-live .side-btn svg{width:18px;height:18px;color:#667EEA}
+.c3-live .mic-btn{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#667EEA,#6D28D9);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 30px rgba(102,126,234,.4)}
+.c3-live .mic-btn svg{width:24px;height:24px;color:#fff}
+
+.c3-archive{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c3-archive .page-title{font-size:22px;font-weight:800;color:#1A1B3A;margin-bottom:16px}
+.c3-archive .session{background:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.65);border-radius:16px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,30,.03)}
+.c3-archive .session-icon{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.c3-archive .session-icon svg{width:18px;height:18px}
+.c3-archive .session-title{font-size:13px;font-weight:700;color:#1A1B3A}
+.c3-archive .session-meta{font-size:10px;color:#8185B0;margin-top:2px}
+
+.c3-settings{flex:1;display:flex;flex-direction:column;padding:52px 20px 0}
+.c3-settings .page-title{font-size:22px;font-weight:800;color:#1A1B3A;margin-bottom:20px}
+.c3-settings .card{background:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.65);border-radius:16px;padding:4px 14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,30,.03)}
+.c3-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(200,206,235,.5)}
+.c3-settings .srow:last-child{border:none}
+.c3-settings .srow-label{font-size:12px;color:#1A1B3A}
+.c3-settings .srow-value{font-size:11px;color:#8185B0}
+
+/* ================================================================
+   CONCEPT 4 — EDITORIAL NOIR (Magazine/Swiss)
+   ================================================================ */
+.c4 .phone-screen{background:#FAFAF8}
+.c4 .phone-bezel{border-color:#D5D5D0}
+.c4 .phone-island{background:#111}
+.c4 .statusbar{color:#999}
+
+.c4-home{flex:1;display:flex;flex-direction:column;padding:52px 22px 0}
+.c4-home .rule{width:40px;height:3px;background:#111;margin-bottom:20px}
+.c4-home .title{font-family:'Playfair Display',serif;font-size:28px;font-weight:900;color:#111;line-height:1.05;letter-spacing:-.03em;margin-bottom:6px}
+.c4-home .subtitle{font-family:'Playfair Display',serif;font-size:12px;color:#999;font-style:italic;margin-bottom:28px}
+.c4-home .cta{display:flex;align-items:center;gap:12px;padding:16px 18px;background:#111;border-radius:14px;margin-bottom:32px}
+.c4-home .cta svg{width:20px;height:20px;color:#fff;flex-shrink:0}
+.c4-home .cta-text{font-size:14px;font-weight:700;color:#fff;flex:1}
+.c4-home .cta-arrow{font-size:16px;color:rgba(255,255,255,.35)}
+.c4-home .sec-label{font-size:10px;font-weight:700;letter-spacing:.2em;color:#999;text-transform:uppercase;margin-bottom:12px}
+.c4-home .mode-list{display:flex;flex-direction:column}
+.c4-mrow{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #E5E5E3}
+.c4-mrow .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.c4-mrow .mlabel{font-size:14px;font-weight:600;color:#111;flex:1}
+.c4-mrow .marrow{font-size:12px;color:#CCC}
+.c4 .bottomnav{border-top:1px solid #E5E5E3;background:#FAFAF8}
+.c4 .bottomnav-item{color:#BBB}
+.c4 .bottomnav-item.active{color:#111}
+
+.c4-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:#FAFAF8}
+.c4-live .live-badge{position:absolute;top:56px;right:20px;font-size:10px;font-weight:800;color:#111;letter-spacing:.15em;text-transform:uppercase;display:flex;align-items:center;gap:5px}
+.c4-live .live-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:#111;animation:blink 1s infinite}
+.c4-live .big-orb{width:120px;height:120px;border-radius:50%;border:2px solid #111;display:flex;align-items:center;justify-content:center}
+.c4-live .big-orb svg{width:36px;height:36px;color:#111}
+.c4-live .transcript{margin-top:20px;text-align:center}
+.c4-live .transcript h3{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#111;margin-bottom:4px}
+.c4-live .transcript p{font-size:12px;color:#999}
+.c4-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center}
+.c4-live .mic-btn{width:52px;height:52px;border-radius:50%;background:#111;display:flex;align-items:center;justify-content:center}
+.c4-live .mic-btn svg{width:22px;height:22px;color:#fff}
+
+.c4-archive{flex:1;display:flex;flex-direction:column;padding:52px 22px 0;background:#FAFAF8}
+.c4-archive .page-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:#111;margin-bottom:4px;letter-spacing:-.02em}
+.c4-archive .page-sub{font-family:'Playfair Display',serif;font-size:12px;color:#999;font-style:italic;margin-bottom:20px}
+.c4-archive .session{padding:14px 0;border-bottom:1px solid #E5E5E3;display:flex;align-items:flex-start;gap:10px}
+.c4-archive .dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.c4-archive .session-title{font-size:14px;font-weight:600;color:#111}
+.c4-archive .session-meta{font-size:10px;color:#999;margin-top:3px}
+
+.c4-settings{flex:1;display:flex;flex-direction:column;padding:52px 22px 0;background:#FAFAF8}
+.c4-settings .page-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:#111;margin-bottom:24px}
+.c4-settings .sec-label{font-size:10px;font-weight:700;letter-spacing:.2em;color:#999;text-transform:uppercase;margin:16px 0 8px}
+.c4-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #E5E5E3}
+.c4-settings .srow-label{font-size:13px;color:#111}
+.c4-settings .srow-value{font-size:12px;color:#999}
+
+/* ================================================================
+   CONCEPT 5 — AURORA VIVID (Vibrant/Playful)
+   ================================================================ */
+.c5 .phone-screen{background:#0C0C14}
+.c5 .phone-bezel{border-color:#1A1A28}
+.c5 .statusbar{color:rgba(255,255,255,.35)}
+
+.c5-home{flex:1;display:flex;flex-direction:column;padding:52px 20px 0;background:linear-gradient(180deg,#0C0C14 0%,#10101C 100%)}
+.c5-home .greeting{font-size:13px;color:rgba(255,255,255,.35)}
+.c5-home .name{font-size:24px;font-weight:800;color:#fff;margin-bottom:20px}
+.c5-home .hero{background:linear-gradient(135deg,#6366F1,#EC4899,#F59E0B);border-radius:22px;padding:22px 20px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 8px 40px rgba(99,102,241,.2)}
+.c5-home .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 70% 20%,rgba(255,255,255,.12),transparent);pointer-events:none}
+.c5-home .hero h3{font-size:18px;font-weight:900;color:#fff;margin-bottom:4px;position:relative}
+.c5-home .hero p{font-size:11px;color:rgba(255,255,255,.65);position:relative}
+.c5-home .hero svg{position:absolute;top:14px;right:14px;width:20px;height:20px;color:rgba(255,255,255,.3)}
+.c5-home .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.c5-mcard{border-radius:16px;padding:16px 14px;text-align:center;position:relative;overflow:hidden}
+.c5-mcard::before{content:'';position:absolute;inset:0;opacity:.1;border-radius:16px}
+.c5-mcard--purple{border:1px solid rgba(99,102,241,.2)}.c5-mcard--purple::before{background:linear-gradient(135deg,#6366F1,#818CF8)}
+.c5-mcard--amber{border:1px solid rgba(245,158,11,.2)}.c5-mcard--amber::before{background:linear-gradient(135deg,#F59E0B,#FBBF24)}
+.c5-mcard--green{border:1px solid rgba(16,185,129,.2)}.c5-mcard--green::before{background:linear-gradient(135deg,#10B981,#34D399)}
+.c5-mcard--pink{border:1px solid rgba(236,72,153,.2)}.c5-mcard--pink::before{background:linear-gradient(135deg,#EC4899,#F472B6)}
+.c5-mcard svg{width:26px;height:26px;margin:0 auto 6px;display:block;position:relative}
+.c5-mcard .card-title{font-size:12px;font-weight:700;color:#fff;position:relative}
+.c5 .bottomnav{border-top:1px solid rgba(255,255,255,.06);background:rgba(12,12,20,.9)}
+.c5 .bottomnav-item{color:rgba(255,255,255,.25)}
+.c5 .bottomnav-item.active{color:#818CF8}
+
+.c5-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:#0C0C14}
+.c5-live .bg-glow{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(99,102,241,.12) 0%,rgba(236,72,153,.06) 50%,transparent 80%)}
+.c5-live .big-orb{width:140px;height:140px;border-radius:50%;background:conic-gradient(from 0deg,#6366F1,#EC4899,#F59E0B,#10B981,#6366F1);box-shadow:0 0 80px rgba(99,102,241,.3);position:relative;animation:spin 8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.c5-live .big-orb::after{content:'';position:absolute;inset:8px;border-radius:50%;background:#0C0C14}
+.c5-live .big-orb svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;color:rgba(255,255,255,.7);z-index:1}
+.c5-live .transcript{font-size:14px;color:rgba(255,255,255,.4);text-align:center;margin-top:24px;position:relative}
+.c5-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center;gap:20px;z-index:1}
+.c5-live .mic-btn{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#EC4899);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 30px rgba(99,102,241,.4)}
+.c5-live .mic-btn svg{width:24px;height:24px;color:#fff}
+
+.c5-archive{flex:1;display:flex;flex-direction:column;padding:52px 20px 0;background:#0C0C14}
+.c5-archive .page-title{font-size:22px;font-weight:800;color:#fff;margin-bottom:16px}
+.c5-archive .session{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.c5-archive .session-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.c5-archive .session-icon svg{width:18px;height:18px}
+.c5-archive .session-title{font-size:13px;font-weight:700;color:rgba(255,255,255,.8)}
+.c5-archive .session-meta{font-size:10px;color:rgba(255,255,255,.25);margin-top:2px}
+
+.c5-settings{flex:1;display:flex;flex-direction:column;padding:52px 20px 0;background:#0C0C14}
+.c5-settings .page-title{font-size:22px;font-weight:800;color:#fff;margin-bottom:20px}
+.c5-settings .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:14px;padding:4px 14px;margin-bottom:10px}
+.c5-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.c5-settings .srow:last-child{border:none}
+.c5-settings .srow-label{font-size:12px;color:rgba(255,255,255,.6)}
+.c5-settings .srow-value{font-size:11px;color:rgba(255,255,255,.25)}
+
+/* ================================================================
+   CONCEPT 6 — ZEN MINIMAL (Japanese Minimalism)
+   ================================================================ */
+.c6 .phone-screen{background:#FDFDFD}
+.c6 .phone-bezel{border-color:#E0E0E0}
+.c6 .phone-island{background:#222}
+.c6 .statusbar{color:#AAA}
+
+.c6-home{flex:1;display:flex;flex-direction:column;padding:56px 24px 0}
+.c6-home .name{font-size:11px;font-weight:500;color:#999;letter-spacing:.12em;text-transform:uppercase;margin-bottom:32px}
+.c6-home .title{font-size:26px;font-weight:300;color:#111;line-height:1.3;letter-spacing:-.01em;margin-bottom:36px}
+.c6-home .title strong{font-weight:700}
+.c6-home .orb-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:32px}
+.c6-home .orb{width:72px;height:72px;border-radius:50%;border:1.5px solid #222;display:flex;align-items:center;justify-content:center}
+.c6-home .orb svg{width:26px;height:26px;color:#222}
+.c6-home .orb-hint{font-size:9px;color:#AAA;margin-top:12px;letter-spacing:.15em;text-transform:uppercase}
+.c6-home .mode-list{display:flex;flex-direction:column}
+.c6-mrow{display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid #EBEBEB}
+.c6-mrow:last-child{border-bottom:1px solid #EBEBEB}
+.c6-mrow svg{width:18px;height:18px;color:#666;flex-shrink:0}
+.c6-mrow .mlabel{font-size:13px;font-weight:500;color:#111;flex:1}
+.c6-mrow .marrow{font-size:10px;color:#CCC}
+.c6 .bottomnav{border-top:1px solid #EBEBEB;background:#FDFDFD}
+.c6 .bottomnav-item{color:#CCC}
+.c6 .bottomnav-item.active{color:#111}
+
+.c6-live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;background:#FDFDFD}
+.c6-live .big-orb{width:100px;height:100px;border-radius:50%;border:1px solid #DDD;display:flex;align-items:center;justify-content:center}
+.c6-live .big-orb-inner{width:60px;height:60px;border-radius:50%;background:#111}
+.c6-live .transcript{font-size:12px;color:#999;margin-top:20px;letter-spacing:.05em}
+.c6-live .bottom-controls{position:absolute;bottom:0;left:0;right:0;padding:16px 20px 28px;display:flex;align-items:center;justify-content:center}
+.c6-live .mic-btn{width:48px;height:48px;border-radius:50%;border:1.5px solid #222;display:flex;align-items:center;justify-content:center}
+.c6-live .mic-btn svg{width:20px;height:20px;color:#222}
+
+.c6-archive{flex:1;display:flex;flex-direction:column;padding:56px 24px 0;background:#FDFDFD}
+.c6-archive .page-title{font-size:11px;font-weight:500;color:#999;letter-spacing:.12em;text-transform:uppercase;margin-bottom:24px}
+.c6-archive .session{padding:14px 0;border-bottom:1px solid #EBEBEB}
+.c6-archive .session-title{font-size:14px;font-weight:500;color:#111}
+.c6-archive .session-meta{font-size:10px;color:#AAA;margin-top:3px}
+
+.c6-settings{flex:1;display:flex;flex-direction:column;padding:56px 24px 0;background:#FDFDFD}
+.c6-settings .page-title{font-size:11px;font-weight:500;color:#999;letter-spacing:.12em;text-transform:uppercase;margin-bottom:24px}
+.c6-settings .srow{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #EBEBEB}
+.c6-settings .srow-label{font-size:13px;color:#111}
+.c6-settings .srow-value{font-size:12px;color:#AAA}
+
+/* ─── COLOR SWATCHES ─── */
+.palette{display:flex;gap:6px;margin-top:20px}
+.swatch{width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,.08)}
+
+/* ─── VOTE ─── */
+.vote{padding:140px 0 100px;text-align:center;border-top:1px solid var(--border)}
+.vote h2{font-family:'Playfair Display',serif;font-size:clamp(2rem,5vw,3.5rem);font-weight:900;margin-bottom:16px}
+.vote h2 em{font-style:italic;color:var(--accent)}
+.vote>p{color:var(--text2);max-width:500px;margin:0 auto 48px;font-size:.95rem;line-height:1.7}
+.vote-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px;margin:0 auto}
+.vote-card{background:var(--surface);border:2px solid var(--border);border-radius:20px;padding:32px 20px;cursor:pointer;transition:all .3s;text-align:center}
+.vote-card:hover{border-color:var(--accent);transform:translateY(-6px);box-shadow:0 16px 48px rgba(196,149,106,.12)}
+.vote-card.selected{border-color:var(--accent);background:rgba(196,149,106,.06)}
+.vote-num{font-family:'Space Grotesk',monospace;font-size:12px;font-weight:600;color:var(--accent);margin-bottom:10px}
+.vote-name{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:800;margin-bottom:4px}
+.vote-tag{font-size:.8rem;color:var(--text2)}
+
+/* ─── FOOTER ─── */
+footer{padding:48px 0;text-align:center;border-top:1px solid var(--border)}
+footer p{font-size:12px;color:var(--text2)}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:1100px){.phone-grid{grid-template-columns:repeat(2,1fr);gap:40px}}
+@media(max-width:900px){
+  .concept-header{grid-template-columns:1fr;gap:40px}
+  .audit-grid{grid-template-columns:1fr 1fr}
+  .vote-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:600px){
+  .phone-grid{grid-template-columns:1fr;max-width:300px;margin:0 auto}
+  .audit-grid{grid-template-columns:1fr}
+  .vote-grid{grid-template-columns:1fr}
+  .container{padding:0 20px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ SVG SPRITES (hidden) ═══ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-grad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-signal" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="16" width="4" height="4" rx="1"/><rect x="8" y="12" width="4" height="8" rx="1"/><rect x="14" y="8" width="4" height="12" rx="1"/><rect x="20" y="4" width="4" height="16" rx="1" opacity=".3"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="10" x="2" y="7" rx="2"/><path d="M22 11v2"/><rect x="4" y="9" width="10" height="6" rx="1" fill="currentColor" opacity=".3"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+</svg>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<section class="cover">
+  <div class="cover-badge">Confidential — CEO Review Only</div>
+  <h1>Arqivon Design<br><em>Direction Review</em></h1>
+  <p>An honest audit of our current interface and six strategic redesign proposals for the four core screens — each crafted to reflect a product identity worthy of our ambition.</p>
+  <div class="scroll-cue" onclick="document.getElementById('audit').scrollIntoView({behavior:'smooth'})">
+    Scroll to begin
+    <div class="arrow"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ AUDIT ═══════════════════ -->
+<section class="audit" id="audit">
+  <div class="container">
+    <div class="audit-header">
+      <div class="section-eyebrow section-eyebrow--red">Honest Audit</div>
+      <h2 class="section-title">What's Holding Us Back</h2>
+      <p class="section-desc">Our engineering is solid. Our surface layer is not. Here's what a premium product cannot afford to ship.</p>
+    </div>
+    <div class="audit-grid">
+      <div class="audit-card"><h3>Color Identity Crisis</h3><p>Home screen uses 4 different blues (#3B82F6, #0EA5E9, #818CF8, #22D3EE) with no clear hierarchy. All mode cards look the same at a glance. The Go Live gradient screams "SaaS template."</p></div>
+      <div class="audit-card"><h3>Zero Premium Signal</h3><p>Generic AppBar titles ("SETTINGS", "ARCHIVE"). Default Roboto font. No visual metaphor for "Living Lens." The app looks like a developer prototype, not a product worth paying for.</p></div>
+      <div class="audit-card"><h3>Wasted Real Estate</h3><p>40% of Home scroll space is a "How it works" tutorial section. A premium product is self-evident. No recent sessions, no personalization, no dynamic content to bring users back.</p></div>
+      <div class="audit-card"><h3>No Craft Details</h3><p>No micro-interactions on cards. No entrance animations. Live screen audio mode is a blank white canvas. Settings has zero personality. Bottom nav is stock Material. Nothing says "we sweated every pixel."</p></div>
+      <div class="audit-card"><h3>Mode Cards Are Weak</h3><p>120×120 circles with one icon and a label. No descriptions visible, no visual differentiation. The 2×2 grid wastes space and creates visual monotony. Users can't feel the power of each mode.</p></div>
+      <div class="audit-card"><h3>Live Screen Inconsistency</h3><p>Mic button uses a purple gradient that doesn't match any brand token. Input mode toggle feels bolted on. Bottom area mixes text input, mic, and side controls in a layout that fights for space.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ STICKY NAV ═══════════════════ -->
+<nav class="topnav" id="topnav">
+  <div class="container">
+    <div class="topnav-inner">
+      <div class="topnav-logo">Proposals</div>
+      <a href="#c1" class="pill active" data-c="1">01 Obsidian Lux</a>
+      <a href="#c2" class="pill" data-c="2">02 Warm Earth</a>
+      <a href="#c3" class="pill" data-c="3">03 Glass Atelier</a>
+      <a href="#c4" class="pill" data-c="4">04 Editorial Noir</a>
+      <a href="#c5" class="pill" data-c="5">05 Aurora Vivid</a>
+      <a href="#c6" class="pill" data-c="6">06 Zen Minimal</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════ CONCEPT 1: OBSIDIAN LUX ═══════════════════ -->
+<section class="concept c1" id="c1">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 01 / 06</div>
+      <h2 class="concept-name">Obsidian Lux</h2>
+      <p class="concept-tag">"Darkness as a canvas for intelligence."</p>
+      <p class="concept-desc">A premium dark interface inspired by the world's most sophisticated tools. Deep blacks with carefully placed luminance — every element floats on darkness, making the AI orb the unmistakable hero. This is the design language of a product that costs nothing to try and everything to leave.</p>
+      <div class="inspo-row">
+        <span class="inspo">Arc Browser</span><span class="inspo">Linear</span><span class="inspo">Raycast</span><span class="inspo">Apple Intelligence</span>
+      </div>
+      <div class="palette">
+        <div class="swatch" style="background:#08080D"></div>
+        <div class="swatch" style="background:#7C3AED"></div>
+        <div class="swatch" style="background:#A78BFA"></div>
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="swatch" style="background:#10B981"></div>
+        <div class="swatch" style="background:#3B82F6"></div>
+      </div>
+    </div>
+    <div class="principles">
+      <h4>Design Principles</h4>
+      <ul>
+        <li>Dark surfaces with luminous accents — the orb glows, everything else recedes</li>
+        <li>Mode cards use subtle gradient tints — each has its own light signature</li>
+        <li>Go Live becomes a pulsing orb, not a rectangular button</li>
+        <li>Typography: SF Pro / Inter Extra Bold — sharp and modern</li>
+        <li>Premium depth through luminosity, not elevation or borders</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phone-grid">
+    <!-- HOME -->
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c1-home">
+        <div class="greeting">Good evening</div>
+        <div class="name">Emmanuel</div>
+        <div class="hero-orb-wrap">
+          <div class="hero-orb"><svg><use href="#i-mic"/></svg></div>
+          <div class="orb-label">Tap to go live</div>
+        </div>
+        <div class="modes">
+          <div class="c1-card c1-card--purple"><svg style="color:#A78BFA"><use href="#i-sparkles"/></svg><div class="card-title">Assistant</div><div class="card-desc">Multimodal AI agent</div></div>
+          <div class="c1-card c1-card--amber"><svg style="color:#FBBF24"><use href="#i-globe"/></svg><div class="card-title">Translator</div><div class="card-desc">100+ languages</div></div>
+          <div class="c1-card c1-card--green"><svg style="color:#34D399"><use href="#i-grad"/></svg><div class="card-title">Tutor</div><div class="card-desc">Step-by-step</div></div>
+          <div class="c1-card c1-card--blue"><svg style="color:#60A5FA"><use href="#i-wrench"/></svg><div class="card-title">Support</div><div class="card-desc">Visual diagnostics</div></div>
+        </div>
+      </div>
+      <div class="bottomnav">
+        <div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div>
+      </div>
+    </div></div></div>
+
+    <!-- LIVE -->
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.4)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c1-live">
+        <div class="live-badge">LIVE</div>
+        <div class="mode-strip"><span class="mode-chip active">Assistant</span><span class="mode-chip">Translator</span></div>
+        <div class="big-orb" style="position:relative"><svg><use href="#i-sparkles"/></svg></div>
+        <div class="transcript">"Tell me about the architecture…"</div>
+        <div class="bottom-controls">
+          <div class="side-btn"><svg><use href="#i-kbd"/></svg></div>
+          <div class="mic-btn"><svg><use href="#i-stop"/></svg></div>
+          <div class="side-btn"><svg><use href="#i-camera"/></svg></div>
+        </div>
+      </div>
+    </div></div></div>
+
+    <!-- ARCHIVE -->
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.4)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c1-archive">
+        <div class="page-title">Your Sessions</div>
+        <div class="page-sub">3 conversations this week</div>
+        <div class="filters"><span class="fchip active">All</span><span class="fchip">Assistant</span><span class="fchip">Translator</span><span class="fchip">Tutor</span></div>
+        <div class="session"><div class="session-icon" style="background:rgba(124,58,237,.12)"><svg style="color:#A78BFA"><use href="#i-sparkles"/></svg></div><div><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · 12 turns · 4m 22s</div></div></div>
+        <div class="session"><div class="session-icon" style="background:rgba(245,158,11,.12)"><svg style="color:#FBBF24"><use href="#i-globe"/></svg></div><div><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · 8 turns · 2m 10s</div></div></div>
+        <div class="session"><div class="session-icon" style="background:rgba(16,185,129,.12)"><svg style="color:#34D399"><use href="#i-grad"/></svg></div><div><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · 15 turns · 6m 45s</div></div></div>
+      </div>
+      <div class="bottomnav">
+        <div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div>
+        <div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div>
+      </div>
+    </div></div></div>
+
+    <!-- SETTINGS -->
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.4)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c1-settings">
+        <div class="page-title">Settings</div>
+        <div class="profile-card"><div class="avatar">EM</div><div><div class="user-name">Emmanuel Mfon</div><div class="user-email">emmanuel@arqivo.com</div></div></div>
+        <div class="sec-label">Default Mode</div>
+        <div class="srow"><span class="srow-label">Active Mode</span><span class="srow-value">Assistant</span></div>
+        <div class="sec-label">Appearance</div>
+        <div class="srow"><span class="srow-label">Dark Mode</span><div class="toggle"></div></div>
+        <div class="sec-label">AI Voice</div>
+        <div class="srow"><span class="srow-label">Voice</span><span class="srow-value">Puck</span></div>
+        <div class="sec-label">Account</div>
+        <div class="srow"><span class="srow-label" style="color:#FF453A">Sign Out</span><span class="srow-value">→</span></div>
+      </div>
+      <div class="bottomnav">
+        <div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div>
+        <div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div>
+        <div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div>
+      </div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ CONCEPT 2: WARM EARTH ═══════════════════ -->
+<section class="concept c2" id="c2">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 02 / 06</div>
+      <h2 class="concept-name">Warm Earth</h2>
+      <p class="concept-tag">"Intelligence that feels human."</p>
+      <p class="concept-desc">Cream backgrounds, warm browns, organic shapes. This design says "we're not another cold tech tool — we're a warm, trusted companion." Serif headings and earth tones create intimacy. Users feel at home, not at a command line.</p>
+      <div class="inspo-row"><span class="inspo">Headspace</span><span class="inspo">Bear Notes</span><span class="inspo">Aesop</span><span class="inspo">Notion (warm)</span></div>
+      <div class="palette">
+        <div class="swatch" style="background:#FDF8F2"></div>
+        <div class="swatch" style="background:#8B5E3C"></div>
+        <div class="swatch" style="background:#C4956A"></div>
+        <div class="swatch" style="background:#2C1810"></div>
+        <div class="swatch" style="background:#EDE5DB"></div>
+        <div class="swatch" style="background:#FFF8F0"></div>
+      </div>
+    </div>
+    <div class="principles"><h4>Design Principles</h4><ul>
+      <li>Cream (#FDF8F2) base with warm brown (#8B5E3C) as primary accent</li>
+      <li>Playfair Display serif for headings — editorial warmth, not cold tech</li>
+      <li>Hero section is a warm brown gradient banner with soft shadow</li>
+      <li>Mode cards use light tinted backgrounds with subtle borders</li>
+      <li>Every interaction feels like touching quality leather</li>
+    </ul></div>
+  </div>
+  <div class="phone-grid">
+    <!-- C2 HOME -->
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c2-home">
+        <div class="greeting">Good evening</div>
+        <div class="name">Emmanuel</div>
+        <div class="hero"><div class="hero-orb"><svg><use href="#i-mic"/></svg></div><div class="hero-text"><h3>Go Live</h3><p>Your AI is ready to see &amp; speak</p></div></div>
+        <div class="sec-label">Choose your mode</div>
+        <div class="modes">
+          <div class="c2-mcard"><svg style="color:#8B5E3C"><use href="#i-sparkles"/></svg><div class="card-title">Assistant</div><div class="card-desc">Multimodal AI</div></div>
+          <div class="c2-mcard"><svg style="color:#B8860B"><use href="#i-globe"/></svg><div class="card-title">Translator</div><div class="card-desc">Live translation</div></div>
+          <div class="c2-mcard"><svg style="color:#6B8E5C"><use href="#i-grad"/></svg><div class="card-title">Tutor</div><div class="card-desc">Step-by-step</div></div>
+          <div class="c2-mcard"><svg style="color:#7A6B5C"><use href="#i-wrench"/></svg><div class="card-title">Support</div><div class="card-desc">Visual help</div></div>
+        </div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <!-- C2 LIVE -->
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c2-live">
+        <div class="live-badge">LIVE</div>
+        <div class="big-orb" style="position:relative"><svg><use href="#i-sparkles"/></svg></div>
+        <div class="transcript">I'm listening…</div>
+        <div class="bottom-controls"><div class="mic-btn"><svg><use href="#i-stop"/></svg></div></div>
+      </div>
+    </div></div></div>
+    <!-- C2 ARCHIVE -->
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c2-archive">
+        <div class="page-title">Your Sessions</div>
+        <div class="session"><div class="session-icon" style="background:#F3E8DD"><svg style="color:#8B5E3C"><use href="#i-sparkles"/></svg></div><div><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · 12 turns · 4m 22s</div></div></div>
+        <div class="session"><div class="session-icon" style="background:#FEF3C7"><svg style="color:#B8860B"><use href="#i-globe"/></svg></div><div><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · 8 turns</div></div></div>
+        <div class="session"><div class="session-icon" style="background:#D1FAE5"><svg style="color:#6B8E5C"><use href="#i-grad"/></svg></div><div><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · 15 turns · 6m 45s</div></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <!-- C2 SETTINGS -->
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c2-settings">
+        <div class="page-title">Settings</div>
+        <div class="card"><div class="srow"><span class="srow-label">Default Mode</span><span class="srow-value">Assistant</span></div><div class="srow"><span class="srow-label">AI Voice</span><span class="srow-value">Puck</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label">Dark Mode</span><div class="toggle"></div></div><div class="srow"><span class="srow-label">Source Language</span><span class="srow-value">Auto</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label" style="color:#C0392B">Sign Out</span><span class="srow-value">→</span></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ CONCEPT 3: GLASS ATELIER ═══════════════════ -->
+<section class="concept c3" id="c3">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 03 / 06</div>
+      <h2 class="concept-name">Glass Atelier</h2>
+      <p class="concept-tag">"Spatial depth meets crystalline clarity."</p>
+      <p class="concept-desc">Inspired by Apple Vision Pro and iOS 18's layered glass aesthetic. A soft lavender gradient background with frosted glass cards floating above. Every element has depth through translucency. The result is three-dimensional and alive — like looking through a crafted lens.</p>
+      <div class="inspo-row"><span class="inspo">Apple Vision Pro</span><span class="inspo">iOS 18</span><span class="inspo">Figma</span><span class="inspo">Loom</span></div>
+      <div class="palette">
+        <div class="swatch" style="background:#EAEDFF"></div>
+        <div class="swatch" style="background:#667EEA"></div>
+        <div class="swatch" style="background:#818CF8"></div>
+        <div class="swatch" style="background:#6D28D9"></div>
+        <div class="swatch" style="background:#1A1B3A"></div>
+        <div class="swatch" style="background:rgba(255,255,255,.55);border-color:rgba(255,255,255,.5)"></div>
+      </div>
+    </div>
+    <div class="principles"><h4>Design Principles</h4><ul>
+      <li>Lavender gradient base (#EAEDFF → #DFE3FF) — soft, dimensional</li>
+      <li>Frosted glass cards with white borders and real backdrop-filter blur</li>
+      <li>The orb is a purple-to-violet jewel — the "Living Lens" metaphor</li>
+      <li>Cards float as individual glass panels with micro-shadows</li>
+      <li>Depth through opacity layers and translucency, not drop shadows</li>
+    </ul></div>
+  </div>
+  <div class="phone-grid">
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c3-home">
+        <div class="greeting">Good evening,</div>
+        <div class="name">Emmanuel</div>
+        <div class="hero"><div class="hero-orb"><svg><use href="#i-mic"/></svg></div><h3>Go Live</h3><p>Your living lens awaits</p></div>
+        <div class="modes">
+          <div class="c3-mcard"><svg style="color:#6366F1"><use href="#i-sparkles"/></svg><div class="card-title">Assistant</div><div class="card-desc">Multimodal AI</div></div>
+          <div class="c3-mcard"><svg style="color:#D97706"><use href="#i-globe"/></svg><div class="card-title">Translator</div><div class="card-desc">Live translation</div></div>
+          <div class="c3-mcard"><svg style="color:#059669"><use href="#i-grad"/></svg><div class="card-title">Tutor</div><div class="card-desc">Step-by-step</div></div>
+          <div class="c3-mcard"><svg style="color:#2563EB"><use href="#i-wrench"/></svg><div class="card-title">Support</div><div class="card-desc">Visual help</div></div>
+        </div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c3-live">
+        <div class="big-orb" style="position:relative"><svg><use href="#i-sparkles"/></svg></div>
+        <div class="transcript">Listening…</div>
+        <div class="bottom-controls"><div class="side-btn"><svg><use href="#i-kbd"/></svg></div><div class="mic-btn"><svg><use href="#i-stop"/></svg></div><div class="side-btn"><svg><use href="#i-camera"/></svg></div></div>
+      </div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c3-archive">
+        <div class="page-title">Your Sessions</div>
+        <div class="session"><div class="session-icon" style="background:rgba(99,102,241,.1)"><svg style="color:#6366F1"><use href="#i-sparkles"/></svg></div><div><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · 12 turns · 4m 22s</div></div></div>
+        <div class="session"><div class="session-icon" style="background:rgba(217,119,6,.1)"><svg style="color:#D97706"><use href="#i-globe"/></svg></div><div><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · 8 turns</div></div></div>
+        <div class="session"><div class="session-icon" style="background:rgba(5,150,105,.1)"><svg style="color:#059669"><use href="#i-grad"/></svg></div><div><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · 15 turns</div></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c3-settings">
+        <div class="page-title">Settings</div>
+        <div class="card"><div class="srow"><span class="srow-label">Default Mode</span><span class="srow-value">Assistant</span></div><div class="srow"><span class="srow-label">AI Voice</span><span class="srow-value">Puck</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label">Dark Mode</span><span class="srow-value">Off</span></div><div class="srow"><span class="srow-label">Source Lang</span><span class="srow-value">Auto</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label" style="color:#EF4444">Sign Out</span><span class="srow-value">→</span></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ CONCEPT 4: EDITORIAL NOIR ═══════════════════ -->
+<section class="concept c4" id="c4">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 04 / 06</div>
+      <h2 class="concept-name">Editorial Noir</h2>
+      <p class="concept-tag">"Swiss precision meets editorial voice."</p>
+      <p class="concept-desc">Black and white with one accent. Serif headlines. Hairline rules. Inspired by Monocle magazine and Dieter Rams. This design bets on typography and negative space — letting information architecture do the heavy lifting. Minimalism as the ultimate luxury.</p>
+      <div class="inspo-row"><span class="inspo">Monocle</span><span class="inspo">Things 3</span><span class="inspo">Bloomberg</span><span class="inspo">Dieter Rams</span></div>
+      <div class="palette">
+        <div class="swatch" style="background:#FAFAF8;border-color:#DDD"></div>
+        <div class="swatch" style="background:#111"></div>
+        <div class="swatch" style="background:#999"></div>
+        <div class="swatch" style="background:#5B5FEF"></div>
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="swatch" style="background:#10B981"></div>
+      </div>
+    </div>
+    <div class="principles"><h4>Design Principles</h4><ul>
+      <li>Near-white (#FAFAF8) with pure black text — maximum contrast</li>
+      <li>Playfair Display serif for all headings — immediate editorial authority</li>
+      <li>Modes as list items with color dots — zero fluff, high density</li>
+      <li>Go Live is a solid black pill — the most confident CTA possible</li>
+      <li>Archive entries are typographic, not card-based — newspaper index feel</li>
+    </ul></div>
+  </div>
+  <div class="phone-grid">
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c4-home">
+        <div class="rule"></div>
+        <div class="title">Your living<br>lens awaits.</div>
+        <div class="subtitle">4 modes · real-time AI · voice + vision</div>
+        <div class="cta"><svg><use href="#i-mic"/></svg><span class="cta-text">Go Live</span><span class="cta-arrow">→</span></div>
+        <div class="sec-label">Modes</div>
+        <div class="mode-list">
+          <div class="c4-mrow"><div class="dot" style="background:#5B5FEF"></div><span class="mlabel">Assistant</span><span class="marrow">→</span></div>
+          <div class="c4-mrow"><div class="dot" style="background:#F59E0B"></div><span class="mlabel">Translator</span><span class="marrow">→</span></div>
+          <div class="c4-mrow"><div class="dot" style="background:#10B981"></div><span class="mlabel">Tutor</span><span class="marrow">→</span></div>
+          <div class="c4-mrow"><div class="dot" style="background:#3B82F6"></div><span class="mlabel">Support</span><span class="marrow">→</span></div>
+        </div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c4-live">
+        <div class="live-badge">RECORDING</div>
+        <div class="big-orb"><svg><use href="#i-mic"/></svg></div>
+        <div class="transcript"><h3>Listening</h3><p>Assistant mode · Audio only</p></div>
+        <div class="bottom-controls"><div class="mic-btn"><svg><use href="#i-stop"/></svg></div></div>
+      </div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c4-archive">
+        <div class="page-title">Archive</div>
+        <div class="page-sub">3 sessions this week</div>
+        <div class="session"><div class="dot" style="background:#5B5FEF"></div><div><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · Assistant · 12 turns · 4m 22s</div></div></div>
+        <div class="session"><div class="dot" style="background:#F59E0B"></div><div><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · Translator · 8 turns</div></div></div>
+        <div class="session"><div class="dot" style="background:#10B981"></div><div><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · Tutor · 15 turns · 6m 45s</div></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c4-settings">
+        <div class="page-title">Settings</div>
+        <div class="sec-label">Preferences</div>
+        <div class="srow"><span class="srow-label">Default Mode</span><span class="srow-value">Assistant</span></div>
+        <div class="srow"><span class="srow-label">AI Voice</span><span class="srow-value">Puck</span></div>
+        <div class="srow"><span class="srow-label">Dark Mode</span><span class="srow-value">Off</span></div>
+        <div class="sec-label">Account</div>
+        <div class="srow"><span class="srow-label">Emmanuel Mfon</span><span class="srow-value">emmanuel@arqivo.com</span></div>
+        <div class="srow"><span class="srow-label" style="color:#EF4444">Sign Out</span><span class="srow-value"></span></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ CONCEPT 5: AURORA VIVID ═══════════════════ -->
+<section class="concept c5" id="c5">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 05 / 06</div>
+      <h2 class="concept-name">Aurora Vivid</h2>
+      <p class="concept-tag">"Bold color as a competitive weapon."</p>
+      <p class="concept-desc">Dark base with vivid, saturated colors that pop. Each mode has its own unmistakable gradient identity. The hero section explodes with a full-spectrum gradient. The Live orb is a spinning conic gradient ring. This design screams confidence, energy, and "the future is here."</p>
+      <div class="inspo-row"><span class="inspo">Spotify</span><span class="inspo">Discord</span><span class="inspo">Vercel</span><span class="inspo">Stripe</span></div>
+      <div class="palette">
+        <div class="swatch" style="background:#0C0C14"></div>
+        <div class="swatch" style="background:#6366F1"></div>
+        <div class="swatch" style="background:#EC4899"></div>
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="swatch" style="background:#10B981"></div>
+        <div class="swatch" style="background:conic-gradient(#6366F1,#EC4899,#F59E0B,#10B981,#6366F1)"></div>
+      </div>
+    </div>
+    <div class="principles"><h4>Design Principles</h4><ul>
+      <li>Deep dark base (#0C0C14) with vivid mode-specific gradients</li>
+      <li>Hero banner uses multi-stop gradient — indigo→pink→amber — unforgettable</li>
+      <li>Each mode card glows with its unique color through subtle background tints</li>
+      <li>The Live orb is a spinning conic gradient ring with dark center — mesmerizing</li>
+      <li>High saturation everywhere — demands attention, retains memory</li>
+    </ul></div>
+  </div>
+  <div class="phone-grid">
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.35)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c5-home">
+        <div class="greeting">Good evening</div>
+        <div class="name">Emmanuel</div>
+        <div class="hero"><svg><use href="#i-arrow-right"/></svg><h3>Go Live Now</h3><p>Your AI lens is ready</p></div>
+        <div class="modes">
+          <div class="c5-mcard c5-mcard--purple"><svg style="color:#818CF8"><use href="#i-sparkles"/></svg><div class="card-title">Assistant</div></div>
+          <div class="c5-mcard c5-mcard--amber"><svg style="color:#FBBF24"><use href="#i-globe"/></svg><div class="card-title">Translator</div></div>
+          <div class="c5-mcard c5-mcard--green"><svg style="color:#34D399"><use href="#i-grad"/></svg><div class="card-title">Tutor</div></div>
+          <div class="c5-mcard c5-mcard--pink"><svg style="color:#F472B6"><use href="#i-wrench"/></svg><div class="card-title">Support</div></div>
+        </div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.35)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c5-live">
+        <div class="bg-glow"></div>
+        <div class="big-orb" style="position:relative"><svg><use href="#i-mic"/></svg></div>
+        <div class="transcript">Listening…</div>
+        <div class="bottom-controls"><div class="mic-btn"><svg><use href="#i-stop"/></svg></div></div>
+      </div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.35)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c5-archive">
+        <div class="page-title">Your Sessions</div>
+        <div class="session"><div class="session-icon" style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(129,140,248,.08))"><svg style="color:#818CF8"><use href="#i-sparkles"/></svg></div><div><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · 12 turns</div></div></div>
+        <div class="session"><div class="session-icon" style="background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(251,191,36,.08))"><svg style="color:#FBBF24"><use href="#i-globe"/></svg></div><div><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · 8 turns</div></div></div>
+        <div class="session"><div class="session-icon" style="background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(52,211,153,.08))"><svg style="color:#34D399"><use href="#i-grad"/></svg></div><div><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · 15 turns</div></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar" style="color:rgba(255,255,255,.35)"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c5-settings">
+        <div class="page-title">Settings</div>
+        <div class="card"><div class="srow"><span class="srow-label">Default Mode</span><span class="srow-value">Assistant</span></div><div class="srow"><span class="srow-label">AI Voice</span><span class="srow-value">Puck</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label">Dark Mode</span><span class="srow-value">On</span></div></div>
+        <div class="card"><div class="srow"><span class="srow-label" style="color:#FF453A">Sign Out</span><span class="srow-value">→</span></div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ CONCEPT 6: ZEN MINIMAL ═══════════════════ -->
+<section class="concept c6" id="c6">
+<div class="container">
+  <div class="concept-header">
+    <div>
+      <div class="concept-num">CONCEPT 06 / 06</div>
+      <h2 class="concept-name">Zen Minimal</h2>
+      <p class="concept-tag">"The most powerful statement is silence."</p>
+      <p class="concept-desc">Nearly monochrome. Maximum whitespace. Hairline details. This design strips away everything that doesn't serve the user. The Go Live button is a simple circle. Modes are a minimal list. So refined it feels invisible — and that's the point.</p>
+      <div class="inspo-row"><span class="inspo">Muji</span><span class="inspo">Porsche Design</span><span class="inspo">iA Writer</span><span class="inspo">Braun</span></div>
+      <div class="palette">
+        <div class="swatch" style="background:#FDFDFD;border-color:#DDD"></div>
+        <div class="swatch" style="background:#111"></div>
+        <div class="swatch" style="background:#999"></div>
+        <div class="swatch" style="background:#CCC"></div>
+        <div class="swatch" style="background:#EBEBEB;border-color:#DDD"></div>
+      </div>
+    </div>
+    <div class="principles"><h4>Design Principles</h4><ul>
+      <li>Pure white (#FDFDFD) with minimal gray hierarchy — only 3 tones</li>
+      <li>Thin-weight typography: font-weight 300 for hero — luxury through restraint</li>
+      <li>Go Live is a circle outline — the most confident, understated CTA</li>
+      <li>Modes as clean list with hairline dividers — no cards, no boxes</li>
+      <li>Every pixel of whitespace is intentional — nothing competes for attention</li>
+    </ul></div>
+  </div>
+  <div class="phone-grid">
+    <div class="phone-col"><div class="phone-label">Home</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c6-home">
+        <div class="name">Emmanuel</div>
+        <div class="title">Your <strong>living lens</strong> is ready.</div>
+        <div class="orb-wrap"><div class="orb"><svg><use href="#i-mic"/></svg></div><div class="orb-hint">Tap to go live</div></div>
+        <div class="mode-list">
+          <div class="c6-mrow"><svg style="color:#555"><use href="#i-sparkles"/></svg><span class="mlabel">Assistant</span><span class="marrow">→</span></div>
+          <div class="c6-mrow"><svg style="color:#555"><use href="#i-globe"/></svg><span class="mlabel">Translator</span><span class="marrow">→</span></div>
+          <div class="c6-mrow"><svg style="color:#555"><use href="#i-grad"/></svg><span class="mlabel">Tutor</span><span class="marrow">→</span></div>
+          <div class="c6-mrow"><svg style="color:#555"><use href="#i-wrench"/></svg><span class="mlabel">Support</span><span class="marrow">→</span></div>
+        </div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item active"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Live</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c6-live">
+        <div class="big-orb"><div class="big-orb-inner"></div></div>
+        <div class="transcript">Listening</div>
+        <div class="bottom-controls"><div class="mic-btn"><svg><use href="#i-stop"/></svg></div></div>
+      </div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Archive</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c6-archive">
+        <div class="page-title">Archive</div>
+        <div class="session"><div class="session-title">Architecture Discussion</div><div class="session-meta">Today · Assistant · 12 turns</div></div>
+        <div class="session"><div class="session-title">French Menu Translation</div><div class="session-meta">Yesterday · Translator · 8 turns</div></div>
+        <div class="session"><div class="session-title">Calculus Problem Set</div><div class="session-meta">Feb 19 · Tutor · 15 turns</div></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item active"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+    <div class="phone-col"><div class="phone-label">Settings</div>
+    <div class="phone"><div class="phone-bezel"></div><div class="phone-island"></div><div class="phone-screen">
+      <div class="statusbar"><span class="statusbar-time">9:41</span><span class="statusbar-icons"><svg><use href="#i-signal"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-battery"/></svg></span></div>
+      <div class="c6-settings">
+        <div class="page-title">Settings</div>
+        <div class="srow"><span class="srow-label">Default Mode</span><span class="srow-value">Assistant</span></div>
+        <div class="srow"><span class="srow-label">AI Voice</span><span class="srow-value">Puck</span></div>
+        <div class="srow"><span class="srow-label">Dark Mode</span><span class="srow-value">Off</span></div>
+        <div class="srow"><span class="srow-label">Source Language</span><span class="srow-value">Auto-detect</span></div>
+        <div class="srow"><span class="srow-label" style="color:#EF4444">Sign Out</span><span class="srow-value"></span></div>
+      </div>
+      <div class="bottomnav"><div class="bottomnav-item"><svg><use href="#i-home"/></svg><span>Home</span></div><div class="bottomnav-item"><svg><use href="#i-radio"/></svg><span>Live</span></div><div class="bottomnav-item"><svg><use href="#i-archive"/></svg><span>Archive</span></div><div class="bottomnav-item active"><svg><use href="#i-settings"/></svg><span>Settings</span></div></div>
+    </div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════ VOTE ═══════════════════ -->
+<section class="vote" id="vote">
+  <div class="container">
+    <h2>Choose the <em>direction.</em></h2>
+    <p>Select the design concept that best represents where Arqivon should go. Your choice will be implemented across all four screens.</p>
+    <div class="vote-grid">
+      <div class="vote-card" onclick="vote(this,1)"><div class="vote-num">01</div><div class="vote-name">Obsidian Lux</div><div class="vote-tag">Dark Premium</div></div>
+      <div class="vote-card" onclick="vote(this,2)"><div class="vote-num">02</div><div class="vote-name">Warm Earth</div><div class="vote-tag">Organic Warmth</div></div>
+      <div class="vote-card" onclick="vote(this,3)"><div class="vote-num">03</div><div class="vote-name">Glass Atelier</div><div class="vote-tag">Spatial Computing</div></div>
+      <div class="vote-card" onclick="vote(this,4)"><div class="vote-num">04</div><div class="vote-name">Editorial Noir</div><div class="vote-tag">Swiss Typography</div></div>
+      <div class="vote-card" onclick="vote(this,5)"><div class="vote-num">05</div><div class="vote-name">Aurora Vivid</div><div class="vote-tag">Vibrant Energy</div></div>
+      <div class="vote-card" onclick="vote(this,6)"><div class="vote-num">06</div><div class="vote-name">Zen Minimal</div><div class="vote-tag">Japanese Minimalism</div></div>
+    </div>
+  </div>
+</section>
+
+<footer><p>Arqivon Design Review · Confidential · February 2026</p></footer>
+
+<script>
+// Nav active state on scroll
+const pills=document.querySelectorAll('.pill[data-c]');
+const sections=document.querySelectorAll('.concept');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const id=e.target.id;pills.forEach(p=>p.classList.remove('active'));const a=document.querySelector(`.pill[href="#${id}"]`);if(a)a.classList.add('active')}})},{threshold:.2,rootMargin:'-80px 0px -40% 0px'});
+sections.forEach(s=>obs.observe(s));
+
+// Smooth scroll nav
+pills.forEach(p=>p.addEventListener('click',e=>{e.preventDefault();document.querySelector(p.getAttribute('href'))?.scrollIntoView({behavior:'smooth'})}));
+
+// Vote
+function vote(el,n){
+  const names=['','Obsidian Lux','Warm Earth','Glass Atelier','Editorial Noir','Aurora Vivid','Zen Minimal'];
+  document.querySelectorAll('.vote-card').forEach(c=>{c.classList.remove('selected')});
+  el.classList.add('selected');
+  // Scroll to the chosen concept
+  document.querySelector(`#c${n}`)?.scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
