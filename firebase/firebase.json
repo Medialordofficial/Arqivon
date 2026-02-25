@@ -8,6 +8,7 @@
   },
   "hosting": {
     "public": "../landing",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",

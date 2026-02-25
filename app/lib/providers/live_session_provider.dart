@@ -93,8 +93,9 @@ class LiveSessionState {
       isResponding: isResponding ?? this.isResponding,
       mode: mode ?? this.mode,
       transcript: clearTranscript ? null : (transcript ?? this.transcript),
-      userTranscript:
-          clearUserTranscript ? null : (userTranscript ?? this.userTranscript),
+      userTranscript: clearUserTranscript
+          ? null
+          : (userTranscript ?? this.userTranscript),
       currentAction: clearAction ? null : (currentAction ?? this.currentAction),
       actionHistory: actionHistory ?? this.actionHistory,
       currentTranslation: clearTranslation
@@ -103,8 +104,9 @@ class LiveSessionState {
       translationHistory: translationHistory ?? this.translationHistory,
       sourceLang: sourceLang ?? this.sourceLang,
       targetLang: targetLang ?? this.targetLang,
-      currentTutorStep:
-          clearTutorStep ? null : (currentTutorStep ?? this.currentTutorStep),
+      currentTutorStep: clearTutorStep
+          ? null
+          : (currentTutorStep ?? this.currentTutorStep),
       tutorSteps: tutorSteps ?? this.tutorSteps,
       currentSupportTopic: currentSupportTopic ?? this.currentSupportTopic,
       supportTopics: supportTopics ?? this.supportTopics,
@@ -144,25 +146,28 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // while idle should not trigger a Gemini reconnect on the backend.
     if (current.isStreaming) {
       final selectedVoice = ref.read(settingsProvider).selectedVoice;
-      _ws?.send(WsInbound(
-        type: 'set_mode',
-        mode: newMode.wsValue,
-        voice: selectedVoice,
-      ));
+      _ws?.send(
+        WsInbound(
+          type: 'set_mode',
+          mode: newMode.wsValue,
+          voice: selectedVoice,
+        ),
+      );
     }
   }
 
   void setLanguages({String? sourceLang, String? targetLang}) {
     final current = state.valueOrNull ?? const LiveSessionState();
-    state = AsyncData(current.copyWith(
-      sourceLang: sourceLang,
-      targetLang: targetLang,
-    ));
-    _ws?.send(WsInbound(
-      type: 'set_language',
-      sourceLang: sourceLang ?? current.sourceLang,
-      targetLang: targetLang ?? current.targetLang,
-    ));
+    state = AsyncData(
+      current.copyWith(sourceLang: sourceLang, targetLang: targetLang),
+    );
+    _ws?.send(
+      WsInbound(
+        type: 'set_language',
+        sourceLang: sourceLang ?? current.sourceLang,
+        targetLang: targetLang ?? current.targetLang,
+      ),
+    );
   }
 
   // ── Start / Stop ──────────────────────────────────────────────────────
@@ -219,8 +224,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       // Dispose old WS to prevent resource leaks before creating a new one.
       _ws?.dispose();
       _ws = WebSocketService(
-          userId: userId,
-          authToken: await FirebaseAuth.instance.currentUser?.getIdToken());
+        userId: userId,
+        authToken: await FirebaseAuth.instance.currentUser?.getIdToken(),
+        tokenRefresher: () async =>
+            FirebaseAuth.instance.currentUser?.getIdToken(true),
+      );
       _stateSub?.cancel();
       _msgSub?.cancel();
       _stateSub = _ws!.stateStream.listen((s) {
@@ -255,21 +263,25 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // we always send it at least once per connection.
     final selectedVoice = ref.read(settingsProvider).selectedVoice;
     if (_lastSentMode != current.mode) {
-      _ws!.send(WsInbound(
-        type: 'set_mode',
-        mode: current.mode.wsValue,
-        voice: selectedVoice,
-      ));
+      _ws!.send(
+        WsInbound(
+          type: 'set_mode',
+          mode: current.mode.wsValue,
+          voice: selectedVoice,
+        ),
+      );
       _lastSentMode = current.mode;
     }
 
     // If translator, send language prefs
     if (current.mode == AgentMode.translator) {
-      _ws!.send(WsInbound(
-        type: 'set_language',
-        sourceLang: current.sourceLang,
-        targetLang: current.targetLang,
-      ));
+      _ws!.send(
+        WsInbound(
+          type: 'set_language',
+          sourceLang: current.sourceLang,
+          targetLang: current.targetLang,
+        ),
+      );
     }
 
     // Cancel any live audio subscription first to avoid duplicate sends
@@ -279,23 +291,32 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // Start audio capture and pipe to WebSocket
     await _audio!.start();
     _audioChunksSent = 0;
-    _audioSub = _audio!.audioStream.listen((b64) {
-      _audioChunksSent++;
-      if (_audioChunksSent % 50 == 1) {
-        _log.fine('audio chunk #$_audioChunksSent → WS (state=${_ws?.state})');
-      }
-      _ws?.send(WsInbound(type: 'audio', data: b64));
-    }, onDone: () {
-      _log.warning(
-          'audioStream DONE — subscription ended! chunks=$_audioChunksSent');
-    }, onError: (e) {
-      _log.severe('audioStream ERROR', e);
-    });
+    _audioSub = _audio!.audioStream.listen(
+      (b64) {
+        _audioChunksSent++;
+        if (_audioChunksSent % 50 == 1) {
+          _log.fine(
+            'audio chunk #$_audioChunksSent → WS (state=${_ws?.state})',
+          );
+        }
+        _ws?.send(WsInbound(type: 'audio', data: b64));
+      },
+      onDone: () {
+        _log.warning(
+          'audioStream DONE — subscription ended! chunks=$_audioChunksSent',
+        );
+      },
+      onError: (e) {
+        _log.severe('audioStream ERROR', e);
+      },
+    );
 
-    state = AsyncData(current.copyWith(
-      isStreaming: true,
-      connectionState: WsConnectionState.connected,
-    ));
+    state = AsyncData(
+      current.copyWith(
+        isStreaming: true,
+        connectionState: WsConnectionState.connected,
+      ),
+    );
   }
 
   Future<void> stopSession() async {
@@ -357,10 +378,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
             _log.info('first audio chunk received — setting isResponding=true');
-            state = AsyncData(current.copyWith(
-              isResponding: true,
-              clearUserTranscript: true,
-            ));
+            state = AsyncData(
+              current.copyWith(isResponding: true, clearUserTranscript: true),
+            );
           }
         }
         break;
@@ -378,39 +398,47 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           msg.actionType ?? 'generic',
           msg.payload ?? {},
         );
-        state = AsyncData(current.copyWith(
-          currentAction: action,
-          actionHistory: [...current.actionHistory, action],
-        ));
+        state = AsyncData(
+          current.copyWith(
+            currentAction: action,
+            actionHistory: [...current.actionHistory, action],
+          ),
+        );
         break;
 
       case 'translation':
         if (msg.payload != null) {
           final overlay = TranslationOverlay.fromPayload(msg.payload!);
-          state = AsyncData(current.copyWith(
-            currentTranslation: overlay,
-            translationHistory: [...current.translationHistory, overlay],
-          ));
+          state = AsyncData(
+            current.copyWith(
+              currentTranslation: overlay,
+              translationHistory: [...current.translationHistory, overlay],
+            ),
+          );
         }
         break;
 
       case 'tutor_step':
         if (msg.payload != null) {
           final step = TutorStep.fromPayload(msg.payload!);
-          state = AsyncData(current.copyWith(
-            currentTutorStep: step,
-            tutorSteps: [...current.tutorSteps, step],
-          ));
+          state = AsyncData(
+            current.copyWith(
+              currentTutorStep: step,
+              tutorSteps: [...current.tutorSteps, step],
+            ),
+          );
         }
         break;
 
       case 'support_topic':
         if (msg.payload != null) {
           final topic = SupportTopic.fromPayload(msg.payload!);
-          state = AsyncData(current.copyWith(
-            currentSupportTopic: topic,
-            supportTopics: [...current.supportTopics, topic],
-          ));
+          state = AsyncData(
+            current.copyWith(
+              currentSupportTopic: topic,
+              supportTopics: [...current.supportTopics, topic],
+            ),
+          );
         }
         break;
 
@@ -436,20 +464,18 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // (handled by onPlaybackDone callback).
         _log.info('turn_complete received from backend');
         _audio?.flushAndPlay();
-        state = AsyncData(current.copyWith(
-          clearTranscript: true,
-          clearUserTranscript: true,
-        ));
+        state = AsyncData(
+          current.copyWith(clearTranscript: true, clearUserTranscript: true),
+        );
         break;
 
       case 'interrupted':
         // User barged in — stop playback immediately and clear stale overlays.
         _log.info('interrupted received from backend');
         _audio?.stopPlayback();
-        state = AsyncData(current.copyWith(
-          isResponding: false,
-          clearTranslation: true,
-        ));
+        state = AsyncData(
+          current.copyWith(isResponding: false, clearTranslation: true),
+        );
         break;
 
       case 'status':
@@ -473,5 +499,5 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
 final liveSessionProvider =
     AutoDisposeAsyncNotifierProvider<LiveSessionNotifier, LiveSessionState>(
-  LiveSessionNotifier.new,
-);
+      LiveSessionNotifier.new,
+    );

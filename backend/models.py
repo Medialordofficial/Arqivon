@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -39,7 +39,7 @@ class InboundMessage(BaseModel):
     voice: str | None = None         # AI voice selection (Aoede, Puck, etc.)
     source_lang: str | None = None   # for SET_LANGUAGE (translator)
     target_lang: str | None = None   # for SET_LANGUAGE (translator)
-    timestamp: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
+    timestamp: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
 
 
 # ── Outbound (Server → Client) ───────────────────────────────────────────────
@@ -69,7 +69,7 @@ class OutboundMessage(BaseModel):
     text: str | None = None
     action_type: str | None = None
     payload: dict[str, Any] | None = None
-    timestamp: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
+    timestamp: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
 
 
 # ── Session persistence ──────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ class SessionRecord(BaseModel):
     mode: str = AgentMode.GENERAL.value
     source_lang: str = "auto"
     target_lang: str = "en"
-    started_at: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
+    started_at: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     ended_at: float | None = None
     turn_count: int = 0
     tags: list[str] = Field(default_factory=list)

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Arqivon</title>
+    <meta name="description" content="Privacy Policy for the Arqivon AI voice assistant application.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="assets/images/logo.png">
+    <style>
+        .legal { max-width: 800px; margin: 0 auto; padding: 120px 24px 80px; }
+        .legal h1 { font-family: 'Space Grotesk', sans-serif; font-size: 2.5rem; margin-bottom: 8px; }
+        .legal .updated { color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-bottom: 40px; }
+        .legal h2 { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; margin-top: 36px; margin-bottom: 12px; color: #a78bfa; }
+        .legal p, .legal li { font-family: 'Inter', sans-serif; line-height: 1.7; color: rgba(255,255,255,0.8); margin-bottom: 12px; }
+        .legal ul { padding-left: 24px; }
+        .legal a { color: #a78bfa; text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <!-- Minimal navbar -->
+    <header class="navbar" style="position: fixed; top: 0; width: 100%; z-index: 100; background: rgba(10,10,15,0.95); backdrop-filter: blur(12px);">
+        <div class="container navbar__inner">
+            <a href="/" class="navbar__brand">
+                <img src="assets/images/logo-128.png" alt="Arqivo" width="32" height="32" class="navbar__logo-img">
+                <span class="navbar__name">Arqivo</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="legal">
+        <h1>Privacy Policy</h1>
+        <p class="updated">Last updated: July 2025</p>
+
+        <h2>1. Introduction</h2>
+        <p>Arqivon ("we", "our", "us") is a real-time multimodal AI voice assistant. This Privacy Policy explains how we collect, use, and protect your information when you use the Arqivon mobile application and related services (the "Service").</p>
+
+        <h2>2. Information We Collect</h2>
+        <p><strong>Account Information:</strong> When you sign in with Google, Apple, or email, we receive your name, email address, and profile photo as provided by the authentication provider.</p>
+        <p><strong>Voice & Audio Data:</strong> During live sessions, your microphone audio is streamed in real time to the Google Gemini API for processing. We do not permanently store raw audio recordings.</p>
+        <p><strong>Camera & Image Data:</strong> If you enable audio+video mode, camera frames are captured and sent to the Gemini API for visual understanding. We do not permanently store camera images.</p>
+        <p><strong>Session Data:</strong> We store session metadata (titles, summaries, timestamps, turn counts, agent mode used) in Firebase Firestore to display your session history.</p>
+        <p><strong>Memories:</strong> If you use the "remember" feature, the facts you ask the AI to remember are stored in Firestore under your user account.</p>
+        <p><strong>Usage Data:</strong> We may collect anonymous crash reports via Firebase Crashlytics to improve app stability.</p>
+
+        <h2>3. How We Use Your Information</h2>
+        <ul>
+            <li>To provide and operate the AI voice assistant functionality</li>
+            <li>To process your voice and camera input through the Google Gemini API</li>
+            <li>To display your session history and stored memories</li>
+            <li>To improve app stability and fix bugs via crash analytics</li>
+            <li>To authenticate your identity and secure your account</li>
+        </ul>
+
+        <h2>4. Third-Party Services</h2>
+        <p>We use the following third-party services:</p>
+        <ul>
+            <li><strong>Google Gemini API:</strong> Processes voice, text, and image inputs. Subject to <a href="https://ai.google.dev/terms" target="_blank">Google's AI Terms</a>.</li>
+            <li><strong>Firebase (Google):</strong> Authentication, Firestore database, Crashlytics, and Hosting. Subject to <a href="https://firebase.google.com/terms" target="_blank">Firebase Terms</a>.</li>
+            <li><strong>Google Cloud Run:</strong> Hosts our backend servers.</li>
+        </ul>
+
+        <h2>5. Data Retention</h2>
+        <p>Session metadata and memories are retained until you delete them or delete your account. Voice and camera data are processed in real time and not permanently stored on our servers.</p>
+
+        <h2>6. Data Security</h2>
+        <p>We use industry-standard security measures including HTTPS/TLS encryption for all data in transit, Firebase Authentication for identity verification, and Firestore security rules to restrict data access to authenticated users.</p>
+
+        <h2>7. Your Rights</h2>
+        <p>You can:</p>
+        <ul>
+            <li>Delete individual sessions from your history within the app</li>
+            <li>Delete individual memories within the app</li>
+            <li>Delete your entire account and associated data from Settings</li>
+            <li>Contact us to request a full data export or deletion</li>
+        </ul>
+
+        <h2>8. Children's Privacy</h2>
+        <p>Arqivon is not directed at children under 13. We do not knowingly collect personal information from children under 13. If you believe we have collected data from a child, please contact us.</p>
+
+        <h2>9. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. We will notify you of significant changes through the app or by updating the "Last updated" date above.</p>
+
+        <h2>10. Contact Us</h2>
+        <p>If you have questions about this Privacy Policy, please contact us at:</p>
+        <p><strong>Email:</strong> privacy@arqivon.com</p>
+    </main>
+
+    <footer class="footer" style="border-top: 1px solid rgba(255,255,255,0.08);">
+        <div class="container" style="padding: 24px 0; text-align: center;">
+            <p style="color: rgba(255,255,255,0.4); font-size: 0.85rem;">&copy; 2025 Arqivon. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

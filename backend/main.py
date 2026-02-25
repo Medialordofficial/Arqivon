@@ -253,6 +253,7 @@ app.add_middleware(
     allow_origins=[
         "https://arqivon-backend-653546103163.us-central1.run.app",
         "https://arqivon.com",
+        "https://arqivon-inc.web.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -307,8 +308,8 @@ async def list_sessions(user_id: str, token: str | None = None):
 async def _send_json(ws: WebSocket, msg: OutboundMessage) -> None:
     try:
         await ws.send_text(msg.model_dump_json())
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("_send_json failed (type=%s): %s", msg.type, exc)
 
 
 async def _save_session(user_id: str, record: SessionRecord) -> None:
@@ -466,8 +467,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         if live_ctx:
             try:
                 await live_ctx.__aexit__(None, None, None)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Error closing old Gemini context: %s", exc)
         # Open new
         live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice)
         logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
@@ -831,7 +832,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     f"Conversation transcript:\n{transcript_text}"
                 )
                 summary_response = await genai_client.aio.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.0-flash-lite",
                     contents=summary_prompt,
                 )
                 if summary_response.text:
@@ -844,11 +845,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         if live_ctx is not None:
             try:
                 await live_ctx.__aexit__(None, None, None)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Error closing Gemini context on teardown: %s", exc)
         try:
             await websocket.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Error closing websocket on teardown: %s", exc)
         logger.info("Session ended: user=%s session=%s mode=%s turns=%d",
                      user_id, session_id, current_mode, session_record.turn_count)

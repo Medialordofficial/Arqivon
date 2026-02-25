@@ -27,9 +27,9 @@ class FirestoreService {
       return snap.docs
           .map((d) => SessionModel.fromFirestore({...d.data(), 'id': d.id}))
           .toList();
-    } catch (e) {
-      _log.severe('getSessions error', e);
-      return [];
+    } catch (e, st) {
+      _log.severe('getSessions error', e, st);
+      rethrow;
     }
   }
 
@@ -54,9 +54,9 @@ class FirestoreService {
           .collection('memories')
           .get();
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
-    } catch (e) {
-      _log.severe('getMemories error', e);
-      return [];
+    } catch (e, st) {
+      _log.severe('getMemories error', e, st);
+      rethrow;
     }
   }
 
@@ -65,10 +65,9 @@ class FirestoreService {
     String userId, {
     required Map<String, dynamic> settings,
   }) async {
-    await _db.collection('users').doc(userId).set(
-      {'settings': settings},
-      SetOptions(merge: true),
-    );
+    await _db.collection('users').doc(userId).set({
+      'settings': settings,
+    }, SetOptions(merge: true));
   }
 
   /// Load user settings.
@@ -76,7 +75,8 @@ class FirestoreService {
     try {
       final doc = await _db.collection('users').doc(userId).get();
       return (doc.data()?['settings'] as Map<String, dynamic>?) ?? {};
-    } catch (e) {
+    } catch (e, st) {
+      _log.severe('loadUserSettings error', e, st);
       return {};
     }
   }

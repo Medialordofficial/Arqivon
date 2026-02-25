@@ -45,6 +45,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   final TextEditingController _textController = TextEditingController();
   bool _showTextInput = false;
   _LiveInputMode _inputMode = _LiveInputMode.audioOnly;
+  int _consecutiveFrameFailures = 0;
+  static const _maxConsecutiveFrameFailures = 10;
 
   @override
   void initState() {
@@ -123,8 +125,18 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       final bytes = await file.readAsBytes();
       final b64 = base64Encode(bytes);
       ref.read(liveSessionProvider.notifier).sendVideoFrame(b64);
+      _consecutiveFrameFailures = 0;
     } catch (e) {
-      // Frame drop is OK – don't crash
+      _consecutiveFrameFailures++;
+      if (_consecutiveFrameFailures >= _maxConsecutiveFrameFailures) {
+        _log.warning(
+          'Camera capture failed $_consecutiveFrameFailures times consecutively, '
+          'stopping frame capture: $e',
+        );
+        _stopFrameCapture();
+      } else {
+        _log.fine('Frame capture failed ($_consecutiveFrameFailures): $e');
+      }
     }
   }
 
@@ -240,14 +252,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           if (_inputMode == _LiveInputMode.audioVideo &&
               _cameraReady &&
               _cameraController != null)
-            ClipRRect(
-              child: CameraPreview(_cameraController!),
-            )
+            ClipRRect(child: CameraPreview(_cameraController!))
           else
             // Theme-aware background
-            Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-            ),
+            Container(color: Theme.of(context).scaffoldBackgroundColor),
 
           // ── Gradient scrim (camera mode only) ─────────────────────
           if (_inputMode == _LiveInputMode.audioVideo)
@@ -282,9 +290,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    Theme.of(context)
-                        .scaffoldBackgroundColor
-                        .withValues(alpha: 0.95),
+                    Theme.of(
+                      context,
+                    ).scaffoldBackgroundColor.withValues(alpha: 0.95),
                   ],
                 ),
               ),
@@ -302,8 +310,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 const Spacer(),
                 if (isStreaming)
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
@@ -311,16 +321,20 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.fiber_manual_record,
-                            size: 10, color: Colors.white),
+                        const Icon(
+                          Icons.fiber_manual_record,
+                          size: 10,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           mode.label.toUpperCase(),
                           style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 0.5),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ],
                     ),
@@ -346,19 +360,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           // ── Translator: live translation subtitle ──────────────────
           if (mode == AgentMode.translator && currentTranslation != null)
             Positioned(
-              top: MediaQuery.of(context).padding.top +
+              top:
+                  MediaQuery.of(context).padding.top +
                   (transcript != null && transcript.isNotEmpty ? 170 : 94),
               left: 0,
               right: 0,
-              child: TranslationOverlayWidget(
-                overlay: currentTranslation,
-              ),
+              child: TranslationOverlayWidget(overlay: currentTranslation),
             ),
 
           // ── Support: topic tracker ──────────────────────────────────
           if (mode == AgentMode.support && currentSupportTopic != null)
             Positioned(
-              top: MediaQuery.of(context).padding.top +
+              top:
+                  MediaQuery.of(context).padding.top +
                   (transcript != null && transcript.isNotEmpty ? 170 : 94),
               left: 0,
               right: 0,
@@ -386,10 +400,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     context,
                   );
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(result),
-                      behavior: SnackBarBehavior.floating,
-                    ));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
                   }
                 },
               ),
@@ -438,10 +454,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.50),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.50),
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
                   fontStyle: FontStyle.italic,
@@ -491,22 +506,21 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     isResponding
                         ? 'Responding…'
                         : isStreaming
-                            ? 'Listening…'
-                            : 'Go ahead, I\'m ready to assist',
+                        ? 'Listening…'
+                        : 'Go ahead, I\'m ready to assist',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isResponding
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.85)
-                          : Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.50),
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.85)
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.50),
                       fontSize: 16,
-                      fontWeight:
-                          isResponding ? FontWeight.w500 : FontWeight.w400,
+                      fontWeight: isResponding
+                          ? FontWeight.w500
+                          : FontWeight.w400,
                       letterSpacing: 0.1,
                     ),
                   ),
@@ -526,20 +540,21 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                 if (!isStreaming)
                   Container(
                     margin: const EdgeInsets.only(bottom: 20),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.06),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.10),
-                          width: 1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.10),
+                        width: 1,
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -549,7 +564,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           icon: Icons.mic_rounded,
                           selected: _inputMode == _LiveInputMode.audioOnly,
                           onTap: () => setState(
-                              () => _inputMode = _LiveInputMode.audioOnly),
+                            () => _inputMode = _LiveInputMode.audioOnly,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         _InputModeChip(
@@ -558,7 +574,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           selected: _inputMode == _LiveInputMode.audioVideo,
                           onTap: () {
                             setState(
-                                () => _inputMode = _LiveInputMode.audioVideo);
+                              () => _inputMode = _LiveInputMode.audioVideo,
+                            );
                             // Init camera on first switch to A/V mode.
                             if (!_cameraReady) _initCamera();
                           },
@@ -602,7 +619,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               if (mounted) {
                                 setState(() {});
                                 // Resume frame capture if streaming
-                                final isCurrentlyStreaming = ref
+                                final isCurrentlyStreaming =
+                                    ref
                                         .read(liveSessionProvider)
                                         .valueOrNull
                                         ?.isStreaming ??
@@ -615,8 +633,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
                     // ── Main mic / stop button ──────────────────────
                     Semantics(
-                      label:
-                          isStreaming ? 'Stop session' : 'Start live session',
+                      label: isStreaming
+                          ? 'Stop session'
+                          : 'Start live session',
                       button: true,
                       child: GestureDetector(
                         onTap: () {
@@ -633,32 +652,33 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                 ? const LinearGradient(
                                     colors: [
                                       Color(0xFF00BCD4),
-                                      Color(0xFF7C3AED)
+                                      Color(0xFF7C3AED),
                                     ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   )
                                 : isStreaming
-                                    ? null
-                                    : const LinearGradient(
-                                        colors: [
-                                          Color(0xFF7C3AED),
-                                          Color(0xFF5B5FEF),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
+                                ? null
+                                : const LinearGradient(
+                                    colors: [
+                                      Color(0xFF7C3AED),
+                                      Color(0xFF5B5FEF),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
                             color: !isResponding && isStreaming
                                 ? Colors.red
                                 : null,
                             boxShadow: [
                               BoxShadow(
-                                color: (isResponding
-                                        ? const Color(0xFF00BCD4)
-                                        : isStreaming
+                                color:
+                                    (isResponding
+                                            ? const Color(0xFF00BCD4)
+                                            : isStreaming
                                             ? Colors.red
                                             : const Color(0xFF5B5FEF))
-                                    .withValues(alpha: 0.50),
+                                        .withValues(alpha: 0.50),
                                 blurRadius: 28,
                                 spreadRadius: 6,
                               ),
@@ -668,8 +688,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                             isResponding
                                 ? Icons.record_voice_over_rounded
                                 : isStreaming
-                                    ? Icons.stop_rounded
-                                    : Icons.mic_rounded,
+                                ? Icons.stop_rounded
+                                : Icons.mic_rounded,
                             size: 32,
                             color: Colors.white,
                           ),
@@ -680,8 +700,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     // Keyboard toggle (right side)
                     _controlButton(
                       icon: Icons.keyboard_rounded,
-                      semanticLabel:
-                          _showTextInput ? 'Hide keyboard' : 'Show keyboard',
+                      semanticLabel: _showTextInput
+                          ? 'Hide keyboard'
+                          : 'Show keyboard',
                       onPressed: () {
                         HapticFeedback.lightImpact();
                         setState(() => _showTextInput = !_showTextInput);
@@ -698,12 +719,14 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(30),
                         border: Border.all(
-                            color: Theme.of(context).dividerColor, width: 1),
+                          color: Theme.of(context).dividerColor,
+                          width: 1,
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -714,33 +737,34 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               maxLength: 500,
                               maxLines: 1,
                               style: TextStyle(
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface,
-                                  fontSize: 15),
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: 15,
+                              ),
                               decoration: InputDecoration(
                                 hintText: _hintTextForMode(mode),
                                 hintStyle: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.40),
-                                    fontSize: 15),
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.40),
+                                  fontSize: 15,
+                                ),
                                 border: InputBorder.none,
                                 isDense: true,
                                 counterText: '',
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                               ),
                               onSubmitted: (_) => _sendTextMessage(),
                             ),
                           ),
                           IconButton(
                             onPressed: _sendTextMessage,
-                            icon: Icon(Icons.arrow_upward_rounded,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.5)),
+                            icon: Icon(
+                              Icons.arrow_upward_rounded,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.5),
+                            ),
                             iconSize: 22,
                           ),
                         ],
@@ -792,10 +816,12 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
         ),
         child: IconButton(
           onPressed: onPressed,
-          icon: Icon(icon,
-              color: onPressed != null
-                  ? onSurface
-                  : onSurface.withValues(alpha: 0.4)),
+          icon: Icon(
+            icon,
+            color: onPressed != null
+                ? onSurface
+                : onSurface.withValues(alpha: 0.4),
+          ),
           iconSize: 28,
         ),
       ),
@@ -833,14 +859,15 @@ class _InputModeChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 16,
-                color: selected
-                    ? Colors.white
-                    : Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.5)),
+            Icon(
+              icon,
+              size: 16,
+              color: selected
+                  ? Colors.white
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -849,10 +876,9 @@ class _InputModeChip extends StatelessWidget {
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 color: selected
                     ? Colors.white
-                    : Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.5),
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],

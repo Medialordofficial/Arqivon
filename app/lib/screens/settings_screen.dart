@@ -41,15 +41,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor:
-                        ArqivonTheme.primary.withValues(alpha: 0.15),
+                    backgroundColor: ArqivonTheme.primary.withValues(
+                      alpha: 0.15,
+                    ),
                     backgroundImage: user?.photoURL != null
                         ? NetworkImage(user!.photoURL!)
                         : null,
                     child: user?.photoURL == null
-                        ? Icon(Icons.person_rounded,
+                        ? Icon(
+                            Icons.person_rounded,
                             color: Theme.of(context).colorScheme.primary,
-                            size: 28)
+                            size: 28,
+                          )
                         : null,
                   ),
                   const SizedBox(width: 16),
@@ -69,10 +72,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           user?.email ?? 'Sign in to sync your data',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.5),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -92,22 +94,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final isSelected = settings.defaultMode == mode;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(mode.icon,
-                        color: isSelected
-                            ? mode.color
-                            : Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.3)),
+                    leading: Icon(
+                      mode.icon,
+                      color: isSelected
+                          ? mode.color
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
                     title: Text(mode.label),
-                    subtitle: Text(mode.description,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.4),
-                        )),
+                    subtitle: Text(
+                      mode.description,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.4),
+                      ),
+                    ),
                     trailing: isSelected
                         ? Icon(Icons.check_circle_rounded, color: mode.color)
                         : null,
@@ -161,10 +165,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       settings.isDarkMode ? 'Dark' : 'Light',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.5),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                     secondary: Icon(
@@ -199,15 +202,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Icons.record_voice_over_rounded,
                       color: isSelected
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.3),
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.3),
                     ),
                     title: Text(voice),
                     trailing: isSelected
-                        ? Icon(Icons.check_circle_rounded,
-                            color: Theme.of(context).colorScheme.primary)
+                        ? Icon(
+                            Icons.check_circle_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
                         : null,
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -239,10 +243,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.logout_rounded,
-                                  color: Color(0xFFEF4444)),
-                              title: const Text('Sign Out',
-                                  style: TextStyle(color: Color(0xFFEF4444))),
+                              leading: Icon(
+                                Icons.logout_rounded,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              title: Text(
+                                'Sign Out',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
                               onTap: () async {
                                 setState(() => _authLoading = true);
                                 try {
@@ -265,15 +275,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             const Divider(height: 1),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.delete_forever_rounded,
-                                  color: Color(0xFFEF4444)),
-                              title: const Text('Delete Account',
-                                  style: TextStyle(color: Color(0xFFEF4444))),
+                              leading: Icon(
+                                Icons.delete_forever_rounded,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              title: Text(
+                                'Delete Account',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
                               subtitle: Text(
                                 'Permanently remove your account and data',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Theme.of(context)
+                                  color: Theme.of(
+                                    context,
+                                  )
                                       .colorScheme
                                       .onSurface
                                       .withValues(alpha: 0.4),
@@ -285,8 +303,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         )
                       : ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.login_rounded,
-                              color: Theme.of(context).colorScheme.primary),
+                          leading: Icon(
+                            Icons.login_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           title: const Text('Sign in with Google'),
                           onTap: () async {
                             setState(() => _authLoading = true);
@@ -336,10 +356,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'The Living Lens · v1.0.0',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.6),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -352,10 +371,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     'Powered by Gemini 2.0 Flash Live · Google Cloud Run · Firebase',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.4),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -371,34 +389,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.privacy_tip_rounded,
-                        color: Theme.of(context).colorScheme.primary),
+                    leading: Icon(
+                      Icons.privacy_tip_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     title: const Text('Privacy Policy'),
-                    trailing: Icon(Icons.open_in_new_rounded,
-                        size: 18,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.3)),
+                    trailing: Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
                     onTap: () => launchUrl(
-                      Uri.parse('https://arqivon.com/privacy'),
+                      Uri.parse('https://arqivon-inc.web.app/privacy'),
                       mode: LaunchMode.externalApplication,
                     ),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.description_rounded,
-                        color: Theme.of(context).colorScheme.primary),
+                    leading: Icon(
+                      Icons.description_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     title: const Text('Terms of Service'),
-                    trailing: Icon(Icons.open_in_new_rounded,
-                        size: 18,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.3)),
+                    trailing: Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
                     onTap: () => launchUrl(
-                      Uri.parse('https://arqivon.com/terms'),
+                      Uri.parse('https://arqivon-inc.web.app/terms'),
                       mode: LaunchMode.externalApplication,
                     ),
                   ),
@@ -428,7 +452,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFEF4444),
+              foregroundColor: Theme.of(ctx).colorScheme.error,
             ),
             child: const Text('Delete'),
           ),
@@ -451,9 +475,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.code == 'requires-recent-login'
-                ? 'Please sign in again before deleting your account'
-                : 'Failed to delete account: ${e.message}'),
+            content: Text(
+              e.code == 'requires-recent-login'
+                  ? 'Please sign in again before deleting your account'
+                  : 'Failed to delete account: ${e.message}',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -486,26 +512,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(Icons.language_rounded,
-              size: 20,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withValues(alpha: 0.5)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 14)),
+          Icon(
+            Icons.language_rounded,
+            size: 20,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.5),
           ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
           DropdownButton<String>(
             value: langs.containsKey(value) ? value : langs.keys.first,
             underline: const SizedBox.shrink(),
             dropdownColor: Theme.of(context).colorScheme.surface,
             items: langs.entries
-                .map((e) => DropdownMenuItem(
-                      value: e.key,
-                      child:
-                          Text(e.value, style: const TextStyle(fontSize: 13)),
-                    ))
+                .map(
+                  (e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value, style: const TextStyle(fontSize: 13)),
+                  ),
+                )
                 .toList(),
             onChanged: (v) {
               if (v != null) onChanged(v);

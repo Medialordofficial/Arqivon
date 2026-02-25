@@ -58,21 +58,23 @@ class AudioService {
   Future<void> _ensureAudioSession() async {
     if (_sessionConfigured) return;
     final session = await AudioSession.instance;
-    await session.configure(AudioSessionConfiguration(
-      avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-      avAudioSessionCategoryOptions:
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
-              AVAudioSessionCategoryOptions.allowBluetooth,
-      avAudioSessionMode: AVAudioSessionMode.voiceChat,
-      // Use `media` usage to avoid Android's VoIP echo-canceller path which
-      // can silently kill the recorder when the player stops/starts.
-      androidAudioAttributes: const AndroidAudioAttributes(
-        contentType: AndroidAudioContentType.speech,
-        usage: AndroidAudioUsage.media,
+    await session.configure(
+      AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions:
+            AVAudioSessionCategoryOptions.defaultToSpeaker |
+            AVAudioSessionCategoryOptions.allowBluetooth,
+        avAudioSessionMode: AVAudioSessionMode.voiceChat,
+        // Use `media` usage to avoid Android's VoIP echo-canceller path which
+        // can silently kill the recorder when the player stops/starts.
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: false,
       ),
-      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-      androidWillPauseWhenDucked: false,
-    ));
+    );
     _sessionConfigured = true;
     _log.info('audio session configured');
   }
@@ -90,17 +92,21 @@ class AudioService {
     // Always stop first for a clean slate.
     try {
       await _recorder.stop();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('pre-start recorder stop: $e');
+    }
 
     try {
-      final stream = await _recorder.startStream(const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-        echoCancel: true,
-        noiseSuppress: true,
-        autoGain: true,
-      ));
+      final stream = await _recorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+          echoCancel: true,
+          noiseSuppress: true,
+          autoGain: true,
+        ),
+      );
 
       _isCapturing = true;
       _recordChunkCount = 0;
@@ -110,7 +116,8 @@ class AudioService {
           _recordChunkCount++;
           if (_recordChunkCount % 100 == 1) {
             _log.fine(
-                'recorder data chunk #$_recordChunkCount (${data.length} bytes)');
+              'recorder data chunk #$_recordChunkCount (${data.length} bytes)',
+            );
           }
           if (!_audioController.isClosed) {
             _audioController.add(base64Encode(data));
@@ -156,7 +163,9 @@ class AudioService {
     _recordSub = null;
     try {
       await _recorder.stop();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('stop recorder: $e');
+    }
     _log.info('recorder stopped');
   }
 
@@ -175,7 +184,9 @@ class AudioService {
     _recordSub = null;
     try {
       await _recorder.stop();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('ensureRecording stop: $e');
+    }
     await start();
   }
 
@@ -189,8 +200,10 @@ class AudioService {
     // Debounce: flush after a short idle window so we accumulate small chunks
     // into a larger WAV.
     _flushTimer?.cancel();
-    _flushTimer =
-        Timer(const Duration(milliseconds: _flushIntervalMs), _flushPartial);
+    _flushTimer = Timer(
+      const Duration(milliseconds: _flushIntervalMs),
+      _flushPartial,
+    );
   }
 
   /// Write buffered PCM to a temp WAV file, add it to the turn's playlist,
@@ -244,7 +257,8 @@ class AudioService {
   Future<void> flushAndPlay() async {
     _flushTimer?.cancel();
     _log.info(
-        'flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}');
+      'flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}',
+    );
 
     // Flush remaining PCM.
     if (_pcmBuffer.isNotEmpty) {
@@ -319,29 +333,39 @@ class AudioService {
     _turnPlaylist = null;
     _tempFiles.clear();
 
-    // Run disposal in a microtask to avoid re-entrance inside the player
+    // Run disposal asynchronously to avoid re-entrance inside the player
     // state listener callback.
-    scheduleMicrotask(() async {
-      try {
-        await player?.stop();
-      } catch (_) {}
-      try {
-        await player?.dispose();
-      } catch (_) {}
-      // Clear the ConcatenatingAudioSource children (optional but tidy).
-      try {
-        await playlist?.clear();
-      } catch (_) {}
-
-      for (final path in files) {
+    unawaited(
+      Future(() async {
         try {
-          await File(path).delete();
-        } catch (_) {}
-      }
+          await player?.stop();
+        } catch (e) {
+          _log.fine('turn player stop: $e');
+        }
+        try {
+          await player?.dispose();
+        } catch (e) {
+          _log.fine('turn player dispose: $e');
+        }
+        // Clear the ConcatenatingAudioSource children (optional but tidy).
+        try {
+          await playlist?.clear();
+        } catch (e) {
+          _log.fine('turn playlist clear: $e');
+        }
 
-      _log.info('turn player disposed — calling onPlaybackDone');
-      onPlaybackDone?.call();
-    });
+        for (final path in files) {
+          try {
+            await File(path).delete();
+          } catch (e) {
+            _log.fine('temp file delete: $e');
+          }
+        }
+
+        _log.info('turn player disposed — calling onPlaybackDone');
+        onPlaybackDone?.call();
+      }),
+    );
   }
 
   /// Stop playback immediately (barge-in from user).
@@ -358,15 +382,21 @@ class AudioService {
 
     try {
       await player?.stop();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('stopPlayback stop: $e');
+    }
     try {
       await player?.dispose();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('stopPlayback dispose: $e');
+    }
 
     for (final path in _tempFiles) {
       try {
         await File(path).delete();
-      } catch (_) {}
+      } catch (e) {
+        _log.fine('stopPlayback file delete: $e');
+      }
     }
     _tempFiles.clear();
     _log.info('playback stopped (barge-in)');
@@ -423,15 +453,21 @@ class AudioService {
 
     try {
       _turnPlayer?.stop();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('dispose stop: $e');
+    }
     try {
       _turnPlayer?.dispose();
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('dispose player: $e');
+    }
 
     for (final path in _tempFiles) {
       try {
         File(path).deleteSync();
-      } catch (_) {}
+      } catch (e) {
+        _log.fine('dispose file delete: $e');
+      }
     }
   }
 }

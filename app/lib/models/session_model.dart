@@ -48,8 +48,11 @@ class SessionModel {
             )
           : null,
       turnCount: (data['turn_count'] as num?)?.toInt() ?? 0,
-      tags: (data['tags'] as List<dynamic>?)?.cast<String>() ?? [],
-      topics: (data['topics'] as List<dynamic>?)?.cast<String>() ?? [],
+      tags:
+          (data['tags'] as List<dynamic>?)?.whereType<String>().toList() ?? [],
+      topics:
+          (data['topics'] as List<dynamic>?)?.whereType<String>().toList() ??
+          [],
       thumbnailUrl: data['thumbnail_url'] as String?,
     );
   }
