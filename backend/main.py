@@ -46,7 +46,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("arqivo")
+logger = logging.getLogger("arqivon")
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 
@@ -374,9 +374,7 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
-        # NOTE: output_audio_transcription intentionally omitted — AI audio is
-        # already played to the user; transcribing it back as text causes
-        # haphazard text in random languages to appear on the client.
+        output_audio_transcription=types.AudioTranscriptionConfig(),
     )
     live_ctx = genai_client.aio.live.connect(
         model=settings.gemini_model,
@@ -628,8 +626,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     await _send_json(websocket, OutboundMessage(
                                         type=OutboundType.USER_TRANSCRIPT, text=txt,
                                     ))
-                            # output_transcription is intentionally ignored — see
-                            # config comment above.
+                            # Forward AI output transcription so the client can
+                            # display what the AI said as text.
+                            if sc.output_transcription:
+                                txt = getattr(sc.output_transcription, 'text', None)
+                                if txt:
+                                    conversation_transcript.append(f"AI: {txt}")
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.TRANSCRIPT, text=txt,
+                                    ))
                             if sc.turn_complete:
                                 session_record.turn_count += 1
                                 logger.info(">>> turn_complete from Gemini — sending to client (audio_chunks_from_client=%d, turns=%d)", client_audio_count, session_record.turn_count)

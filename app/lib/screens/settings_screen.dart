@@ -9,6 +9,7 @@ import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/glassmorphic_card.dart';
+import 'memories_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -219,6 +220,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   );
                 }).toList(),
+              ),
+            ),
+
+            // ── Account ────────────────────────────────────────────
+            // ── My Memories ────────────────────────────────────────
+            _sectionHeader(context, 'MY MEMORIES'),
+            GlassmorphicCard(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.psychology_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: const Text('View AI Memories'),
+                subtitle: Text(
+                  'See what Arqivon remembers about you',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.4),
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.3),
+                ),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const MemoriesScreen(),
+                  ),
+                ),
               ),
             ),
 

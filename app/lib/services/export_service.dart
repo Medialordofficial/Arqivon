@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -11,12 +12,47 @@ import '../models/agent_mode.dart';
 class ExportService {
   ExportService._();
 
+  /// Cached Unicode-capable font for PDF rendering.
+  static pw.Font? _unicodeFont;
+  static pw.Font? _unicodeBoldFont;
+
+  /// Try to load a bundled Noto Sans font for broad Unicode coverage.
+  /// Falls back to Helvetica if the asset isn't available.
+  static Future<pw.ThemeData> _pdfTheme() async {
+    // Try to load NotoSans from assets for CJK / Arabic / Cyrillic support.
+    // If the asset isn't bundled, fall back gracefully to Helvetica.
+    if (_unicodeFont == null) {
+      try {
+        final regular = await rootBundle.load(
+          'assets/fonts/NotoSans-Regular.ttf',
+        );
+        _unicodeFont = pw.Font.ttf(regular);
+        final bold = await rootBundle.load(
+          'assets/fonts/NotoSans-Bold.ttf',
+        );
+        _unicodeBoldFont = pw.Font.ttf(bold);
+      } catch (_) {
+        // Font not bundled — use default Helvetica (Latin-only).
+      }
+    }
+
+    if (_unicodeFont != null) {
+      return pw.ThemeData.withFont(
+        base: _unicodeFont!,
+        bold: _unicodeBoldFont ?? _unicodeFont!,
+      );
+    }
+    return pw.ThemeData.base();
+  }
+
   static Future<File> generatePdf(ExportDocument doc) async {
     final pdf = pw.Document();
+    final theme = await _pdfTheme();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        theme: theme,
         margin: const pw.EdgeInsets.all(40),
         build: (context) => [
           pw.Header(

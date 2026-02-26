@@ -49,6 +49,14 @@ class AudioService {
 
   bool _sessionConfigured = false;
 
+  // ── Audio amplitude for visualizer ──────────────────────────────
+  final StreamController<double> _amplitudeController =
+      StreamController<double>.broadcast();
+
+  /// Stream of RMS amplitude values (0.0–1.0) from the microphone input.
+  /// Used by the orb visualizer for audio-reactive animation.
+  Stream<double> get amplitudeStream => _amplitudeController.stream;
+
   // ── Public getters ─────────────────────────────────────────────────
   Stream<String> get audioStream => _audioController.stream;
   bool get isCapturing => _isCapturing;
@@ -63,7 +71,7 @@ class AudioService {
         avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
         avAudioSessionCategoryOptions:
             AVAudioSessionCategoryOptions.defaultToSpeaker |
-            AVAudioSessionCategoryOptions.allowBluetooth,
+                AVAudioSessionCategoryOptions.allowBluetooth,
         avAudioSessionMode: AVAudioSessionMode.voiceChat,
         // Use `media` usage to avoid Android's VoIP echo-canceller path which
         // can silently kill the recorder when the player stops/starts.
@@ -121,6 +129,10 @@ class AudioService {
           }
           if (!_audioController.isClosed) {
             _audioController.add(base64Encode(data));
+          }
+          // Compute RMS amplitude for the orb visualizer.
+          if (!_amplitudeController.isClosed && data.length >= 2) {
+            _emitAmplitude(data);
           }
         },
         onError: (e) {
@@ -441,6 +453,40 @@ class AudioService {
     return wav;
   }
 
+  // ── Amplitude calculation ───────────────────────────────────────
+
+  /// Compute RMS amplitude from raw PCM-16 data and emit a normalized
+  /// value (0.0–1.0) for the orb visualizer.
+  void _emitAmplitude(Uint8List pcm) {
+    // PCM-16 LE mono: 2 bytes per sample
+    final sampleCount = pcm.length ~/ 2;
+    if (sampleCount == 0) return;
+
+    double sumSquares = 0;
+    for (var i = 0; i < sampleCount; i++) {
+      // Read 16-bit signed little-endian sample.
+      final lo = pcm[i * 2];
+      final hi = pcm[i * 2 + 1];
+      int sample = lo | (hi << 8);
+      if (sample >= 0x8000) sample -= 0x10000; // sign-extend
+      sumSquares += sample * sample;
+    }
+
+    final rms = (sumSquares / sampleCount);
+    // Normalize: PCM-16 max is 32767, so max squared is ~1.07e9.
+    // Use a log scale for perceptual mapping, clamped to 0.0–1.0.
+    const maxRms = 32767.0 * 32767.0;
+    final linear = (rms / maxRms).clamp(0.0, 1.0);
+    // Apply sqrt for more perceptual response (quiet sounds are more visible).
+    final normalized = (linear * 4.0).clamp(0.0, 1.0); // boost sensitivity
+    final perceptual =
+        normalized > 0 ? normalized * 0.7 + 0.3 * normalized * normalized : 0.0;
+
+    if (!_amplitudeController.isClosed) {
+      _amplitudeController.add(perceptual.clamp(0.0, 1.0));
+    }
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   void dispose() {
@@ -449,6 +495,7 @@ class AudioService {
     _recordSub?.cancel();
     _playbackSub?.cancel();
     _audioController.close();
+    _amplitudeController.close();
     _recorder.dispose();
 
     try {

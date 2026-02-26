@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The four operating modes for the Arqivo agent.
+/// The four operating modes for the Arqivon agent.
 enum AgentMode {
   general,
   translator,

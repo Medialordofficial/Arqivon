@@ -360,8 +360,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           // ── Translator: live translation subtitle ──────────────────
           if (mode == AgentMode.translator && currentTranslation != null)
             Positioned(
-              top:
-                  MediaQuery.of(context).padding.top +
+              top: MediaQuery.of(context).padding.top +
                   (transcript != null && transcript.isNotEmpty ? 170 : 94),
               left: 0,
               right: 0,
@@ -371,8 +370,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           // ── Support: topic tracker ──────────────────────────────────
           if (mode == AgentMode.support && currentSupportTopic != null)
             Positioned(
-              top:
-                  MediaQuery.of(context).padding.top +
+              top: MediaQuery.of(context).padding.top +
                   (transcript != null && transcript.isNotEmpty ? 170 : 94),
               left: 0,
               right: 0,
@@ -469,11 +467,16 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           Positioned.fill(
             child: Align(
               alignment: const Alignment(0, -0.20),
-              child: LiveWave(
-                isListening: isStreaming && !isResponding,
-                isResponding: isResponding,
-                color: mode.color,
-                size: 270,
+              child: ValueListenableBuilder<double>(
+                valueListenable:
+                    ref.read(liveSessionProvider.notifier).amplitudeNotifier,
+                builder: (context, amplitude, _) => LiveWave(
+                  isListening: isStreaming && !isResponding,
+                  isResponding: isResponding,
+                  amplitude: amplitude,
+                  color: mode.color,
+                  size: 270,
+                ),
               ),
             ),
           ),
@@ -506,8 +509,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     isResponding
                         ? 'Responding…'
                         : isStreaming
-                        ? 'Listening…'
-                        : 'Go ahead, I\'m ready to assist',
+                            ? 'Listening…'
+                            : 'Go ahead, I\'m ready to assist',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isResponding
@@ -518,9 +521,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               context,
                             ).colorScheme.onSurface.withValues(alpha: 0.50),
                       fontSize: 16,
-                      fontWeight: isResponding
-                          ? FontWeight.w500
-                          : FontWeight.w400,
+                      fontWeight:
+                          isResponding ? FontWeight.w500 : FontWeight.w400,
                       letterSpacing: 0.1,
                     ),
                   ),
@@ -619,8 +621,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               if (mounted) {
                                 setState(() {});
                                 // Resume frame capture if streaming
-                                final isCurrentlyStreaming =
-                                    ref
+                                final isCurrentlyStreaming = ref
                                         .read(liveSessionProvider)
                                         .valueOrNull
                                         ?.isStreaming ??
@@ -633,9 +634,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
                     // ── Main mic / stop button ──────────────────────
                     Semantics(
-                      label: isStreaming
-                          ? 'Stop session'
-                          : 'Start live session',
+                      label:
+                          isStreaming ? 'Stop session' : 'Start live session',
                       button: true,
                       child: GestureDetector(
                         onTap: () {
@@ -658,27 +658,26 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                     end: Alignment.bottomRight,
                                   )
                                 : isStreaming
-                                ? null
-                                : const LinearGradient(
-                                    colors: [
-                                      Color(0xFF7C3AED),
-                                      Color(0xFF5B5FEF),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
+                                    ? null
+                                    : const LinearGradient(
+                                        colors: [
+                                          Color(0xFF7C3AED),
+                                          Color(0xFF5B5FEF),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
                             color: !isResponding && isStreaming
                                 ? Colors.red
                                 : null,
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    (isResponding
-                                            ? const Color(0xFF00BCD4)
-                                            : isStreaming
+                                color: (isResponding
+                                        ? const Color(0xFF00BCD4)
+                                        : isStreaming
                                             ? Colors.red
                                             : const Color(0xFF5B5FEF))
-                                        .withValues(alpha: 0.50),
+                                    .withValues(alpha: 0.50),
                                 blurRadius: 28,
                                 spreadRadius: 6,
                               ),
@@ -688,8 +687,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                             isResponding
                                 ? Icons.record_voice_over_rounded
                                 : isStreaming
-                                ? Icons.stop_rounded
-                                : Icons.mic_rounded,
+                                    ? Icons.stop_rounded
+                                    : Icons.mic_rounded,
                             size: 32,
                             color: Colors.white,
                           ),
@@ -700,9 +699,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                     // Keyboard toggle (right side)
                     _controlButton(
                       icon: Icons.keyboard_rounded,
-                      semanticLabel: _showTextInput
-                          ? 'Hide keyboard'
-                          : 'Show keyboard',
+                      semanticLabel:
+                          _showTextInput ? 'Hide keyboard' : 'Show keyboard',
                       onPressed: () {
                         HapticFeedback.lightImpact();
                         setState(() => _showTextInput = !_showTextInput);
@@ -743,7 +741,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                               decoration: InputDecoration(
                                 hintText: _hintTextForMode(mode),
                                 hintStyle: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
                                       .withValues(alpha: 0.40),
                                   fontSize: 15,
                                 ),

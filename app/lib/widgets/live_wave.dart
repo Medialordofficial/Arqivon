@@ -12,12 +12,16 @@ class LiveWave extends StatefulWidget {
     super.key,
     required this.isListening,
     required this.isResponding,
+    this.amplitude = 0.0,
     this.color,
     this.size = 260,
   });
 
   final bool isListening;
   final bool isResponding;
+
+  /// Mic RMS amplitude (0.0–1.0) driving audio-reactive pulsing.
+  final double amplitude;
 
   /// Accent tint (blended subtly into the orb's palette).
   final Color? color;
@@ -125,6 +129,7 @@ class _LiveWaveState extends State<LiveWave> with TickerProviderStateMixin {
             painter: _OrbPainter(
               breathe: breathe,
               active: active,
+              amplitude: widget.amplitude,
               ripple1: _ripple1.value,
               ripple2: _ripple2.value,
               ripple3: _ripple3.value,
@@ -143,6 +148,7 @@ class _OrbPainter extends CustomPainter {
   const _OrbPainter({
     required this.breathe,
     required this.active,
+    required this.amplitude,
     required this.ripple1,
     required this.ripple2,
     required this.ripple3,
@@ -152,6 +158,7 @@ class _OrbPainter extends CustomPainter {
 
   final double breathe;
   final double active;
+  final double amplitude;
   final double ripple1;
   final double ripple2;
   final double ripple3;
@@ -171,7 +178,8 @@ class _OrbPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     final baseR = size.width * (0.375 + 0.025 * breathe);
-    final orbR = baseR * (1.0 + 0.04 * active);
+    // Audio-reactive expansion: orb grows up to 10% with voice amplitude.
+    final orbR = baseR * (1.0 + 0.04 * active + 0.10 * amplitude * active);
 
     // ── 1. Ambient outer glow — largest, very soft ────────────────────
     _paintGlow(
@@ -179,7 +187,7 @@ class _OrbPainter extends CustomPainter {
         cx,
         cy,
         orbR * 1.95,
-        _purpleEdge.withValues(alpha: 0.08 + 0.06 * active),
+        _purpleEdge.withValues(alpha: 0.08 + 0.06 * active + 0.06 * amplitude),
         _purpleEdge.withValues(alpha: 0.0),
         blurSigma: orbR * 0.6);
 
@@ -188,7 +196,7 @@ class _OrbPainter extends CustomPainter {
         cx,
         cy,
         orbR * 1.58,
-        _indigoBod.withValues(alpha: 0.14 + 0.10 * active),
+        _indigoBod.withValues(alpha: 0.14 + 0.10 * active + 0.08 * amplitude),
         _indigoBod.withValues(alpha: 0.0),
         blurSigma: orbR * 0.4);
 
@@ -311,6 +319,7 @@ class _OrbPainter extends CustomPainter {
   bool shouldRepaint(_OrbPainter o) =>
       o.breathe != breathe ||
       o.active != active ||
+      o.amplitude != amplitude ||
       o.ripple1 != ripple1 ||
       o.ripple2 != ripple2 ||
       o.ripple3 != ripple3;

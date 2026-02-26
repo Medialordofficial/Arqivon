@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
@@ -124,6 +125,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   int _audioChunksSent = 0;
 
   StreamSubscription? _audioSub;
+  StreamSubscription? _ampSub;
+
+  /// Amplitude notifier for the orb visualizer — avoids high-frequency
+  /// Riverpod state rebuilds by using a ValueNotifier instead.
+  final ValueNotifier<double> amplitudeNotifier = ValueNotifier<double>(0.0);
+
   // Track which mode was last sent to the backend so we avoid triggering an
   // unnecessary Gemini session restart on every mic tap.
   AgentMode? _lastSentMode;
@@ -323,6 +330,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       },
     );
 
+    // Pipe mic amplitude to the ValueNotifier for the orb visualizer.
+    _ampSub?.cancel();
+    _ampSub = _audio!.amplitudeStream.listen(
+      (amp) => amplitudeNotifier.value = amp,
+    );
+
     state = AsyncData(
       current.copyWith(
         isStreaming: true,
@@ -336,6 +349,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // chunks being sent over a half-closed socket.
     await _audioSub?.cancel();
     _audioSub = null;
+    _ampSub?.cancel();
+    _ampSub = null;
+    amplitudeNotifier.value = 0.0;
     await _audio?.stop();
     await _audio?.stopPlayback();
     state = AsyncData(
@@ -510,6 +526,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _msgSub?.cancel();
     _stateSub?.cancel();
     _audioSub?.cancel();
+    _ampSub?.cancel();
+    amplitudeNotifier.dispose();
     _ws?.dispose();
     _audio?.dispose();
   }
