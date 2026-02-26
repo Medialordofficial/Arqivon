@@ -93,9 +93,8 @@ class LiveSessionState {
       isResponding: isResponding ?? this.isResponding,
       mode: mode ?? this.mode,
       transcript: clearTranscript ? null : (transcript ?? this.transcript),
-      userTranscript: clearUserTranscript
-          ? null
-          : (userTranscript ?? this.userTranscript),
+      userTranscript:
+          clearUserTranscript ? null : (userTranscript ?? this.userTranscript),
       currentAction: clearAction ? null : (currentAction ?? this.currentAction),
       actionHistory: actionHistory ?? this.actionHistory,
       currentTranslation: clearTranslation
@@ -104,9 +103,8 @@ class LiveSessionState {
       translationHistory: translationHistory ?? this.translationHistory,
       sourceLang: sourceLang ?? this.sourceLang,
       targetLang: targetLang ?? this.targetLang,
-      currentTutorStep: clearTutorStep
-          ? null
-          : (currentTutorStep ?? this.currentTutorStep),
+      currentTutorStep:
+          clearTutorStep ? null : (currentTutorStep ?? this.currentTutorStep),
       tutorSteps: tutorSteps ?? this.tutorSteps,
       currentSupportTopic: currentSupportTopic ?? this.currentSupportTopic,
       supportTopics: supportTopics ?? this.supportTopics,
@@ -141,7 +139,21 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void setMode(AgentMode newMode) {
     final current = state.valueOrNull ?? const LiveSessionState();
-    state = AsyncData(current.copyWith(mode: newMode));
+    // Stop any in-flight playback from the old mode so stale audio doesn't
+    // bleed across modes during the video demo.
+    if (current.isResponding) {
+      _audio?.stopPlayback();
+    }
+    state = AsyncData(
+      current.copyWith(
+        mode: newMode,
+        isResponding: false,
+        clearTranslation: true,
+        clearAction: true,
+        clearTutorStep: true,
+        clearExport: true,
+      ),
+    );
     // Only tell the backend if the user is actively streaming; changing modes
     // while idle should not trigger a Gemini reconnect on the backend.
     if (current.isStreaming) {
@@ -470,11 +482,17 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'interrupted':
-        // User barged in — stop playback immediately and clear stale overlays.
+        // User barged in — stop playback immediately and clear ALL stale overlays.
         _log.info('interrupted received from backend');
         _audio?.stopPlayback();
         state = AsyncData(
-          current.copyWith(isResponding: false, clearTranslation: true),
+          current.copyWith(
+            isResponding: false,
+            clearTranslation: true,
+            clearAction: true,
+            clearTutorStep: true,
+            clearExport: true,
+          ),
         );
         break;
 
@@ -499,5 +517,5 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
 final liveSessionProvider =
     AutoDisposeAsyncNotifierProvider<LiveSessionNotifier, LiveSessionState>(
-      LiveSessionNotifier.new,
-    );
+  LiveSessionNotifier.new,
+);
