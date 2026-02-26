@@ -1,39 +1,62 @@
 graph TD
-    subgraph Flutter App
-        UI[UI / Smart Action Cards]
-        Cam[Camera Plugin 2fps]
-        Mic[Audio VAD]
-        Spk[Audio Player]
-        WS_Client[WebSocket Channel]
+    subgraph Mobile["📱 Flutter Mobile App"]
+        direction TB
+        UI["🎨 Mode-Specific UI\n• Smart Action Cards\n• Translation Overlay\n• Tutor Guidance\n• Support Tracker\n• Export Documents"]
+        Cam["📷 Camera Plugin\n2fps JPEG Frames"]
+        Mic["🎙️ Microphone\n16kHz PCM Audio"]
+        Spk["🔊 Audio Player\njust_audio WAV"]
+        ModeSel["🔄 Mode Selector\nAssistant | Translator\nTutor | Support"]
+        WS_Client["⚡ WebSocket Channel\nAuto-reconnect + Backoff"]
+        RivState["📦 Riverpod State\nLiveSessionNotifier"]
+        Export["📄 PDF Export\npdf + share_plus"]
     end
 
-    subgraph Google Cloud Run
-        FastAPI[FastAPI WebSocket Relay]
-        ToolReg[Agentic Tool Registry]
+    subgraph CloudRun["☁️ Google Cloud Run"]
+        direction TB
+        FastAPI["🚀 FastAPI Server\nWebSocket Relay"]
+        AuthMid["🔐 Firebase Auth\nToken Verification"]
+        ToolReg["🛠️ Tool Registry\n17 Agentic Tools"]
+        ModeLogic["🧠 Mode-Aware\nSystem Prompts"]
+        SessionMgr["📊 Session Manager\nPer-User Live Context"]
     end
 
-    subgraph Google AI
-        Gemini[Gemini 2.5 Flash Live API]
+    subgraph GeminiAPI["🤖 Google Gemini"]
+        Gemini["Gemini 2.5 Flash\nLive API\n(Native Audio)"]
+        GeminiLite["Gemini 2.0 Flash Lite\nSession Summary"]
     end
 
-    subgraph Firebase
-        Auth[Firebase Auth]
-        FS[Firestore Memories/Archive]
+    subgraph Firebase["🔥 Firebase"]
+        Auth["Firebase Auth\nGoogle · Apple · Email"]
+        Firestore["Cloud Firestore\n• Sessions Archive\n• Persistent Memories\n• User Settings"]
+        Hosting["Firebase Hosting\nLanding · Privacy · Terms"]
     end
 
-    Cam -->|Base64 JPEG| WS_Client
-    Mic -->|PCM Audio| WS_Client
-    WS_Client <-->|Bidirectional WS| FastAPI
-    
-    FastAPI <-->|GenAI SDK LiveConnect| Gemini
-    Gemini -->|Function Call| ToolReg
-    ToolReg -->|create_ui_action| FastAPI
-    FastAPI -->|ui_action JSON| WS_Client
-    WS_Client --> UI
-    
-    FastAPI -->|Audio Response| WS_Client
+    %% Mobile to Cloud Run
+    Cam -->|"Base64 JPEG\n(2 fps)"| WS_Client
+    Mic -->|"PCM Audio\n(16kHz)"| WS_Client
+    WS_Client <-->|"Bidirectional\nWebSocket (wss://)"| FastAPI
+    ModeSel --> RivState
+    RivState --> WS_Client
+
+    %% Auth flow
+    Auth -.->|"ID Token"| WS_Client
+    WS_Client -->|"Bearer Token"| AuthMid
+    AuthMid --> FastAPI
+
+    %% Cloud Run to Gemini
+    FastAPI <-->|"google-genai SDK\naio.live.connect()"| Gemini
+    Gemini -->|"Function Calls"| ToolReg
+    ToolReg -->|"Tool Response"| Gemini
+    FastAPI -->|"Transcript"| GeminiLite
+
+    %% Responses back to client
+    FastAPI -->|"Audio PCM"| WS_Client
     WS_Client --> Spk
-    
-    ToolReg -->|upsert_firestore_memory| FS
-    WS_Client -->|Auth| Auth
-    UI -->|Archive Fetch| FS
+    FastAPI -->|"UI Actions\n+ Mode Data"| WS_Client
+    WS_Client --> UI
+    UI --> Export
+
+    %% Firestore connections
+    ToolReg -->|"upsert_memory\nlog_resolution"| Firestore
+    FastAPI -->|"Save Session"| Firestore
+    RivState -->|"Fetch Archive"| Firestore

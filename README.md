@@ -116,8 +116,8 @@ Current AI assistants are trapped behind a text box. You type, wait, read. But r
 ```
 Arqivon/
 ├── backend/                          # Python FastAPI backend
-│   ├── main.py                       # WebSocket relay + Gemini Live sessions (759 LOC)
-│   ├── tool_registry.py              # 17 agentic tools across 4 modes (668 LOC)
+│   ├── main.py                       # WebSocket relay + Gemini Live sessions (855 LOC)
+│   ├── tool_registry.py              # 17 agentic tools across 4 modes (675 LOC)
 │   ├── models.py                     # Pydantic schemas (AgentMode, messages, sessions)
 │   ├── config.py                     # Environment-based settings
 │   ├── requirements.txt              # Python dependencies
@@ -162,7 +162,7 @@ Arqivon/
 │       │   ├── glassmorphic_card.dart       # Frosted-glass card wrapper
 │       │   └── session_tile.dart            # Mode-colored archive tiles
 │       └── screens/
-│           ├── live_screen.dart         # Camera + audio + mode overlays (721 LOC)
+│           ├── live_screen.dart         # Camera + audio + mode overlays (889 LOC)
 │           ├── home_screen.dart         # Home tab with mode selector
 │           ├── login_screen.dart        # Google/Apple Sign-In
 │           ├── settings_screen.dart     # Settings
@@ -175,10 +175,15 @@ Arqivon/
 ├── architecture.mmd                    # Mermaid diagram source
 ├── architecture.png                    # Rendered architecture diagram
 ├── demo_storyboard.md                  # Demo video script
+├── landing/                            # Landing page + Privacy Policy + Terms of Service
+│   ├── index.html
+│   ├── privacy.html
+│   ├── terms.html
+│   └── firebase.json
 └── README.md                           # This file
 ```
 
-**Codebase:** ~8,600 lines across 38 source files (34 Dart + 4 Python)
+**Codebase:** ~10,600 lines across 44 source files (39 Dart + 5 Python) — plus 1,067 lines of tests (99 unit tests, 7 test files)
 
 ---
 
@@ -271,6 +276,20 @@ Deploy Firestore rules:
 cd firebase
 firebase deploy --only firestore:rules,storage
 ```
+
+### 6. Landing Page (Privacy Policy & Terms)
+
+The landing page, privacy policy, and terms of service are hosted on Firebase Hosting:
+
+```bash
+cd landing
+firebase deploy --only hosting --project arqivon-inc
+```
+
+**Live URLs:**
+- Landing: https://arqivon-inc.web.app
+- Privacy Policy: https://arqivon-inc.web.app/privacy
+- Terms of Service: https://arqivon-inc.web.app/terms
 
 ---
 
