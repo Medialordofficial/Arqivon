@@ -878,6 +878,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         video encoding, rate-limit checks, or mode-switch reconnects.
         """
         nonlocal client_audio_count, _last_audio_time
+        consecutive_send_fails = 0
         while not cancel_event.is_set():
             try:
                 audio_bytes = await asyncio.wait_for(
@@ -893,6 +894,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             # Pause while a mode switch is in progress to avoid sending
             # to a closed session.
             if _switching.is_set() or session is None:
+                consecutive_send_fails = 0
                 continue
             tracer.start("audio_send")
             if client_audio_count % 50 == 1:
@@ -900,15 +902,40 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             client_audio_count, len(audio_bytes))
             try:
                 try:
-                    await session.send_realtime_input(
-                        audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                    await asyncio.wait_for(
+                        session.send_realtime_input(
+                            audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                        ),
+                        timeout=5.0,
                     )
                 except TypeError:
-                    await session.send_realtime_input(
-                        media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                    await asyncio.wait_for(
+                        session.send_realtime_input(
+                            media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                        ),
+                        timeout=5.0,
                     )
+                consecutive_send_fails = 0
+            except asyncio.TimeoutError:
+                consecutive_send_fails += 1
+                logger.warning("Audio send timed out (%d consecutive)", consecutive_send_fails)
+                if consecutive_send_fails >= 5:
+                    logger.error("5 consecutive audio send timeouts — forcing Gemini reconnect")
+                    try:
+                        await _reconnect_session(current_mode, source_lang, target_lang, current_voice)
+                        consecutive_send_fails = 0
+                    except Exception as re_exc:
+                        logger.error("Auto-reconnect in audio forwarder failed: %s", re_exc)
             except Exception as exc:
-                logger.debug("Audio send failed: %s", exc)
+                consecutive_send_fails += 1
+                logger.debug("Audio send failed (%d): %s", consecutive_send_fails, exc)
+                if consecutive_send_fails >= 10:
+                    logger.error("10 consecutive audio send failures — forcing Gemini reconnect")
+                    try:
+                        await _reconnect_session(current_mode, source_lang, target_lang, current_voice)
+                        consecutive_send_fails = 0
+                    except Exception as re_exc:
+                        logger.error("Auto-reconnect in audio forwarder failed: %s", re_exc)
             tracer.end("audio_send")
 
     # ── Video forwarder (latest-wins frame slot → Gemini) ──────────────
@@ -933,9 +960,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 continue
             tracer.start("frame_send")
             try:
-                await session.send_realtime_input(
-                    media=types.Blob(data=frame_data, mime_type="image/jpeg"),
+                await asyncio.wait_for(
+                    session.send_realtime_input(
+                        media=types.Blob(data=frame_data, mime_type="image/jpeg"),
+                    ),
+                    timeout=5.0,
                 )
+            except asyncio.TimeoutError:
+                logger.warning("Video frame send timed out")
             except Exception as exc:
                 logger.debug("Video frame send failed: %s", exc)
             tracer.end("frame_send")

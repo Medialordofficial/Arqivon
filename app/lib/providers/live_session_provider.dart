@@ -150,6 +150,18 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// messages to the backend when the user taps modes quickly.
   Timer? _modeSwitchDebounce;
 
+  // ── Watchdog timers ────────────────────────────────────────────────
+  /// Detects when the Android recorder silently dies (no onDone, no data).
+  Timer? _recorderWatchdog;
+  int _lastWatchdogChunkCount = 0;
+  int _watchdogStallCount = 0;
+
+  /// Detects when the backend/Gemini stops responding entirely.
+  Timer? _responseWatchdog;
+  int _lastResponseChunkCount = 0;
+  int _serverMessageCount = 0;
+  int _lastWatchdogServerMsgCount = 0;
+
   /// Accumulated user/AI text within the current Gemini turn.
   /// Saved as ChatMessages on turn_complete.
   final List<String> _turnUserTexts = [];
@@ -280,10 +292,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       await _ws!.connect();
       // Create player eagerly so AI audio plays even before mic is started.
       _audio ??= AudioService();
-      // NOTE: do NOT send set_mode here — that forces a Gemini reconnect before
-      // the user has started speaking and causes the second set_mode from
-      // startSession() to race against it, resulting in silence.
-      // Reset mode tracking so first startSession() will send the correct mode.
+      // Do NOT send set_mode here. Gemini must be connected fresh at the
+      // exact moment audio starts flowing (in startSession). Pre-warming
+      // creates a stale session that silently drops audio.
       _lastSentMode = null;
     } catch (e, st) {
       _log.severe('connectOnly failed', e, st);
@@ -413,10 +424,92 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(
       current.copyWith(
         isStreaming: true,
-        isMuted: true, // Start muted — user must tap mic to unmute
+        isMuted: false, // Start listening immediately — one tap to go
         connectionState: WsConnectionState.connected,
       ),
     );
+
+    // ── Start watchdog timers ─────────────────────────────────────────
+    _startWatchdogs();
+  }
+
+  void _startWatchdogs() {
+    _stopWatchdogs();
+
+    // Recorder watchdog: every 3s check if audio chunks are flowing.
+    _lastWatchdogChunkCount = _audioChunksSent;
+    _watchdogStallCount = 0;
+    _recorderWatchdog = Timer.periodic(const Duration(seconds: 3), (_) {
+      final cur = state.valueOrNull;
+      if (cur == null || !cur.isStreaming || cur.isMuted) {
+        _lastWatchdogChunkCount = _audioChunksSent;
+        _watchdogStallCount = 0;
+        return;
+      }
+      if (_audioChunksSent == _lastWatchdogChunkCount) {
+        _watchdogStallCount++;
+        _log.warning(
+          'Recorder watchdog: no new chunks for ${_watchdogStallCount * 3}s '
+          '(total=$_audioChunksSent) — force-restarting recorder',
+        );
+        _audio?.ensureRecording();
+      } else {
+        _watchdogStallCount = 0;
+      }
+      _lastWatchdogChunkCount = _audioChunksSent;
+    });
+
+    // Response watchdog: every 10s check if server is responding.
+    _lastWatchdogServerMsgCount = _serverMessageCount;
+    _lastResponseChunkCount = _audioChunksSent;
+    _responseWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
+      final cur = state.valueOrNull;
+      if (cur == null || !cur.isStreaming || cur.isMuted) {
+        _lastWatchdogServerMsgCount = _serverMessageCount;
+        _lastResponseChunkCount = _audioChunksSent;
+        return;
+      }
+      // Only trigger if we've been sending audio but got zero responses.
+      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 50;
+      final noResponse = _serverMessageCount == _lastWatchdogServerMsgCount;
+      if (sentAudio && noResponse) {
+        _log.warning(
+          'Response watchdog: sent audio but no server messages for 10s — '
+          'forcing session restart',
+        );
+        _forceSessionRestart();
+      }
+      _lastWatchdogServerMsgCount = _serverMessageCount;
+      _lastResponseChunkCount = _audioChunksSent;
+    });
+  }
+
+  void _stopWatchdogs() {
+    _recorderWatchdog?.cancel();
+    _recorderWatchdog = null;
+    _responseWatchdog?.cancel();
+    _responseWatchdog = null;
+  }
+
+  /// Tear down and restart the entire audio + Gemini session.
+  Future<void> _forceSessionRestart() async {
+    _log.warning('Force-restarting session');
+    _stopWatchdogs();
+    // Send end_session so the backend saves what it has.
+    _ws?.send(const WsInbound(type: 'end_session'));
+    // Brief pause for the backend to process.
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Tear down audio.
+    await _audioSub?.cancel();
+    _audioSub = null;
+    _ampSub?.cancel();
+    _ampSub = null;
+    await _audio?.stop();
+    await _audio?.stopPlayback();
+    // Force _lastSentMode to null so startSession() sends a fresh set_mode.
+    _lastSentMode = null;
+    // Restart.
+    await startSession();
   }
 
   /// Toggle the microphone mute state. When muted, audio chunks are
@@ -430,6 +523,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   }
 
   Future<void> stopSession() async {
+    _stopWatchdogs();
     // Cancel the audio subscription before stopping capture to prevent stale
     // chunks being sent over a half-closed socket.
     await _audioSub?.cancel();
@@ -489,6 +583,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   void _handleServerMessage(WsOutbound msg) {
     final current = state.valueOrNull ?? const LiveSessionState();
     _trackLatency(msg);
+    // Count all non-pong messages for the response watchdog.
+    if (msg.type != 'pong') _serverMessageCount++;
 
     switch (msg.type) {
       case 'audio':
@@ -659,6 +755,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   }
 
   void _cleanup() {
+    _stopWatchdogs();
     _msgSub?.cancel();
     _stateSub?.cancel();
     _audioSub?.cancel();
