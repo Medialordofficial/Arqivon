@@ -30,6 +30,14 @@ class AudioService {
   bool _isCapturing = false;
   bool _disposed = false;
 
+  // ── 100 ms audio chunking ring buffer ──────────────────────────────
+  // The `record` package emits variable-size PCM chunks. We accumulate
+  // them and emit exact 100 ms chunks (3 200 bytes at 16 kHz mono 16-bit)
+  // for consistent Gemini VAD behaviour and optimal bandwidth while
+  // keeping input latency under 100 ms.
+  static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
+  final List<int> _recordRing = [];
+
   // ── Playback (fresh per turn) ──────────────────────────────────────
   AudioPlayer? _turnPlayer;
   ConcatenatingAudioSource? _turnPlaylist;
@@ -39,8 +47,8 @@ class AudioService {
   // PCM accumulation buffer – flushed periodically into WAV temp files.
   final List<int> _pcmBuffer = [];
   Timer? _flushTimer;
-  static const int _flushIntervalMs = 250;
-  static const int _minFlushBytes = 2400; // ~50 ms @ 24 kHz 16-bit mono
+  static const int _flushIntervalMs = 40; // lower = faster first-audio
+  static const int _minFlushBytes = 480; // ~10 ms @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
 
@@ -118,6 +126,7 @@ class AudioService {
 
       _isCapturing = true;
       _recordChunkCount = 0;
+      _recordRing.clear();
       _recordSub?.cancel();
       _recordSub = stream.listen(
         (data) {
@@ -127,8 +136,16 @@ class AudioService {
               'recorder data chunk #$_recordChunkCount (${data.length} bytes)',
             );
           }
-          if (!_audioController.isClosed) {
-            _audioController.add(base64Encode(data));
+          // ── Ring-buffer: accumulate then emit exact 100ms chunks ──
+          _recordRing.addAll(data);
+          while (_recordRing.length >= _chunkTargetBytes) {
+            final chunk = Uint8List.fromList(
+              _recordRing.sublist(0, _chunkTargetBytes),
+            );
+            _recordRing.removeRange(0, _chunkTargetBytes);
+            if (!_audioController.isClosed) {
+              _audioController.add(base64Encode(chunk));
+            }
           }
           // Compute RMS amplitude for the orb visualizer.
           if (!_amplitudeController.isClosed && data.length >= 2) {
@@ -169,10 +186,21 @@ class AudioService {
   }
 
   /// Stop microphone capture.
+  ///
+  /// Flushes any residual bytes in the ring buffer so the last partial
+  /// chunk of user speech is not silently dropped.
   Future<void> stop() async {
     _isCapturing = false;
     _recordSub?.cancel();
     _recordSub = null;
+    // Flush residual ring-buffer bytes so the user's last syllable
+    // isn't lost. Gemini handles variable-size chunks fine.
+    if (_recordRing.isNotEmpty && !_audioController.isClosed) {
+      final residual = Uint8List.fromList(_recordRing);
+      _audioController.add(base64Encode(residual));
+      _log.info('flushed ${_recordRing.length} residual ring-buffer bytes');
+      _recordRing.clear();
+    }
     try {
       await _recorder.stop();
     } catch (e) {
@@ -209,13 +237,24 @@ class AudioService {
     final bytes = base64Decode(base64Audio);
     _pcmBuffer.addAll(bytes);
 
-    // Debounce: flush after a short idle window so we accumulate small chunks
-    // into a larger WAV.
-    _flushTimer?.cancel();
-    _flushTimer = Timer(
-      const Duration(milliseconds: _flushIntervalMs),
-      _flushPartial,
-    );
+    // Throttle (NOT debounce): start a timer on the first chunk, and
+    // do NOT reset it when subsequent chunks arrive. This guarantees
+    // audio starts playing within _flushIntervalMs of the very first
+    // chunk, even if Gemini sends chunks in rapid succession.
+    if (_flushTimer == null || !_flushTimer!.isActive) {
+      _flushTimer = Timer(
+        const Duration(milliseconds: _flushIntervalMs),
+        _flushPartial,
+      );
+    }
+    // Hard cap: if buffer grows beyond 0.5 s of audio (24 000 bytes at
+    // 24 kHz 16-bit mono), flush immediately to prevent unbounded
+    // buffering during fast Gemini responses.
+    if (_pcmBuffer.length >= 24000) {
+      _flushTimer?.cancel();
+      _flushTimer = null;
+      _flushPartial();
+    }
   }
 
   /// Write buffered PCM to a temp WAV file, add it to the turn's playlist,
@@ -389,28 +428,34 @@ class AudioService {
     _playbackStarted = false;
 
     final player = _turnPlayer;
+    final files = List<String>.from(_tempFiles);
     _turnPlayer = null;
     _turnPlaylist = null;
+    _tempFiles.clear();
 
+    // Stop the player synchronously for instant silence, then dispose in
+    // the background so we return fast and the caller can restart the
+    // recorder without audio-focus contention.
     try {
       await player?.stop();
     } catch (e) {
       _log.fine('stopPlayback stop: $e');
     }
-    try {
-      await player?.dispose();
-    } catch (e) {
-      _log.fine('stopPlayback dispose: $e');
-    }
-
-    for (final path in _tempFiles) {
+    // Dispose player + delete temp files in background to not block caller.
+    unawaited(Future(() async {
       try {
-        await File(path).delete();
+        await player?.dispose();
       } catch (e) {
-        _log.fine('stopPlayback file delete: $e');
+        _log.fine('stopPlayback dispose: $e');
       }
-    }
-    _tempFiles.clear();
+      for (final path in files) {
+        try {
+          await File(path).delete();
+        } catch (e) {
+          _log.fine('stopPlayback file delete: $e');
+        }
+      }
+    }));
     _log.info('playback stopped (barge-in)');
   }
 

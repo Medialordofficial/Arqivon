@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/logger.dart';
 import '../providers/auth_provider.dart';
 
-/// Sign-in / create-account screen — dark Indigo design.
+/// Sign-in / create-account screen — warm golden design.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -100,7 +100,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Password reset email sent!'),
-            backgroundColor: Color(0xFF10B981),
+            backgroundColor: Color(0xFF5DAE4E),
           ),
         );
       }
@@ -128,7 +128,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B0F1A) : cs.surface,
+      backgroundColor:
+          isDark ? const Color(0xFF1A130D) : const Color(0xFFFFF8F0),
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
@@ -137,16 +138,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF0B0F1A),
-                    Color(0xFF131929),
-                    Color(0xFF1A1F35)
+                    Color(0xFF1A130D),
+                    Color(0xFF251C14),
+                    Color(0xFF2A1F15)
                   ],
                 )
-              : LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [cs.surface, cs.surfaceContainerHighest],
-                ),
+              : null,
+          color: isDark ? null : const Color(0xFFFFF8F0),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
@@ -170,13 +168,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               gradient: const LinearGradient(
-                                colors: [Color(0xFF5B5FEF), Color(0xFF0EA5E9)],
+                                colors: [Color(0xFFC98B4E), Color(0xFFE8943A)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF5B5FEF)
+                                  color: const Color(0xFFC98B4E)
                                       .withValues(alpha: 0.4),
                                   blurRadius: 24,
                                   offset: const Offset(0, 8),
@@ -350,8 +348,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: FilledButton(
                         onPressed: _loading ? null : _submitEmail,
                         style: FilledButton.styleFrom(
-                          backgroundColor: cs.primary,
-                          disabledBackgroundColor: const Color(0xFF2D3256),
+                          backgroundColor: const Color(0xFFC98B4E),
+                          disabledBackgroundColor: isDark
+                              ? const Color(0xFF3A2A1A)
+                              : const Color(0xFFE8D5C0),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
                           elevation: 0,
@@ -504,8 +504,9 @@ class _DarkField extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
     final fillColor =
-        isDark ? const Color(0xFF1E2640) : cs.surfaceContainerHighest;
-    final borderColor = isDark ? const Color(0xFF2D3A5A) : cs.outline;
+        isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
+    final borderColor =
+        isDark ? const Color(0xFF4A3A2A) : const Color(0xFFF0E0D0);
     final hintColor = cs.onSurface.withValues(alpha: 0.5);
 
     return TextFormField(
@@ -579,9 +580,9 @@ class _SocialBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
-    final bgColor =
-        isDark ? const Color(0xFF1E2640) : cs.surfaceContainerHighest;
-    final borderColor = isDark ? const Color(0xFF2D3A5A) : cs.outline;
+    final bgColor = isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
+    final borderColor =
+        isDark ? const Color(0xFF4A3A2A) : const Color(0xFFF0E0D0);
 
     return GestureDetector(
       onTap: onTap,
@@ -620,7 +621,7 @@ class _GoogleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final centerColor =
-        isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9);
+        isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
     return SizedBox(
         width: 22,
         height: 22,

@@ -83,7 +83,10 @@ class WebSocketService {
   void send(WsInbound message) {
     if (_state != WsConnectionState.connected || _channel == null) return;
     try {
-      _channel!.sink.add(jsonEncode(message.toJson()));
+      final json = message.toJson();
+      // Inject epoch-seconds timestamp for server-side latency measurement.
+      json['timestamp'] = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      _channel!.sink.add(jsonEncode(json));
     } catch (e) {
       _log.severe('Send error', e);
     }

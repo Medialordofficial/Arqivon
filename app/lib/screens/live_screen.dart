@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../config/constants.dart';
 import '../config/logger.dart';
 import '../main.dart';
 import '../models/agent_mode.dart';
+import '../models/chat_message.dart';
 import '../providers/live_session_provider.dart';
 import '../services/action_handler_service.dart';
 import '../services/websocket_service.dart';
@@ -42,21 +44,29 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   CameraController? _cameraController;
   Timer? _frameTimer;
   bool _cameraReady = false;
+  bool _isCapturingFrame = false;
   final TextEditingController _textController = TextEditingController();
   bool _showTextInput = false;
   _LiveInputMode _inputMode = _LiveInputMode.audioOnly;
   int _consecutiveFrameFailures = 0;
   static const _maxConsecutiveFrameFailures = 10;
 
+  final ScrollController _chatScrollController = ScrollController();
+
+  // ── Adaptive video frame rate ─────────────────────────────────────
+  Duration _currentFrameInterval = AppConstants.frameCaptureInterval;
+  static const Duration _minFrameInterval =
+      Duration(milliseconds: 250); // ~4 fps
+  static const Duration _maxFrameInterval =
+      Duration(milliseconds: 800); // ~1.25 fps
+  int _fastFrameCount = 0;
+  int _slowFrameCount = 0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Stop audio/video when user navigates away from the Live tab.
     widget.tabNotifier.addListener(_onTabChanged);
-    // Camera init deferred to when audio+video mode is selected.
-    // WebSocket pre-connect: runs on first frame only (not at app startup
-    // since MainNavigator now lazy-builds this screen).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(liveSessionProvider.notifier).connectOnly();
     });
@@ -64,7 +74,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   void _onTabChanged() {
     if (widget.tabNotifier.index != 1) {
-      // User navigated away from Live tab — stop session.
       final current = ref.read(liveSessionProvider).valueOrNull;
       if (current?.isStreaming ?? false) {
         _stopFrameCapture();
@@ -92,8 +101,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       if (cameras.isEmpty) return;
       _cameraController = CameraController(
         cameras.first,
-        ResolutionPreset.medium,
-        enableAudio: false, // we record audio separately
+        ResolutionPreset.low,
+        enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
       await _cameraController!.initialize();
@@ -105,10 +114,18 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   void _startFrameCapture() {
     _frameTimer?.cancel();
-    _frameTimer = Timer.periodic(
-      AppConstants.frameCaptureInterval,
-      (_) => _captureAndSendFrame(),
-    );
+    _currentFrameInterval = AppConstants.frameCaptureInterval;
+    _fastFrameCount = 0;
+    _slowFrameCount = 0;
+    _scheduleNextFrame();
+  }
+
+  void _scheduleNextFrame() {
+    _frameTimer?.cancel();
+    _frameTimer = Timer(_currentFrameInterval, () async {
+      await _captureAndSendFrame();
+      if (_frameTimer != null) _scheduleNextFrame();
+    });
   }
 
   void _stopFrameCapture() {
@@ -117,26 +134,59 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   }
 
   Future<void> _captureAndSendFrame() async {
+    if (_isCapturingFrame) return;
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
+    _isCapturingFrame = true;
+    final sw = Stopwatch()..start();
     try {
       final file = await _cameraController!.takePicture();
       final bytes = await file.readAsBytes();
       final b64 = base64Encode(bytes);
       ref.read(liveSessionProvider.notifier).sendVideoFrame(b64);
       _consecutiveFrameFailures = 0;
+
+      final elapsedMs = sw.elapsedMilliseconds;
+      if (elapsedMs > 400) {
+        _slowFrameCount++;
+        _fastFrameCount = 0;
+        if (_slowFrameCount >= 3 && _currentFrameInterval < _maxFrameInterval) {
+          _currentFrameInterval = Duration(
+            milliseconds:
+                (_currentFrameInterval.inMilliseconds * 1.5).toInt().clamp(
+                      _minFrameInterval.inMilliseconds,
+                      _maxFrameInterval.inMilliseconds,
+                    ),
+          );
+          _slowFrameCount = 0;
+        }
+      } else if (elapsedMs < 200) {
+        _fastFrameCount++;
+        _slowFrameCount = 0;
+        if (_fastFrameCount >= 5 && _currentFrameInterval > _minFrameInterval) {
+          _currentFrameInterval = Duration(
+            milliseconds:
+                (_currentFrameInterval.inMilliseconds * 0.8).toInt().clamp(
+                      _minFrameInterval.inMilliseconds,
+                      _maxFrameInterval.inMilliseconds,
+                    ),
+          );
+          _fastFrameCount = 0;
+        }
+      }
     } catch (e) {
       _consecutiveFrameFailures++;
       if (_consecutiveFrameFailures >= _maxConsecutiveFrameFailures) {
         _log.warning(
-          'Camera capture failed $_consecutiveFrameFailures times consecutively, '
-          'stopping frame capture: $e',
+          'Camera capture failed $_consecutiveFrameFailures times, stopping: $e',
         );
         _stopFrameCapture();
       } else {
         _log.fine('Frame capture failed ($_consecutiveFrameFailures): $e');
       }
+    } finally {
+      _isCapturingFrame = false;
     }
   }
 
@@ -149,7 +199,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       _stopFrameCapture();
       await notifier.stopSession();
     } else {
-      // Check microphone permission before starting
       final micStatus = await Permission.microphone.request();
       if (!micStatus.isGranted) {
         if (mounted) {
@@ -178,7 +227,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
         return;
       }
       await notifier.startSession();
-      // Only stream video frames in A/V mode
       if (_inputMode == _LiveInputMode.audioVideo) {
         _startFrameCapture();
       }
@@ -190,7 +238,20 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     if (text.isEmpty) return;
     ref.read(liveSessionProvider.notifier).sendText(text);
     _textController.clear();
-    setState(() => _showTextInput = false);
+  }
+
+  void _scrollToBottom() {
+    if (_chatScrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_chatScrollController.hasClients) {
+          _chatScrollController.animateTo(
+            _chatScrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -200,14 +261,17 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     _frameTimer?.cancel();
     _cameraController?.dispose();
     _textController.dispose();
+    _chatScrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(liveSessionProvider);
+    final theme = Theme.of(context);
+    final bottomPad = MediaQuery.of(context).padding.bottom;
 
-    // Show error SnackBar when session enters AsyncError state.
+    // ── Listeners ──────────────────────────────────────────────────
     ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
       if (next is AsyncError && prev is! AsyncError) {
         final errMsg = next.error?.toString() ?? 'Unknown error';
@@ -215,10 +279,10 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
           SnackBar(
             content: Text(errMsg),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: theme.colorScheme.error,
             action: SnackBarAction(
               label: 'Retry',
-              textColor: Theme.of(context).colorScheme.onError,
+              textColor: theme.colorScheme.onError,
               onPressed: () {
                 ref.read(liveSessionProvider.notifier).connectOnly();
               },
@@ -228,9 +292,49 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       }
     });
 
+    ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
+      final oldMode = prev?.valueOrNull?.mode;
+      final newMode = next.valueOrNull?.mode;
+      if (oldMode != null && newMode != null && oldMode != newMode) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(newMode.icon, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Text(
+                  'Switched to ${newMode.label}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: newMode.color,
+            duration: const Duration(seconds: 2),
+            margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    });
+
+    // Auto-scroll on new messages
+    ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
+      final oldLen = prev?.valueOrNull?.chatMessages.length ?? 0;
+      final newLen = next.valueOrNull?.chatMessages.length ?? 0;
+      if (newLen > oldLen) _scrollToBottom();
+    });
+
     final session = sessionAsync.valueOrNull;
     final isStreaming = session?.isStreaming ?? false;
     final isResponding = session?.isResponding ?? false;
+    final isMuted = session?.isMuted ?? true;
     final connectionState =
         session?.connectionState ?? WsConnectionState.disconnected;
     final currentAction = session?.currentAction;
@@ -242,543 +346,483 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     final currentSupportTopic = session?.currentSupportTopic;
     final supportTopics = session?.supportTopics ?? [];
     final pendingExport = session?.pendingExport;
+    final chatMessages = session?.chatMessages ?? [];
+
+    const orbSize = 180.0;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ── Background ──────────────────────────────────────────
-          if (_inputMode == _LiveInputMode.audioVideo &&
-              _cameraReady &&
-              _cameraController != null)
-            ClipRRect(child: CameraPreview(_cameraController!))
-          else
-            // Theme-aware background
-            Container(color: Theme.of(context).scaffoldBackgroundColor),
-
-          // ── Gradient scrim (camera mode only) ─────────────────────
-          if (_inputMode == _LiveInputMode.audioVideo)
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.85),
-                    ],
-                    stops: const [0, 0.2, 0.55, 1.0],
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Bottom fade scrim (always) ─────────────────────────────
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 200,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Theme.of(
-                      context,
-                    ).scaffoldBackgroundColor.withValues(alpha: 0.95),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Top bar: connection + LIVE badge ───────────────────────
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 16,
-            right: 16,
-            child: Row(
-              children: [
-                ConnectionIndicator(state: connectionState),
-                const Spacer(),
-                if (isStreaming)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.fiber_manual_record,
-                          size: 10,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          mode.label.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Mode selector strip ────────────────────────────────────
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 44,
-            left: 0,
-            right: 0,
-            child: ModeSelectorStrip(
-              selectedMode: mode,
-              isStreaming: isStreaming,
-              onModeSelected: (m) {
-                ref.read(liveSessionProvider.notifier).setMode(m);
-              },
-            ),
-          ),
-
-          // ── Translator: live translation subtitle ──────────────────
-          if (mode == AgentMode.translator && currentTranslation != null)
-            Positioned(
-              top: MediaQuery.of(context).padding.top +
-                  (transcript != null && transcript.isNotEmpty ? 170 : 94),
-              left: 0,
-              right: 0,
-              child: TranslationOverlayWidget(overlay: currentTranslation),
-            ),
-
-          // ── Support: topic tracker ──────────────────────────────────
-          if (mode == AgentMode.support && currentSupportTopic != null)
-            Positioned(
-              top: MediaQuery.of(context).padding.top +
-                  (transcript != null && transcript.isNotEmpty ? 170 : 94),
-              left: 0,
-              right: 0,
-              child: SupportTopicTracker(
-                currentTopic: currentSupportTopic,
-                allTopics: supportTopics,
-              ),
-            ),
-
-          // ── Smart Action Card overlay ───────────────────────────────
-          if (currentAction != null)
-            Positioned(
-              bottom: 220,
-              left: 0,
-              right: 0,
-              child: SmartActionCard(
-                action: currentAction,
-                onDismiss: () =>
-                    ref.read(liveSessionProvider.notifier).dismissAction(),
-                onPrimaryAction: () async {
-                  HapticFeedback.mediumImpact();
-                  ref.read(liveSessionProvider.notifier).dismissAction();
-                  final result = await ActionHandlerService.execute(
-                    currentAction,
-                    context,
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                },
-              ),
-            ),
-
-          // ── Tutor: guidance card ────────────────────────────────────
-          if (mode == AgentMode.tutor && currentTutorStep != null)
-            Positioned(
-              bottom: 220,
-              left: 0,
-              right: 0,
-              child: TutorGuidanceCard(
-                step: currentTutorStep,
-                onDismiss: () =>
-                    ref.read(liveSessionProvider.notifier).dismissTutorStep(),
-                onRequestHint: () {
-                  ref
-                      .read(liveSessionProvider.notifier)
-                      .sendText('Can you give me a hint for the current step?');
-                },
-              ),
-            ),
-
-          // ── Export: document export card ────────────────────────────
-          if (pendingExport != null)
-            Positioned(
-              bottom: 220,
-              left: 0,
-              right: 0,
-              child: ExportDocumentCard(
-                doc: pendingExport,
-                onDismiss: () =>
-                    ref.read(liveSessionProvider.notifier).dismissExport(),
-              ),
-            ),
-
-          // ── User speech (above orb) ───────────────────────────
-          if (userTranscript != null && userTranscript.isNotEmpty)
-            Positioned(
-              left: 32,
-              right: 32,
-              top: MediaQuery.of(context).padding.top + 100,
-              child: Text(
-                userTranscript,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.50),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  fontStyle: FontStyle.italic,
-                  height: 1.4,
-                ),
-              ),
-            ),
-
-          // ── Centered orb — always visible ─────────────────────────
-          Positioned.fill(
-            child: Align(
-              alignment: const Alignment(0, -0.20),
-              child: ValueListenableBuilder<double>(
-                valueListenable:
-                    ref.read(liveSessionProvider.notifier).amplitudeNotifier,
-                builder: (context, amplitude, _) => LiveWave(
-                  isListening: isStreaming && !isResponding,
-                  isResponding: isResponding,
-                  amplitude: amplitude,
-                  color: mode.color,
-                  size: 270,
-                ),
-              ),
-            ),
-          ),
-
-          // ── Idle prompt / transcript beneath orb ───────────────────
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 190,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (transcript != null && transcript.isNotEmpty)
-                  Text(
-                    transcript,
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      height: 1.35,
-                      letterSpacing: -0.3,
-                    ),
-                  )
-                else
-                  Text(
-                    isResponding
-                        ? 'Responding…'
-                        : isStreaming
-                            ? 'Listening…'
-                            : 'Go ahead, I\'m ready to assist',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isResponding
-                          ? Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.85)
-                          : Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.50),
-                      fontSize: 16,
-                      fontWeight:
-                          isResponding ? FontWeight.w500 : FontWeight.w400,
-                      letterSpacing: 0.1,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Bottom area: mic + text input ──────────────────────────
-          Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 16,
-            left: 0,
-            right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Input mode toggle pill
-                if (!isStreaming)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.10),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _InputModeChip(
-                          label: 'Audio',
-                          icon: Icons.mic_rounded,
-                          selected: _inputMode == _LiveInputMode.audioOnly,
-                          onTap: () => setState(
-                            () => _inputMode = _LiveInputMode.audioOnly,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        _InputModeChip(
-                          label: 'Audio + Video',
-                          icon: Icons.videocam_rounded,
-                          selected: _inputMode == _LiveInputMode.audioVideo,
-                          onTap: () {
-                            setState(
-                              () => _inputMode = _LiveInputMode.audioVideo,
-                            );
-                            // Init camera on first switch to A/V mode.
-                            if (!_cameraReady) _initCamera();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Side controls + mic button row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+      resizeToAvoidBottomInset: true,
+      body: Container(
+        color: theme.scaffoldBackgroundColor,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // ══════════════════════════════════════════════════════
+              // TOP BAR: connection + mode badge
+              // ══════════════════════════════════════════════════════
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
                   children: [
-                    // Camera flip (A/V mode) or mode indicator
-                    _controlButton(
-                      icon: _inputMode == _LiveInputMode.audioVideo
-                          ? Icons.flip_camera_ios_rounded
-                          : mode.icon,
-                      semanticLabel: _inputMode == _LiveInputMode.audioVideo
-                          ? 'Flip camera'
-                          : '${mode.label} mode',
-                      onPressed: _inputMode == _LiveInputMode.audioVideo
-                          ? () async {
-                              final cameras = await availableCameras();
-                              if (cameras.length < 2) return;
-                              final current = _cameraController?.description;
-                              final next = cameras.firstWhere(
-                                (c) =>
-                                    c.lensDirection != current?.lensDirection,
-                                orElse: () => cameras.first,
-                              );
-                              // Pause frame capture to prevent race condition
-                              _stopFrameCapture();
-                              await _cameraController?.dispose();
-                              _cameraController = CameraController(
-                                next,
-                                ResolutionPreset.medium,
-                                enableAudio: false,
-                              );
-                              await _cameraController!.initialize();
-                              if (mounted) {
-                                setState(() {});
-                                // Resume frame capture if streaming
-                                final isCurrentlyStreaming = ref
-                                        .read(liveSessionProvider)
-                                        .valueOrNull
-                                        ?.isStreaming ??
-                                    false;
-                                if (isCurrentlyStreaming) _startFrameCapture();
-                              }
-                            }
-                          : null, // mode icon is decorative in audio-only
-                    ),
-
-                    // ── Main mic / stop button ──────────────────────
-                    Semantics(
-                      label:
-                          isStreaming ? 'Stop session' : 'Start live session',
-                      button: true,
-                      child: GestureDetector(
-                        onTap: () {
-                          HapticFeedback.heavyImpact();
-                          _toggleSession();
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: isResponding
-                                ? const LinearGradient(
-                                    colors: [
-                                      Color(0xFF00BCD4),
-                                      Color(0xFF7C3AED),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  )
-                                : isStreaming
-                                    ? null
-                                    : const LinearGradient(
-                                        colors: [
-                                          Color(0xFF7C3AED),
-                                          Color(0xFF5B5FEF),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                            color: !isResponding && isStreaming
-                                ? Colors.red
-                                : null,
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isResponding
-                                        ? const Color(0xFF00BCD4)
-                                        : isStreaming
-                                            ? Colors.red
-                                            : const Color(0xFF5B5FEF))
-                                    .withValues(alpha: 0.50),
-                                blurRadius: 28,
-                                spreadRadius: 6,
+                    ConnectionIndicator(state: connectionState),
+                    const Spacer(),
+                    if (isStreaming)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.fiber_manual_record,
+                                size: 10, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              mode.label.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
                               ),
-                            ],
-                          ),
-                          child: Icon(
-                            isResponding
-                                ? Icons.record_voice_over_rounded
-                                : isStreaming
-                                    ? Icons.stop_rounded
-                                    : Icons.mic_rounded,
-                            size: 32,
-                            color: Colors.white,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // ══════════════════════════════════════════════════════
+              // MODE SELECTOR STRIP
+              // ══════════════════════════════════════════════════════
+              ModeSelectorStrip(
+                selectedMode: mode,
+                isStreaming: isStreaming,
+                onModeSelected: (m) {
+                  ref.read(liveSessionProvider.notifier).setMode(m);
+                },
+              ),
+
+              const SizedBox(height: 4),
+
+              // ══════════════════════════════════════════════════════
+              // MAIN CONTENT: chat + overlays + orb
+              // ══════════════════════════════════════════════════════
+              Expanded(
+                child: Stack(
+                  children: [
+                    // ── Camera preview background (A/V mode) ─────────
+                    if (_inputMode == _LiveInputMode.audioVideo &&
+                        _cameraReady &&
+                        _cameraController != null) ...[
+                      Positioned.fill(
+                        child:
+                            ClipRRect(child: CameraPreview(_cameraController!)),
+                      ),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.40),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.75),
+                              ],
+                              stops: const [0, 0.15, 0.6, 1.0],
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
 
-                    // Keyboard toggle (right side)
-                    _controlButton(
-                      icon: Icons.keyboard_rounded,
-                      semanticLabel:
-                          _showTextInput ? 'Hide keyboard' : 'Show keyboard',
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => _showTextInput = !_showTextInput);
-                      },
+                    // ── Chat + bottom controls column ──────────────────
+                    Column(
+                      children: [
+                        // ── Chat area ──────────────────────────────────
+                        Expanded(
+                          child: chatMessages.isEmpty && !isStreaming
+                              ? _buildEmptyState(theme, mode)
+                              : _buildChatList(
+                                  theme,
+                                  chatMessages,
+                                  transcript,
+                                  userTranscript,
+                                  isResponding,
+                                  isStreaming,
+                                ),
+                        ),
+
+                        // ── Mode-specific overlays ────────────────────
+                        if (mode == AgentMode.translator &&
+                            currentTranslation != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: TranslationOverlayWidget(
+                                overlay: currentTranslation),
+                          ),
+
+                        if (mode == AgentMode.support &&
+                            currentSupportTopic != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: SupportTopicTracker(
+                              currentTopic: currentSupportTopic,
+                              allTopics: supportTopics,
+                            ),
+                          ),
+
+                        // ── Action / tutor / export cards ─────────────
+                        if (currentAction != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: SmartActionCard(
+                              action: currentAction,
+                              onDismiss: () => ref
+                                  .read(liveSessionProvider.notifier)
+                                  .dismissAction(),
+                              onPrimaryAction: () async {
+                                HapticFeedback.mediumImpact();
+                                ref
+                                    .read(liveSessionProvider.notifier)
+                                    .dismissAction();
+                                final result =
+                                    await ActionHandlerService.execute(
+                                  currentAction,
+                                  context,
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(result),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+
+                        if (mode == AgentMode.tutor && currentTutorStep != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: TutorGuidanceCard(
+                              step: currentTutorStep,
+                              onDismiss: () => ref
+                                  .read(liveSessionProvider.notifier)
+                                  .dismissTutorStep(),
+                              onRequestHint: () {
+                                ref.read(liveSessionProvider.notifier).sendText(
+                                    'Can you give me a hint for the current step?');
+                              },
+                            ),
+                          ),
+
+                        if (pendingExport != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: ExportDocumentCard(
+                              doc: pendingExport,
+                              onDismiss: () => ref
+                                  .read(liveSessionProvider.notifier)
+                                  .dismissExport(),
+                            ),
+                          ),
+
+                        // ══════════════════════════════════════════════
+                        // BOTTOM: Orb with action ring + status + input
+                        // ══════════════════════════════════════════════
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                theme.scaffoldBackgroundColor
+                                    .withValues(alpha: 0.0),
+                                theme.scaffoldBackgroundColor,
+                              ],
+                              stops: const [0.0, 0.3],
+                            ),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.only(bottom: bottomPad + 4),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // ── Orb with action ring ────────────
+                                _OrbWithControls(
+                                  orbSize: orbSize,
+                                  isStreaming: isStreaming,
+                                  isResponding: isResponding,
+                                  isMuted: isMuted,
+                                  mode: mode,
+                                  inputMode: _inputMode,
+                                  amplitudeNotifier: ref
+                                      .read(liveSessionProvider.notifier)
+                                      .amplitudeNotifier,
+                                  onMicTap: () {
+                                    HapticFeedback.heavyImpact();
+                                    _toggleSession();
+                                  },
+                                  onMuteTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    ref
+                                        .read(liveSessionProvider.notifier)
+                                        .toggleMute();
+                                  },
+                                  onVideoTap: () {
+                                    HapticFeedback.lightImpact();
+                                    setState(() {
+                                      _inputMode =
+                                          _inputMode == _LiveInputMode.audioOnly
+                                              ? _LiveInputMode.audioVideo
+                                              : _LiveInputMode.audioOnly;
+                                    });
+                                    if (_inputMode ==
+                                            _LiveInputMode.audioVideo &&
+                                        !_cameraReady) {
+                                      _initCamera();
+                                    }
+                                    if (_inputMode ==
+                                            _LiveInputMode.audioOnly &&
+                                        isStreaming) {
+                                      _stopFrameCapture();
+                                    } else if (_inputMode ==
+                                            _LiveInputMode.audioVideo &&
+                                        isStreaming) {
+                                      _startFrameCapture();
+                                    }
+                                  },
+                                  onKeyboardTap: () {
+                                    HapticFeedback.lightImpact();
+                                    setState(
+                                        () => _showTextInput = !_showTextInput);
+                                  },
+                                ),
+
+                                // ── Status text ─────────────────────
+                                _StatusText(
+                                  isStreaming: isStreaming,
+                                  isResponding: isResponding,
+                                  isMuted: isMuted,
+                                  connectionState: connectionState,
+                                  mode: mode,
+                                ),
+
+                                // ── Text input ──────────────────────
+                                AnimatedCrossFade(
+                                  firstChild: Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                                    child: _buildTextInput(theme, mode),
+                                  ),
+                                  secondChild: const SizedBox.shrink(),
+                                  crossFadeState: _showTextInput
+                                      ? CrossFadeState.showFirst
+                                      : CrossFadeState.showSecond,
+                                  duration: const Duration(milliseconds: 200),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                const SizedBox(height: 14),
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Empty state ─────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
 
-                // ── Text input field ─────────────────────────────────
-                AnimatedCrossFade(
-                  firstChild: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: Theme.of(context).dividerColor,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 18),
-                          Expanded(
-                            child: TextField(
-                              controller: _textController,
-                              maxLength: 500,
-                              maxLines: 1,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 15,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: _hintTextForMode(mode),
-                                hintStyle: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.40),
-                                  fontSize: 15,
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                                counterText: '',
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                              ),
-                              onSubmitted: (_) => _sendTextMessage(),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _sendTextMessage,
-                            icon: Icon(
-                              Icons.arrow_upward_rounded,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                            iconSize: 22,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  secondChild: const SizedBox.shrink(),
-                  crossFadeState: _showTextInput
-                      ? CrossFadeState.showFirst
-                      : CrossFadeState.showSecond,
-                  duration: const Duration(milliseconds: 200),
-                ),
-              ],
+  Widget _buildEmptyState(ThemeData theme, AgentMode mode) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              mode.icon,
+              size: 48,
+              color: theme.colorScheme.primary.withValues(alpha: 0.3),
             ),
+            const SizedBox(height: 16),
+            Text(
+              _emptyStateTitle(mode),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _emptyStateSubtitle(mode),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _emptyStateTitle(AgentMode mode) {
+    switch (mode) {
+      case AgentMode.general:
+        return 'Ready to assist';
+      case AgentMode.translator:
+        return 'Ready to translate';
+      case AgentMode.tutor:
+        return 'Ready to teach';
+      case AgentMode.support:
+        return 'How can I help?';
+    }
+  }
+
+  String _emptyStateSubtitle(AgentMode mode) {
+    switch (mode) {
+      case AgentMode.general:
+        return 'Tap the mic to start a conversation\nor type a message below';
+      case AgentMode.translator:
+        return 'Speak in any language and\nI\'ll translate in real-time';
+      case AgentMode.tutor:
+        return 'Ask a question or show me\na problem with your camera';
+      case AgentMode.support:
+        return 'Describe your issue and\nI\'ll help resolve it';
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Chat list ───────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+
+  Widget _buildChatList(
+    ThemeData theme,
+    List<ChatMessage> messages,
+    String? liveTranscript,
+    String? liveUserTranscript,
+    bool isResponding,
+    bool isStreaming,
+  ) {
+    final hasLiveUser =
+        liveUserTranscript != null && liveUserTranscript.isNotEmpty;
+    final hasLiveAI = liveTranscript != null && liveTranscript.isNotEmpty;
+
+    final itemCount =
+        messages.length + (hasLiveUser ? 1 : 0) + (hasLiveAI ? 1 : 0);
+
+    if (itemCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return ListView.builder(
+      controller: _chatScrollController,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index < messages.length) {
+          final msg = messages[index];
+          if (msg.isSystem) {
+            return _SystemBubble(text: msg.text, theme: theme);
+          }
+          return _ChatBubble(
+            text: msg.text,
+            isUser: msg.isUser,
+            theme: theme,
+          );
+        }
+        final liveIndex = index - messages.length;
+        if (liveIndex == 0 && hasLiveUser) {
+          return _ChatBubble(
+            text: liveUserTranscript,
+            isUser: true,
+            isLive: true,
+            theme: theme,
+          );
+        }
+        return _ChatBubble(
+          text: liveTranscript ?? '',
+          isUser: false,
+          isLive: true,
+          theme: theme,
+        );
+      },
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Text input ──────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+
+  Widget _buildTextInput(ThemeData theme, AgentMode mode) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.10),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 18),
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              maxLength: 500,
+              maxLines: 1,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                hintText: _hintTextForMode(mode),
+                hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.40),
+                  fontSize: 15,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                counterText: '',
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onSubmitted: (_) => _sendTextMessage(),
+            ),
+          ),
+          IconButton(
+            onPressed: _sendTextMessage,
+            icon: Icon(
+              Icons.arrow_upward_rounded,
+              color: theme.colorScheme.primary,
+            ),
+            iconSize: 22,
           ),
         ],
       ),
@@ -788,100 +832,404 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   String _hintTextForMode(AgentMode mode) {
     switch (mode) {
       case AgentMode.general:
-        return 'Ask anything…';
+        return 'Ask anything\u2026';
       case AgentMode.translator:
-        return 'Type to translate…';
+        return 'Type to translate\u2026';
       case AgentMode.tutor:
-        return 'Ask about this problem…';
+        return 'Ask about this problem\u2026';
       case AgentMode.support:
-        return 'Describe your issue…';
+        return 'Describe your issue\u2026';
     }
   }
+}
 
-  Widget _controlButton({
-    required IconData icon,
-    VoidCallback? onPressed,
-    String? semanticLabel,
-  }) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    return Semantics(
-      label: semanticLabel,
-      button: onPressed != null,
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: onPressed != null
-              ? onSurface.withValues(alpha: 0.08)
-              : onSurface.withValues(alpha: 0.04),
-        ),
-        child: IconButton(
-          onPressed: onPressed,
-          icon: Icon(
-            icon,
-            color: onPressed != null
-                ? onSurface
-                : onSurface.withValues(alpha: 0.4),
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Status text ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _StatusText extends StatelessWidget {
+  const _StatusText({
+    required this.isStreaming,
+    required this.isResponding,
+    required this.isMuted,
+    required this.connectionState,
+    required this.mode,
+  });
+
+  final bool isStreaming;
+  final bool isResponding;
+  final bool isMuted;
+  final WsConnectionState connectionState;
+  final AgentMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    String text;
+    double opacity;
+    FontWeight weight;
+
+    if (isResponding) {
+      text = 'Speaking\u2026';
+      opacity = 0.8;
+      weight = FontWeight.w500;
+    } else if (isStreaming && isMuted) {
+      text = 'Mic muted — tap to unmute';
+      opacity = 0.6;
+      weight = FontWeight.w400;
+    } else if (isStreaming) {
+      text = 'Listening\u2026';
+      opacity = 0.6;
+      weight = FontWeight.w400;
+    } else if (connectionState == WsConnectionState.connecting) {
+      text = 'Connecting\u2026';
+      opacity = 0.5;
+      weight = FontWeight.w400;
+    } else if (connectionState == WsConnectionState.reconnecting) {
+      text = 'Reconnecting\u2026';
+      opacity = 0.5;
+      weight = FontWeight.w400;
+    } else {
+      text = 'Tap the mic to start';
+      opacity = 0.45;
+      weight = FontWeight.w400;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: Text(
+          text,
+          key: ValueKey(text),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: weight,
+            color: theme.colorScheme.onSurface.withValues(alpha: opacity),
+            letterSpacing: 0.2,
           ),
-          iconSize: 28,
         ),
       ),
     );
   }
 }
 
-// ── Input mode chip ──────────────────────────────────────────────────────────
-class _InputModeChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Orb with circular action ring ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 
-  const _InputModeChip({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
+class _OrbWithControls extends StatelessWidget {
+  const _OrbWithControls({
+    required this.orbSize,
+    required this.isStreaming,
+    required this.isResponding,
+    required this.isMuted,
+    required this.mode,
+    required this.inputMode,
+    required this.amplitudeNotifier,
+    required this.onMicTap,
+    required this.onMuteTap,
+    required this.onVideoTap,
+    required this.onKeyboardTap,
   });
+
+  final double orbSize;
+  final bool isStreaming;
+  final bool isResponding;
+  final bool isMuted;
+  final AgentMode mode;
+  final _LiveInputMode inputMode;
+  final ValueNotifier<double> amplitudeNotifier;
+  final VoidCallback onMicTap;
+  final VoidCallback onMuteTap;
+  final VoidCallback onVideoTap;
+  final VoidCallback onKeyboardTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? Theme.of(context).colorScheme.primary
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: selected
-                  ? Colors.white
-                  : Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected
-                    ? Colors.white
-                    : Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.5),
+    final theme = Theme.of(context);
+    final ringRadius = orbSize / 2 + 16;
+
+    return SizedBox(
+      width: orbSize + 80,
+      height: orbSize + 80,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // ── The orb (tappable) — starts/stops session ────────────
+          GestureDetector(
+            onTap: onMicTap,
+            child: ValueListenableBuilder<double>(
+              valueListenable: amplitudeNotifier,
+              builder: (context, amplitude, _) => LiveWave(
+                isListening: isStreaming && !isResponding && !isMuted,
+                isResponding: isResponding,
+                amplitude: amplitude,
+                color: mode.color,
+                size: orbSize,
               ),
             ),
-          ],
+          ),
+
+          // ── Mic/Mute button (top — 270 deg) ────────────────────
+          // When NOT streaming: tap to start session
+          // When streaming: tap to toggle mute/unmute
+          _buildRingButton(
+            context: context,
+            angle: -math.pi / 2,
+            radius: ringRadius,
+            icon: isStreaming
+                ? (isMuted ? Icons.mic_off_rounded : Icons.mic_rounded)
+                : Icons.mic_rounded,
+            isActive: isStreaming && !isMuted,
+            activeColor: isStreaming
+                ? (isMuted ? Colors.orange : theme.colorScheme.primary)
+                : theme.colorScheme.primary,
+            onTap: isStreaming ? onMuteTap : onMicTap,
+            label: isStreaming ? (isMuted ? 'Unmute' : 'Mute') : 'Mic',
+          ),
+
+          // ── Stop button (only visible when streaming) ───────────
+          if (isStreaming)
+            _buildRingButton(
+              context: context,
+              angle: math.pi / 2, // bottom — 90 deg
+              radius: ringRadius,
+              icon: Icons.stop_rounded,
+              isActive: true,
+              activeColor: Colors.red,
+              onTap: onMicTap, // orb tap = start/stop
+              label: 'Stop',
+            ),
+
+          // ── Video button (bottom-left — 210 deg) ────────────────
+          _buildRingButton(
+            context: context,
+            angle: math.pi * 7 / 6,
+            radius: ringRadius,
+            icon: inputMode == _LiveInputMode.audioVideo
+                ? Icons.videocam_rounded
+                : Icons.videocam_off_rounded,
+            isActive: inputMode == _LiveInputMode.audioVideo,
+            activeColor: const Color(0xFF6B9F5B),
+            onTap: onVideoTap,
+            label: 'Video',
+          ),
+
+          // ── Keyboard button (bottom-right — 330 deg) ────────────
+          _buildRingButton(
+            context: context,
+            angle: -math.pi / 6,
+            radius: ringRadius,
+            icon: Icons.keyboard_rounded,
+            isActive: false,
+            activeColor: theme.colorScheme.primary,
+            onTap: onKeyboardTap,
+            label: 'Type',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRingButton({
+    required BuildContext context,
+    required double angle,
+    required double radius,
+    required IconData icon,
+    required bool isActive,
+    required Color activeColor,
+    required VoidCallback onTap,
+    required String label,
+  }) {
+    final theme = Theme.of(context);
+    final dx = math.cos(angle) * radius;
+    final dy = math.sin(angle) * radius;
+
+    final bgColor =
+        isActive ? activeColor : theme.colorScheme.surfaceContainerHighest;
+    final iconColor = isActive
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: 0.7);
+
+    return Transform.translate(
+      offset: Offset(dx, dy),
+      child: Semantics(
+        label: label,
+        button: true,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: bgColor,
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 6,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                ),
+                child: Icon(icon, size: 22, color: iconColor),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: isActive
+                      ? activeColor
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Chat bubble ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _ChatBubble extends StatelessWidget {
+  const _ChatBubble({
+    required this.text,
+    required this.isUser,
+    required this.theme,
+    this.isLive = false,
+  });
+
+  final String text;
+  final bool isUser;
+  final bool isLive;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final bubbleColor = isUser
+        ? theme.colorScheme.primary.withValues(alpha: 0.12)
+        : theme.colorScheme.surfaceContainerHighest;
+    final textColor = theme.colorScheme.onSurface;
+    final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: align,
+        children: [
+          if (!isLive)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                isUser ? 'You' : 'Arqivon',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isUser
+                      ? theme.colorScheme.primary.withValues(alpha: 0.7)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.78,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: bubbleColor,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isUser ? 16 : 4),
+                bottomRight: Radius.circular(isUser ? 4 : 16),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: isLive ? 0.6 : 1.0),
+                      fontSize: 15,
+                      height: 1.4,
+                      fontStyle: isLive ? FontStyle.italic : FontStyle.normal,
+                    ),
+                  ),
+                ),
+                if (isLive) ...[
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── System message bubble ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SystemBubble extends StatelessWidget {
+  const _SystemBubble({required this.text, required this.theme});
+
+  final String text;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.error.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ),
     );

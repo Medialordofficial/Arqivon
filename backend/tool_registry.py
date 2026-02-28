@@ -55,6 +55,47 @@ async def upsert_firestore_memory(
     return json.dumps({"status": "skipped", "reason": "Firestore not initialized"})
 
 
+async def recall_memories(
+    *, query: str = "", db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Retrieve all stored memories for the user so the AI can reference them.
+
+    If *query* is provided, the results are filtered to topics or details
+    containing the query string (case-insensitive).  Otherwise all memories
+    are returned.
+    """
+    logger.info("Tool: recall_memories query=%r user=%s", query, user_id)
+    if db is None:
+        return json.dumps({"status": "skipped", "reason": "Firestore not initialized", "memories": []})
+    try:
+        docs = await asyncio.to_thread(
+            lambda: list(
+                db.collection("users").document(user_id)
+                .collection("memories").stream()
+            )
+        )
+        memories = []
+        for doc in docs:
+            data = doc.to_dict()
+            topic = doc.id
+            details = data.get("details", "")
+            # Optional client-side filtering by query substring
+            if query:
+                q = query.lower()
+                if q not in topic.lower() and q not in details.lower():
+                    continue
+            memories.append({
+                "topic": topic,
+                "details": details,
+                "updated_at": data.get("updated_at", ""),
+            })
+        logger.info("recall_memories returned %d items for user=%s", len(memories), user_id)
+        return json.dumps({"status": "ok", "count": len(memories), "memories": memories})
+    except Exception as exc:
+        logger.error("recall_memories failed: %s", exc)
+        return json.dumps({"status": "error", "reason": str(exc), "memories": []})
+
+
 async def create_ui_action(
     *, action_type: str, title: str = "", description: str = "",
     icon: str = "auto_awesome", primary_action_label: str = "OK",
@@ -332,6 +373,26 @@ _SHARED_DECLARATIONS: list[types.FunctionDeclaration] = [
                 "details": {"type": "STRING", "description": "The information to persist."},
             },
             "required": ["topic", "details"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="recall_memories",
+        description=(
+            "Retrieve the user's stored memories from previous sessions. "
+            "Call this when the user references something from the past, asks you to "
+            "compare with something seen earlier, or says 'remember', 'what was', "
+            "'compare to before', 'the one we saw', etc. You can optionally filter "
+            "by a query keyword."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": "Optional keyword to filter memories by topic or content. Leave empty to retrieve all.",
+                },
+            },
+            "required": [],
         },
     ),
     types.FunctionDeclaration(
@@ -636,6 +697,7 @@ TOOL_MAP: dict[str, Any] = {
     # Shared
     "analyze_live_frame": analyze_live_frame,
     "upsert_firestore_memory": upsert_firestore_memory,
+    "recall_memories": recall_memories,
     "create_ui_action": create_ui_action,
     # Translator
     "live_translate": live_translate,

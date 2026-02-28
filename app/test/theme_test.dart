@@ -11,8 +11,8 @@ void main() {
       expect(ArqivonTheme.primaryLight, isNotNull);
     });
 
-    test('primary is vivid indigo', () {
-      expect(ArqivonTheme.primary, const Color(0xFF5B5FEF));
+    test('primary is warm amber-gold', () {
+      expect(ArqivonTheme.primary, const Color(0xFFC98B4E));
     });
 
     test('accent colors are defined', () {

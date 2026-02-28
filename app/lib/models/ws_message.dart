@@ -26,7 +26,7 @@ class WsInbound {
         if (sourceLang != null) 'source_lang': sourceLang,
         if (targetLang != null) 'target_lang': targetLang,
         if (voice != null) 'voice': voice,
-        'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
+        // timestamp injected by WebSocketService.send() for latency tracking
       };
 }
 
@@ -36,6 +36,7 @@ class WsOutbound {
   final String? text;
   final String? actionType;
   final Map<String, dynamic>? payload;
+  final double? timestamp;
 
   const WsOutbound({
     required this.type,
@@ -43,6 +44,7 @@ class WsOutbound {
     this.text,
     this.actionType,
     this.payload,
+    this.timestamp,
   });
 
   factory WsOutbound.fromJson(Map<String, dynamic> json) => WsOutbound(
@@ -51,5 +53,6 @@ class WsOutbound {
         text: json['text'] as String?,
         actionType: json['action_type'] as String?,
         payload: json['payload'] as Map<String, dynamic>?,
+        timestamp: (json['timestamp'] as num?)?.toDouble(),
       );
 }

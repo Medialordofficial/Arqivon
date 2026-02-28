@@ -83,7 +83,7 @@ class ArqivonApp extends ConsumerWidget {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarColor:
-            isDark ? const Color(0xFF0B0F1A) : Colors.white,
+            isDark ? const Color(0xFF1A130D) : Colors.white,
         systemNavigationBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
       ),
@@ -165,73 +165,235 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   }
 }
 
-class _SplashScreen extends StatelessWidget {
+class _SplashScreen extends StatefulWidget {
   const _SplashScreen();
 
   @override
+  State<_SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<_SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoOpacity;
+  late final Animation<double> _titleOpacity;
+  late final Animation<double> _wordsOpacity;
+  late final Animation<double> _glowRadius;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+
+    _logoScale = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0, 0.5, curve: Curves.elasticOut)),
+    );
+    _logoOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+          parent: _ctrl, curve: const Interval(0, 0.3, curve: Curves.easeOut)),
+    );
+    _titleOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.2, 0.5, curve: Curves.easeOut)),
+    );
+    _wordsOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.35, 0.65, curve: Curves.easeOut)),
+    );
+    _glowRadius = Tween<double>(begin: 0, end: 40).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.1, 0.6, curve: Curves.easeOut)),
+    );
+
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: cs.surface,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // App icon
-            const SizedBox(
-              width: 100,
-              height: 100,
-              child: Image(
-                image: AssetImage('assets/images/logo.png'),
-                errorBuilder: _iconFallback,
+      body: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          return Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isDark
+                    ? [const Color(0xFF1A130D), const Color(0xFF251C14)]
+                    : [const Color(0xFFFFF8F0), const Color(0xFFFFF0E0)],
               ),
             ),
-            const SizedBox(height: 28),
-            Text(
-              'Arqivon',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                color: cs.onSurface,
-                letterSpacing: -0.8,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(flex: 3),
+                // ── Glowing logo ──
+                Opacity(
+                  opacity: _logoOpacity.value,
+                  child: Transform.scale(
+                    scale: _logoScale.value,
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFFC98B4E).withValues(alpha: 0.5),
+                            blurRadius: _glowRadius.value,
+                            spreadRadius: _glowRadius.value * 0.3,
+                          ),
+                        ],
+                      ),
+                      child: const ClipOval(
+                        child: Image(
+                          image: AssetImage('assets/images/logo.png'),
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          errorBuilder: _iconFallback,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // ── App name ──
+                Opacity(
+                  opacity: _titleOpacity.value,
+                  child: Text(
+                    'ARQIVON',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w900,
+                      color: isDark
+                          ? const Color(0xFFF5EDE5)
+                          : const Color(0xFF2C1810),
+                      letterSpacing: 6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // ── 3 key words ──
+                Opacity(
+                  opacity: _wordsOpacity.value,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _WordChip('See', isDark),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                const Color(0xFFC98B4E).withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                      _WordChip('Speak', isDark),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                const Color(0xFFC98B4E).withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                      _WordChip('Know', isDark),
+                    ],
+                  ),
+                ),
+                const Spacer(flex: 3),
+                // ── Subtle loading indicator ──
+                Opacity(
+                  opacity: _wordsOpacity.value * 0.5,
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        const Color(0xFFC98B4E).withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 48),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              'The Living Lens',
-              style: TextStyle(
-                fontSize: 13,
-                color: cs.onSurface.withValues(alpha: 0.5),
-                letterSpacing: 1.5,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
   static Widget _iconFallback(BuildContext ctx, Object err, StackTrace? st) {
     return Container(
-      width: 100,
-      height: 100,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF7C3AED), Color(0xFF5B5FEF)],
+      width: 120,
+      height: 120,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [Color(0xFFC98B4E), Color(0xFFE8943A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x667C3AED),
-            blurRadius: 32,
-            spreadRadius: 4,
+            color: Color(0x66C98B4E),
+            blurRadius: 40,
+            spreadRadius: 8,
           ),
         ],
       ),
-      child: const Icon(Icons.mic_rounded, color: Colors.white, size: 48),
+      child: const Icon(Icons.mic_rounded, color: Colors.white, size: 52),
+    );
+  }
+}
+
+class _WordChip extends StatelessWidget {
+  final String text;
+  final bool isDark;
+  const _WordChip(this.text, this.isDark);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFFC98B4E),
+        letterSpacing: 3,
+      ),
     );
   }
 }

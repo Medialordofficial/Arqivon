@@ -55,6 +55,143 @@ gcs_bucket: Any = None
 genai_client: genai.Client | None = None
 
 
+# ── Latency tracer ────────────────────────────────────────────────────────────
+
+class LatencyTracer:
+    """Per-session latency tracker that measures every hop in the pipeline.
+
+    Tracks: audio_in (client→backend), gemini_send, gemini_first_token,
+    gemini_turn, tool_dispatch, audio_out (backend→client), and frame_send.
+    Periodically logs P50/P95/P99 for each span and exposes a summary dict.
+    """
+
+    __slots__ = ("_spans", "_starts", "_log_interval", "_last_log", "session_id")
+
+    def __init__(self, session_id: str, log_interval: float = 30.0):
+        self.session_id = session_id
+        self._log_interval = log_interval
+        self._last_log = time.monotonic()
+        self._spans: dict[str, list[float]] = {}
+        self._starts: dict[str, float] = {}
+
+    def start(self, name: str) -> None:
+        self._starts[name] = time.monotonic()
+
+    def end(self, name: str) -> float:
+        t0 = self._starts.pop(name, None)
+        if t0 is None:
+            return 0.0
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        self._spans.setdefault(name, []).append(elapsed_ms)
+        self._maybe_log()
+        return elapsed_ms
+
+    def record(self, name: str, ms: float) -> None:
+        self._spans.setdefault(name, []).append(ms)
+        self._maybe_log()
+
+    def _maybe_log(self) -> None:
+        now = time.monotonic()
+        if now - self._last_log < self._log_interval:
+            return
+        self._last_log = now
+        summary = self.summary()
+        if summary:
+            logger.info("LATENCY[%s]: %s", self.session_id[:8], summary)
+
+    def summary(self) -> dict[str, dict[str, float]]:
+        result: dict[str, dict[str, float]] = {}
+        for name, values in self._spans.items():
+            if not values:
+                continue
+            s = sorted(values)
+            n = len(s)
+            result[name] = {
+                "count": n,
+                "p50": s[n // 2],
+                "p95": s[int(n * 0.95)] if n >= 2 else s[-1],
+                "p99": s[int(n * 0.99)] if n >= 2 else s[-1],
+                "max": s[-1],
+            }
+        return result
+
+
+# ── Async input queue with interrupt-flush ─────────────────────────────────
+
+class InputQueue:
+    """Async priority queue for client inputs.
+
+    Audio has highest priority and is forwarded immediately.  Video frames
+    are deduplicated — only the most recent queued frame is kept.
+    When the user interrupts (barge-in), `flush()` drops all pending
+    non-audio items so the new utterance gets clean context.
+    """
+
+    def __init__(self):
+        self._audio_q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
+        self._video_frame: bytes | None = None  # latest-wins slot
+        self._video_ready = asyncio.Event()
+
+    async def put_audio(self, data: bytes) -> None:
+        try:
+            self._audio_q.put_nowait(data)
+        except asyncio.QueueFull:
+            # Drop oldest audio chunk to prevent backpressure
+            try:
+                self._audio_q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            self._audio_q.put_nowait(data)
+
+    def put_video(self, data: bytes) -> None:
+        """Latest-wins: only keep the most recent video frame."""
+        self._video_frame = data
+        self._video_ready.set()
+
+    async def get_video(self) -> bytes | None:
+        """Wait for a video frame; returns None if flushed."""
+        await self._video_ready.wait()
+        frame = self._video_frame
+        self._video_frame = None
+        self._video_ready.clear()
+        return frame
+
+    def flush(self) -> None:
+        """Drop pending VIDEO on interrupt (barge-in).
+
+        Audio is NOT flushed — the chunks the user is speaking right now
+        during the barge-in must reach Gemini so it can process the new
+        utterance.  Only stale video frames are dropped.
+        """
+        self._video_frame = None
+        self._video_ready.clear()
+
+
+# ── Video frame throttle / deduplication ───────────────────────────────────
+
+class FrameThrottle:
+    """Drop frames that arrive faster than the minimum interval."""
+
+    __slots__ = ("_min_interval", "_last_sent", "_dropped")
+
+    def __init__(self, min_interval: float = 0.30):
+        self._min_interval = min_interval
+        self._last_sent = 0.0
+        self._dropped = 0
+
+    def should_send(self) -> bool:
+        now = time.monotonic()
+        if now - self._last_sent < self._min_interval:
+            self._dropped += 1
+            return False
+        self._last_sent = now
+        return True
+
+    @property
+    def dropped(self) -> int:
+        return self._dropped
+
+
 # ── Mode-specific system instructions ────────────────────────────────────────
 
 SYSTEM_PROMPTS: dict[str, str] = {
@@ -74,7 +211,11 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "calendar events, URLs, emails, QR codes, business cards, package tracking numbers, "
         "product prices, recipes), IMMEDIATELY call create_ui_action so the user can act on them.\n"
         "• Memory: When the user says 'remember this' or shares a preference, call "
-        "upsert_firestore_memory to persist it across sessions.\n\n"
+        "upsert_firestore_memory to persist it across sessions.\n"
+        "• Recall: When the user references something from a previous session — e.g. "
+        "'compare to the couch we saw before', 'what was the price', 'remember when I "
+        "showed you…' — call recall_memories to retrieve stored information. Use the "
+        "recalled details to answer accurately.\n\n"
 
         "BEHAVIOR GUIDELINES:\n"
         "• Be concise but thorough — give the complete answer the user needs.\n"
@@ -93,8 +234,23 @@ SYSTEM_PROMPTS: dict[str, str] = {
     ),
     AgentMode.TRANSLATOR: (
         "You are Arqivon Translator — the world's most advanced real-time translation engine. "
-        "You provide live, broadcast-quality translation across 100+ languages with native "
+        "You provide live, broadcast-quality translation across ALL languages with native "
         "fluency, cultural awareness, and context sensitivity.\n\n"
+
+        "SUPPORTED LANGUAGES (you MUST translate between ANY of these):\n"
+        "English, Spanish, French, German, Italian, Portuguese, Chinese (Mandarin & Traditional), "
+        "Japanese, Korean, Arabic, Hindi, Russian, Turkish, Dutch, Polish, Swedish, Danish, "
+        "Norwegian, Finnish, Greek, Czech, Slovak, Romanian, Hungarian, Bulgarian, Croatian, "
+        "Serbian, Slovenian, Ukrainian, Lithuanian, Latvian, Estonian, Irish, Welsh, Icelandic, "
+        "Maltese, Albanian, Macedonian, Bosnian, Catalan, Galician, Basque, Luxembourgish, "
+        "Thai, Vietnamese, Indonesian, Malay, Filipino (Tagalog), Bengali, Tamil, Telugu, "
+        "Malayalam, Kannada, Marathi, Gujarati, Punjabi, Urdu, Nepali, Sinhala, Burmese, "
+        "Khmer, Lao, Georgian, Armenian, Azerbaijani, Kazakh, Uzbek, Mongolian, Hebrew, "
+        "Persian (Farsi), Swahili, Amharic, Hausa, Yoruba, Igbo, Zulu, Xhosa, Afrikaans, "
+        "Somali, Kinyarwanda, Malagasy, Shona, Haitian Creole, Quechua, Esperanto, Latin, "
+        "Javanese, Sundanese, Cebuano, Chichewa, Corsican, Frisian, Scottish Gaelic, "
+        "Kurdish, Pashto, Sindhi, Samoan, Sesotho, Tajik, Turkmen, Tatar, Uyghur, Yiddish, "
+        "and any other language you are capable of.\n\n"
 
         "CORE CAPABILITIES:\n"
         "• Real-Time Speech Translation: Listen to speech in any language and IMMEDIATELY "
@@ -335,8 +491,12 @@ def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:
     return delay + random.uniform(0, delay * 0.1)
 
 
-async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede"):
-    """Build a LiveConnectConfig for the given mode and open a session."""
+async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous"):
+    """Build a LiveConnectConfig for the given mode and open a session.
+
+    Fetches stored memories for the user and injects them into the system
+    prompt so the AI has cross-session context from the start.
+    """
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS[AgentMode.GENERAL])
     # Inject language context for translator mode
     if mode == AgentMode.TRANSLATOR:
@@ -346,13 +506,44 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
             f"The target translation language is '{target_lang}'."
         )
 
+    # ── Inject stored memories into the system prompt ─────────────────
+    if db is not None:
+        try:
+            docs = await asyncio.to_thread(
+                lambda: list(
+                    db.collection("users").document(user_id)
+                    .collection("memories").stream()
+                )
+            )
+            if docs:
+                memory_lines = []
+                for doc in docs:
+                    data = doc.to_dict()
+                    topic = doc.id
+                    details = data.get("details", "")
+                    memory_lines.append(f"  • {topic}: {details}")
+                if memory_lines:
+                    prompt += (
+                        "\n\nUSER'S STORED MEMORIES (from previous sessions):\n"
+                        + "\n".join(memory_lines)
+                        + "\n\nUse these memories when the user references past observations, "
+                        "comparisons, or preferences. You can also call recall_memories "
+                        "to get the latest version at any time."
+                    )
+                    logger.info("Injected %d memories into system prompt for user=%s",
+                                len(memory_lines), user_id)
+        except Exception as mem_err:
+            logger.warning("Failed to load memories for prompt injection: %s", mem_err)
+
     # Validate voice name against known Gemini voices
     valid_voices = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
     voice_name = voice if voice in valid_voices else "Aoede"
 
     declarations = get_tool_declarations(mode)
     config = types.LiveConnectConfig(
-        system_instruction=prompt,
+        system_instruction=types.Content(
+            parts=[types.Part(text=prompt)],
+        ),
         tools=[types.Tool(function_declarations=declarations)],
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
@@ -369,8 +560,8 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 disabled=False,
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                prefix_padding_ms=300,
-                silence_duration_ms=800,
+                prefix_padding_ms=100,
+                silence_duration_ms=300,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
@@ -422,77 +613,157 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     )
 
     cancel_event = asyncio.Event()
+    # Guard: set while a mode/language switch is in progress so audio/video
+    # forwarders pause instead of sending to a closed session.
+    _switching = asyncio.Event()
+    tracer = LatencyTracer(session_id)
+    input_q = InputQueue()
+    frame_throttle = FrameThrottle(min_interval=0.30)
 
-    # ── Connect to Gemini Live API with retry ─────────────────────────────
-    attempt = 0
+    # ── Gemini session is lazy ─────────────────────────────────────────────
+    # Defer Gemini connection until the client sends the first set_mode
+    # (triggered by startSession / mic tap). This keeps the WebSocket alive
+    # even if Gemini is temporarily unavailable, preventing the
+    # connecting ↔ reconnecting loop the client would otherwise see.
     session = None
     live_ctx = None
-
-    while attempt < settings.ws_max_reconnect_attempts and not cancel_event.is_set():
-        try:
-            live_ctx, session = await _connect_gemini(current_mode, source_lang, target_lang, current_voice)
-            logger.info("Gemini session established mode=%s voice=%s (attempt %d)", current_mode, current_voice, attempt + 1)
-            await _send_json(websocket, OutboundMessage(type=OutboundType.STATUS, text="connected"))
-            break
-        except Exception as exc:
-            attempt += 1
-            delay = _backoff(attempt)
-            logger.warning("Gemini connect %d/%d failed: %s – retry %.1fs",
-                           attempt, settings.ws_max_reconnect_attempts, exc, delay)
-            await _send_json(websocket, OutboundMessage(
-                type=OutboundType.STATUS, text=f"reconnecting ({attempt})",
-            ))
-            await asyncio.sleep(delay)
-
-    if session is None:
-        await _send_json(websocket, OutboundMessage(
-            type=OutboundType.ERROR, text="Failed to connect to AI after retries",
-        ))
-        await websocket.close()
-        return
+    await _send_json(websocket, OutboundMessage(type=OutboundType.STATUS, text="connected"))
 
     # ── Reconnect helper (for mode switches) ──────────────────────────────
     async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede"):
         nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice
-        current_mode = new_mode
-        source_lang = sl
-        target_lang = tl
-        current_voice = voice
-        session_record.mode = new_mode
-        session_record.source_lang = sl
-        session_record.target_lang = tl
-        # Close old
-        if live_ctx:
-            try:
-                await live_ctx.__aexit__(None, None, None)
-            except Exception as exc:
-                logger.debug("Error closing old Gemini context: %s", exc)
-        # Open new
-        live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice)
-        logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
+        # Signal receiver BEFORE closing so it recognises this is a mode
+        # switch rather than an unexpected error.
+        _mode_switch_event.set()
+        # Signal forwarders to pause so they don't send to the dead session.
+        _switching.set()
+        try:
+            current_mode = new_mode
+            source_lang = sl
+            target_lang = tl
+            current_voice = voice
+            session_record.mode = new_mode
+            session_record.source_lang = sl
+            session_record.target_lang = tl
+            # Close old (if exists — None on first call)
+            if live_ctx:
+                try:
+                    await live_ctx.__aexit__(None, None, None)
+                except Exception as exc:
+                    logger.debug("Error closing old Gemini context: %s", exc)
+            # Open new
+            live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id)
+            logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
+        finally:
+            # Always release forwarders, even on failure, to prevent
+            # permanently blocking the audio/video pipeline.
+            _switching.clear()
 
     # ── Client → Gemini ───────────────────────────────────────────────────
 
     client_audio_count = 0
+    # Asyncio Event that signals receive_from_gemini to restart its listen
+    # loop immediately after a mode switch rather than sleeping.
+    _mode_switch_event = asyncio.Event()
+
+    # ── Audio forwarder (drains audio queue → Gemini at max speed) ─────
+
+    async def _audio_forwarder() -> None:
+        """Dedicated coroutine that drains the audio queue → Gemini.
+
+        By running in its own task, audio forwarding is NEVER blocked by
+        video encoding, rate-limit checks, or mode-switch reconnects.
+        """
+        nonlocal client_audio_count
+        while not cancel_event.is_set():
+            try:
+                audio_bytes = await asyncio.wait_for(
+                    input_q._audio_q.get(), timeout=1.0,
+                )
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                break
+
+            client_audio_count += 1
+            # Pause while a mode switch is in progress to avoid sending
+            # to a closed session.
+            if _switching.is_set() or session is None:
+                continue
+            tracer.start("audio_send")
+            if client_audio_count % 50 == 1:
+                logger.info("Client audio chunk #%d (%d bytes) → Gemini",
+                            client_audio_count, len(audio_bytes))
+            try:
+                try:
+                    await session.send_realtime_input(
+                        audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                    )
+                except TypeError:
+                    await session.send_realtime_input(
+                        media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
+                    )
+            except Exception as exc:
+                logger.debug("Audio send failed: %s", exc)
+            tracer.end("audio_send")
+
+    # ── Video forwarder (latest-wins frame slot → Gemini) ──────────────
+
+    async def _video_forwarder() -> None:
+        """Sends the latest video frame to Gemini, throttled to avoid
+        flooding the Live session with high-FPS imagery."""
+        while not cancel_event.is_set():
+            try:
+                frame_data = await asyncio.wait_for(
+                    input_q.get_video(), timeout=2.0,
+                )
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                break
+            if frame_data is None:
+                continue
+            if not frame_throttle.should_send():
+                continue
+            if _switching.is_set() or session is None:
+                continue
+            tracer.start("frame_send")
+            try:
+                await session.send_realtime_input(
+                    media=types.Blob(data=frame_data, mime_type="image/jpeg"),
+                )
+            except Exception as exc:
+                logger.debug("Video frame send failed: %s", exc)
+            tracer.end("frame_send")
+
+    # ── Client → queue router ──────────────────────────────────────────
 
     async def receive_from_client() -> None:
-        nonlocal current_mode, source_lang, target_lang, client_audio_count
+        nonlocal current_mode, source_lang, target_lang
         msg_count = 0
-        # Rate limiting: max messages per window (audio excluded — it's streaming)
-        RATE_LIMIT = 60  # non-audio messages per window
-        RATE_WINDOW = 10.0  # seconds
+        RATE_LIMIT = 60
+        RATE_WINDOW = 10.0
         rate_timestamps: list[float] = []
         try:
             while not cancel_event.is_set():
                 raw = await websocket.receive_text()
+                tracer.start("ws_parse")
                 msg = InboundMessage.model_validate_json(raw)
+                tracer.end("ws_parse")
                 msg_count += 1
+
+                # Measure client→backend latency from the embedded timestamp.
+                if msg.timestamp:
+                    client_ts = msg.timestamp
+                    server_ts = time.time()
+                    hop_ms = (server_ts - client_ts) * 1000
+                    if hop_ms > 0:
+                        tracer.record("client_hop", min(hop_ms, 5000))  # cap outliers
 
                 # Rate-limit non-audio messages
                 if msg.type != InboundType.AUDIO:
                     now = asyncio.get_event_loop().time()
                     rate_timestamps.append(now)
-                    # Prune old timestamps
                     cutoff = now - RATE_WINDOW
                     rate_timestamps[:] = [t for t in rate_timestamps if t > cutoff]
                     if len(rate_timestamps) > RATE_LIMIT:
@@ -504,7 +775,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         ))
                         continue
 
-                # Log every message type so we can diagnose silent drops
                 if msg.type != InboundType.PING and msg.type != InboundType.AUDIO:
                     logger.info("WS msg #%d type=%s", msg_count, msg.type)
                 elif msg.type == InboundType.PING and msg_count % 5 == 0:
@@ -517,8 +787,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 # Mode switching
                 if msg.type == InboundType.SET_MODE and msg.mode:
                     voice = msg.voice or current_voice
-                    if msg.mode == current_mode and voice == current_voice:
-                        # Already in this mode with same voice — just acknowledge, no reconnect needed.
+                    if session is not None and msg.mode == current_mode and voice == current_voice:
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
@@ -526,13 +795,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         ))
                         continue
                     try:
+                        tracer.start("mode_switch")
+                        # Flush the input queue so stale audio from the old
+                        # mode doesn't contaminate the new session.
+                        input_q.flush()
                         await _reconnect_session(msg.mode, source_lang, target_lang, voice)
+                        # _mode_switch_event is now set inside _reconnect_session
+                        ms = tracer.end("mode_switch")
+                        logger.info("Mode switch completed in %.0fms", ms)
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
                             payload={"mode": msg.mode},
                         ))
                     except Exception as exc:
+                        tracer.end("mode_switch")
                         logger.error("Mode switch failed: %s", exc)
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.ERROR,
@@ -545,7 +822,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     sl = msg.source_lang or source_lang
                     tl = msg.target_lang or target_lang
                     if sl == source_lang and tl == target_lang:
-                        # No change — skip reconnect.
                         continue
                     try:
                         await _reconnect_session(current_mode, sl, tl, current_voice)
@@ -557,30 +833,78 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         logger.error("Language switch failed: %s", exc)
                     continue
 
-                # Media
+                # ── Media → queue (never blocks on Gemini send) ────────
                 if msg.type == InboundType.AUDIO and msg.data:
                     audio_bytes = base64.b64decode(msg.data)
-                    client_audio_count += 1
-                    if client_audio_count % 50 == 1:
-                        logger.info("Client audio chunk #%d (%d bytes) → Gemini", client_audio_count, len(audio_bytes))
-                    await session.send_realtime_input(
-                        media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"),
-                    )
+                    await input_q.put_audio(audio_bytes)
                 elif msg.type == InboundType.VIDEO and msg.data:
                     image_bytes = base64.b64decode(msg.data)
-                    await session.send_realtime_input(
-                        media=types.Blob(data=image_bytes, mime_type="image/jpeg"),
-                    )
+                    input_q.put_video(image_bytes)
                 elif msg.type == InboundType.TEXT and msg.text:
-                    await session.send_client_content(
-                        turns=types.Content(
-                            role="user",
-                            parts=[types.Part(text=msg.text)],
-                        ),
-                        turn_complete=True,
-                    )
+                    if session is not None:
+                        await session.send_client_content(
+                            turns=types.Content(
+                                role="user",
+                                parts=[types.Part(text=msg.text)],
+                            ),
+                            turn_complete=True,
+                        )
                 elif msg.type == InboundType.END_TURN:
-                    await session.send_client_content(turns=None, turn_complete=True)
+                    if session is not None:
+                        await session.send_client_content(turns=None, turn_complete=True)
+
+                # ── Explicit session save (client tapped Stop) ─────────
+                elif msg.type == InboundType.END_SESSION:
+                    session_record.ended_at = datetime.now(timezone.utc).timestamp()
+                    # Auto-title based on mode
+                    mode_titles = {
+                        AgentMode.TRANSLATOR: "Translation Session",
+                        AgentMode.TUTOR: "Tutoring Session",
+                        AgentMode.SUPPORT: "Support Session",
+                    }
+                    if session_record.title == "Live Session":
+                        session_record.title = mode_titles.get(current_mode, "Live Session")
+
+                    # Generate AI summary
+                    if conversation_transcript and len(conversation_transcript) >= 2:
+                        try:
+                            transcript_text = "\n".join(conversation_transcript[-50:])
+                            summary_prompt = (
+                                "Summarize this voice conversation in 1-2 concise sentences. "
+                                "Focus on key topics discussed and any decisions or outcomes. "
+                                "Do NOT use quotes or say 'the user said'. Just state what was "
+                                "discussed.\n\n"
+                                f"Mode: {current_mode}\n"
+                                f"Conversation transcript:\n{transcript_text}"
+                            )
+                            summary_response = await genai_client.aio.models.generate_content(
+                                model="gemini-2.0-flash-lite",
+                                contents=summary_prompt,
+                            )
+                            if summary_response.text:
+                                session_record.summary = summary_response.text.strip()
+                                logger.info("AI summary: %s", session_record.summary[:100])
+                        except Exception as summary_err:
+                            logger.warning("Summary generation failed: %s", summary_err)
+
+                    await _save_session(user_id, session_record)
+                    await _send_json(websocket, OutboundMessage(
+                        type=OutboundType.SESSION_SAVED,
+                        text="session_saved",
+                        payload={"session_id": session_record.session_id},
+                    ))
+                    logger.info("Session explicitly saved: %s (turns=%d)",
+                                session_record.session_id, session_record.turn_count)
+
+                    # Reset for next session on the same WS connection
+                    session_record = SessionRecord(
+                        session_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        title="Live Session",
+                        mode=current_mode,
+                    )
+                    conversation_transcript.clear()
+                    continue
 
         except WebSocketDisconnect:
             logger.info("Client disconnected: user=%s", user_id)
@@ -592,14 +916,26 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Gemini → Client ───────────────────────────────────────────────────
 
     async def receive_from_gemini() -> None:
+        nonlocal session, live_ctx
         max_inner_retries = 5
         inner_retry_count = 0
         try:
             while not cancel_event.is_set():
+                # Wait for Gemini session to be established (lazy connect).
+                if session is None:
+                    try:
+                        await asyncio.wait_for(_mode_switch_event.wait(), timeout=1.0)
+                        _mode_switch_event.clear()
+                    except asyncio.TimeoutError:
+                        pass
+                    continue
                 try:
                     logger.info("Waiting for next Gemini turn... (client_audio_count=%d)", client_audio_count)
                     turn = session.receive()
-                    inner_retry_count = 0  # Reset on successful receive
+                    inner_retry_count = 0
+                    tracer.start("gemini_first_token")
+                    first_token_traced = False
+                    tracer.start("gemini_turn")
                     async for response in turn:
                         # Model audio / text
                         if response.server_content is not None:
@@ -607,11 +943,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             if sc.model_turn and sc.model_turn.parts:
                                 for part in sc.model_turn.parts:
                                     if part.inline_data and part.inline_data.data:
+                                        if not first_token_traced:
+                                            tracer.end("gemini_first_token")
+                                            first_token_traced = True
+                                        tracer.start("audio_out")
                                         audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
                                         logger.info("Audio chunk → client: %d bytes", len(part.inline_data.data))
                                         await _send_json(websocket, OutboundMessage(
                                             type=OutboundType.AUDIO, data=audio_b64,
                                         ))
+                                        tracer.end("audio_out")
                                     elif part.text:
                                         # For native-audio models the text parts are internal
                                         # "thinking" fragments — do NOT surface them as
@@ -636,11 +977,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         type=OutboundType.TRANSCRIPT, text=txt,
                                     ))
                             if sc.turn_complete:
+                                turn_ms = tracer.end("gemini_turn")
+                                if not first_token_traced:
+                                    tracer.end("gemini_first_token")
                                 session_record.turn_count += 1
-                                logger.info(">>> turn_complete from Gemini — sending to client (audio_chunks_from_client=%d, turns=%d)", client_audio_count, session_record.turn_count)
+                                logger.info(">>> turn_complete (%.0fms, audio_in=%d, turns=%d)",
+                                            turn_ms, client_audio_count, session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:
-                                logger.info(">>> interrupted from Gemini — sending to client")
+                                tracer.end("gemini_turn")
+                                if not first_token_traced:
+                                    tracer.end("gemini_first_token")
+                                # Flush the input queue on barge-in so stale
+                                # buffered audio doesn't play into the new turn.
+                                input_q.flush()
+                                logger.info(">>> interrupted from Gemini — flushing queue")
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
 
                         # Tool / function calls
@@ -648,9 +999,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             fn_responses: list[types.FunctionResponse] = []
                             for fc in response.tool_call.function_calls:
                                 logger.info("Function call: %s(%s)", fc.name, fc.args)
+                                tracer.start("tool_dispatch")
                                 result_json = await dispatch_tool_call(
                                     fc.name, fc.args or {}, db=db, user_id=user_id,
                                 )
+                                tool_ms = tracer.end("tool_dispatch")
+                                if tool_ms > 200:
+                                    logger.warning("Slow tool dispatch: %s took %.0fms", fc.name, tool_ms)
 
                                 # Route tool results to the correct outbound type
                                 if fc.name == "create_ui_action":
@@ -778,21 +1133,55 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 except Exception as inner_exc:
                     if cancel_event.is_set():
                         break
+                    # If a mode switch just happened, the old session was
+                    # intentionally torn down — treat it as expected and
+                    # immediately re-attach to the new session.
+                    if _mode_switch_event.is_set():
+                        _mode_switch_event.clear()
+                        inner_retry_count = 0
+                        logger.info("Mode switch detected — re-attaching to new Gemini session")
+                        continue
                     inner_retry_count += 1
                     logger.error("Gemini receive error (%d/%d): %s",
                                  inner_retry_count, max_inner_retries, inner_exc)
                     if inner_retry_count >= max_inner_retries:
-                        logger.error("Max Gemini receive retries exceeded — giving up")
+                        # Reset Gemini session but keep WebSocket alive.
+                        # Auto-retry connection before falling back to idle.
+                        logger.error("Max Gemini retries — auto-reconnecting (WS stays alive)")
+                        session = None
+                        inner_retry_count = 0
                         await _send_json(websocket, OutboundMessage(
-                            type=OutboundType.ERROR,
-                            text="AI connection lost after retries",
+                            type=OutboundType.STATUS,
+                            text="reconnecting",
                         ))
-                        break
+                        for _retry in range(3):
+                            await asyncio.sleep(2 * (_retry + 1))
+                            if cancel_event.is_set():
+                                return
+                            try:
+                                await _reconnect_session(
+                                    current_mode, source_lang, target_lang, current_voice,
+                                )
+                                logger.info("Auto-reconnected Gemini (attempt %d/3)", _retry + 1)
+                                await _send_json(websocket, OutboundMessage(
+                                    type=OutboundType.STATUS, text="connected",
+                                ))
+                                break
+                            except Exception as retry_exc:
+                                logger.warning("Auto-reconnect %d/3 failed: %s", _retry + 1, retry_exc)
+                        else:
+                            # All auto-retries failed — go back to waiting
+                            await _send_json(websocket, OutboundMessage(
+                                type=OutboundType.ERROR,
+                                text="AI unavailable — tap mic to retry",
+                            ))
+                        continue
                     await asyncio.sleep(0.5 * inner_retry_count)
         except Exception as exc:
             logger.error("receive_from_gemini fatal: %s", exc)
-        finally:
-            cancel_event.set()
+        # NOTE: Do NOT set cancel_event here. Only receive_from_client
+        # should tear down the WS when the client actually disconnects.
+        # Gemini failures are recoverable and should not kill the WS.
 
     # ── Heartbeat ─────────────────────────────────────────────────────────
 
@@ -809,6 +1198,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     try:
         await asyncio.gather(
             receive_from_client(),
+            _audio_forwarder(),
+            _video_forwarder(),
             receive_from_gemini(),
             heartbeat(),
             return_exceptions=True,
@@ -846,7 +1237,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception as summary_err:
                 logger.warning("Failed to generate session summary: %s", summary_err)
 
-        await _save_session(user_id, session_record)
+        # Log final latency summary
+        latency_summary = tracer.summary()
+        if latency_summary:
+            logger.info("LATENCY FINAL[%s]: %s", session_id[:8], latency_summary)
+        if frame_throttle.dropped > 0:
+            logger.info("Dropped %d redundant video frames", frame_throttle.dropped)
+
+        # Only save on WS teardown if there are unsaved turns (end_session
+        # may have already saved the current session mid-connection).
+        if session_record.turn_count > 0:
+            await _save_session(user_id, session_record)
         if live_ctx is not None:
             try:
                 await live_ctx.__aexit__(None, None, None)

@@ -21,28 +21,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _pages = [
     _OnboardingPage(
       icon: Icons.auto_awesome_rounded,
-      color: Color(0xFF5B5FEF),
+      color: Color(0xFFC98B4E),
       title: 'Meet Arqivon',
       body:
           'Your AI voice assistant that sees, hears, and acts in real time — powered by Gemini.',
     ),
     _OnboardingPage(
       icon: Icons.view_carousel_rounded,
-      color: Color(0xFF0EA5E9),
+      color: Color(0xFFE8943A),
       title: 'Four Modes, One App',
       body:
           'Switch between Assistant, Translator, Tutor, and Support — each with specialised AI tools and overlays.',
     ),
     _OnboardingPage(
       icon: Icons.videocam_rounded,
-      color: Color(0xFF10B981),
+      color: Color(0xFF6B9F5B),
       title: 'See & Speak',
       body:
           'Point your camera at anything while you talk. Arqivon understands both audio and video simultaneously.',
     ),
     _OnboardingPage(
       icon: Icons.bolt_rounded,
-      color: Color(0xFFF59E0B),
+      color: Color(0xFFD4774A),
       title: 'Smart Actions',
       body:
           'The AI creates actionable cards — open links, save contacts, share translations, and more — with a single tap.',

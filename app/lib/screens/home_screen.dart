@@ -48,8 +48,8 @@ class HomeScreen extends ConsumerWidget {
                           ? NetworkImage(user.photoURL!)
                           : null,
                       backgroundColor: isDark
-                          ? const Color(0xFF1E2640)
-                          : const Color(0xFFF1F5F9),
+                          ? const Color(0xFF312518)
+                          : const Color(0xFFFFF5E6),
                       child: user.photoURL == null
                           ? Text(
                               (user.displayName?.isNotEmpty == true)
@@ -69,8 +69,8 @@ class HomeScreen extends ConsumerWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF1E2640)
-                            : const Color(0xFFF1F5F9),
+                            ? const Color(0xFF312518)
+                            : const Color(0xFFFFF5E6),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.person_rounded,
@@ -147,7 +147,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.auto_awesome_rounded,
                       label: AgentMode.general.label,
-                      accentColor: AgentMode.general.color,
+                      accentColor: const Color(0xFFC98B4E),
                       onTap: () {
                         ref
                             .read(liveSessionProvider.notifier)
@@ -158,7 +158,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.translate_rounded,
                       label: AgentMode.translator.label,
-                      accentColor: AgentMode.translator.color,
+                      accentColor: const Color(0xFFC98B4E),
                       onTap: () {
                         ref
                             .read(liveSessionProvider.notifier)
@@ -175,7 +175,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.school_rounded,
                       label: AgentMode.tutor.label,
-                      accentColor: AgentMode.tutor.color,
+                      accentColor: const Color(0xFFC98B4E),
                       onTap: () {
                         ref
                             .read(liveSessionProvider.notifier)
@@ -186,7 +186,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.headset_mic_rounded,
                       label: AgentMode.support.label,
-                      accentColor: AgentMode.support.color,
+                      accentColor: const Color(0xFFC98B4E),
                       onTap: () {
                         ref
                             .read(liveSessionProvider.notifier)
@@ -232,9 +232,9 @@ class _GoLiveButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [
-                Color(0xFF0055FF), // deep electric blue
-                Color(0xFF0099FF), // vivid sky blue
-                Color(0xFF00C6FF), // bright cyan-blue
+                Color(0xFFC98B4E), // warm amber-gold
+                Color(0xFFE8943A), // bright orange-amber
+                Color(0xFFD4774A), // terracotta
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
@@ -242,7 +242,7 @@ class _GoLiveButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0070FF).withValues(alpha: 0.50),
+                color: const Color(0xFFC98B4E).withValues(alpha: 0.50),
                 blurRadius: 28,
                 offset: const Offset(0, 8),
               ),
@@ -332,28 +332,24 @@ class _CircularModeCard extends StatelessWidget {
                   center: const Alignment(-0.3, -0.3),
                   radius: 1.0,
                   colors: [
-                    accentColor.withValues(alpha: 0.12),
-                    isDark ? const Color(0xFF1E2640) : const Color(0xFFF1F5F9),
+                    accentColor.withValues(alpha: 0.08),
+                    isDark ? const Color(0xFF312518) : const Color(0xFFFFF8F0),
                   ],
                 ),
                 border: Border.all(
-                  color: accentColor.withValues(alpha: 0.25),
-                  width: 2.5,
+                  color: accentColor.withValues(alpha: 0.18),
+                  width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: accentColor.withValues(alpha: 0.10),
-                    blurRadius: 28,
-                    spreadRadius: 4,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
+                    color: accentColor.withValues(alpha: 0.06),
+                    blurRadius: 20,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
-              child: Icon(icon, color: accentColor, size: 40),
+              child: Icon(icon,
+                  color: accentColor.withValues(alpha: 0.75), size: 38),
             ),
             const SizedBox(height: 10),
             Text(
@@ -418,10 +414,10 @@ class _HowItWorksSectionState extends State<_HowItWorksSection> {
   ];
 
   static const _colors = [
-    Color(0xFF3B82F6),
-    Color(0xFF0EA5E9),
-    Color(0xFF818CF8),
-    Color(0xFF22D3EE),
+    Color(0xFFC98B4E),
+    Color(0xFFC98B4E),
+    Color(0xFFC98B4E),
+    Color(0xFFC98B4E),
   ];
 
   @override
@@ -668,14 +664,14 @@ class _StepDescriptionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
+        border: Border.all(color: color.withValues(alpha: 0.14)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: color.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),

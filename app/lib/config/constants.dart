@@ -22,7 +22,7 @@ class AppConstants {
   static const int audioBitDepth = 16;
 
   // Video
-  static const int videoFps = 2; // 2 frames per second
+  static const int videoFps = 3; // 3 frames per second
   static const Duration frameCaptureInterval =
       Duration(milliseconds: 1000 ~/ videoFps);
 

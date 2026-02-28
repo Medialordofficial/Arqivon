@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
+import '../models/chat_message.dart';
 import '../models/smart_action.dart';
 import '../models/ws_message.dart';
 import '../config/logger.dart';
@@ -20,6 +21,9 @@ class LiveSessionState {
 
   /// True while Gemini is streaming audio back to the user.
   final bool isResponding;
+
+  /// True when the mic is muted (not sending audio). Default is muted.
+  final bool isMuted;
   final AgentMode mode;
   final String? transcript;
   final String? userTranscript;
@@ -43,10 +47,14 @@ class LiveSessionState {
   // Export
   final ExportDocument? pendingExport;
 
+  // Chat transcript
+  final List<ChatMessage> chatMessages;
+
   const LiveSessionState({
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
     this.isResponding = false,
+    this.isMuted = true,
     this.mode = AgentMode.general, // overridden in build() with user default
     this.transcript,
     this.userTranscript,
@@ -61,12 +69,14 @@ class LiveSessionState {
     this.currentSupportTopic,
     this.supportTopics = const [],
     this.pendingExport,
+    this.chatMessages = const [],
   });
 
   LiveSessionState copyWith({
     WsConnectionState? connectionState,
     bool? isStreaming,
     bool? isResponding,
+    bool? isMuted,
     AgentMode? mode,
     String? transcript,
     bool clearTranscript = false,
@@ -87,11 +97,13 @@ class LiveSessionState {
     List<SupportTopic>? supportTopics,
     ExportDocument? pendingExport,
     bool clearExport = false,
+    List<ChatMessage>? chatMessages,
   }) {
     return LiveSessionState(
       connectionState: connectionState ?? this.connectionState,
       isStreaming: isStreaming ?? this.isStreaming,
       isResponding: isResponding ?? this.isResponding,
+      isMuted: isMuted ?? this.isMuted,
       mode: mode ?? this.mode,
       transcript: clearTranscript ? null : (transcript ?? this.transcript),
       userTranscript:
@@ -110,6 +122,7 @@ class LiveSessionState {
       currentSupportTopic: currentSupportTopic ?? this.currentSupportTopic,
       supportTopics: supportTopics ?? this.supportTopics,
       pendingExport: clearExport ? null : (pendingExport ?? this.pendingExport),
+      chatMessages: chatMessages ?? this.chatMessages,
     );
   }
 }
@@ -127,7 +140,41 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   StreamSubscription? _audioSub;
   StreamSubscription? _ampSub;
 
+  /// Debounce timer for mode switches — prevents rapid-fire set_mode
+  /// messages to the backend when the user taps modes quickly.
+  Timer? _modeSwitchDebounce;
+
+  /// Accumulated user/AI text within the current Gemini turn.
+  /// Saved as ChatMessages on turn_complete.
+  final List<String> _turnUserTexts = [];
+  final List<String> _turnAiTexts = [];
+
   /// Amplitude notifier for the orb visualizer — avoids high-frequency
+
+  // ── Client-side latency tracking ─────────────────────────────────
+  /// Rolling average of server→client one-way latency in milliseconds.
+  /// Updated from the `timestamp` field of outbound messages.
+  double _avgServerHopMs = 0;
+  int _hopSamples = 0;
+  static const int _maxHopSamples = 50;
+
+  void _trackLatency(WsOutbound msg) {
+    if (msg.timestamp == null || msg.timestamp! <= 0) return;
+    final serverTs = msg.timestamp!;
+    final clientTs = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    final hopMs = (clientTs - serverTs) * 1000;
+    if (hopMs < 0 || hopMs > 10000) return; // clock skew — ignore
+    _hopSamples++;
+    // Exponential moving average (alpha stabilises after _maxHopSamples).
+    final effectiveSamples = _hopSamples.clamp(1, _maxHopSamples);
+    final alpha = 2.0 / (effectiveSamples + 1);
+    _avgServerHopMs = alpha * hopMs + (1 - alpha) * _avgServerHopMs;
+    if (_hopSamples <= 100 && _hopSamples % 20 == 0) {
+      _log.info(
+          'Server→client latency: ${_avgServerHopMs.toStringAsFixed(0)}ms (avg)');
+    }
+  }
+
   /// Riverpod state rebuilds by using a ValueNotifier instead.
   final ValueNotifier<double> amplitudeNotifier = ValueNotifier<double>(0.0);
 
@@ -163,15 +210,23 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     );
     // Only tell the backend if the user is actively streaming; changing modes
     // while idle should not trigger a Gemini reconnect on the backend.
+    // Debounce rapid taps so only the LAST mode is sent after a brief pause.
     if (current.isStreaming) {
-      final selectedVoice = ref.read(settingsProvider).selectedVoice;
-      _ws?.send(
-        WsInbound(
-          type: 'set_mode',
-          mode: newMode.wsValue,
-          voice: selectedVoice,
-        ),
-      );
+      _modeSwitchDebounce?.cancel();
+      _modeSwitchDebounce = Timer(const Duration(milliseconds: 400), () {
+        final latest = state.valueOrNull?.mode ?? newMode;
+        if (_lastSentMode != latest) {
+          final selectedVoice = ref.read(settingsProvider).selectedVoice;
+          _ws?.send(
+            WsInbound(
+              type: 'set_mode',
+              mode: latest.wsValue,
+              voice: selectedVoice,
+            ),
+          );
+          _lastSentMode = latest;
+        }
+      });
     }
   }
 
@@ -312,6 +367,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audioChunksSent = 0;
     _audioSub = _audio!.audioStream.listen(
       (b64) {
+        // Only send audio when NOT muted.
+        final cur = state.valueOrNull;
+        if (cur != null && cur.isMuted) return;
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
           _log.fine(
@@ -333,15 +391,30 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // Pipe mic amplitude to the ValueNotifier for the orb visualizer.
     _ampSub?.cancel();
     _ampSub = _audio!.amplitudeStream.listen(
-      (amp) => amplitudeNotifier.value = amp,
+      (amp) {
+        final cur = state.valueOrNull;
+        // Show flat line when muted.
+        amplitudeNotifier.value = (cur != null && cur.isMuted) ? 0.0 : amp;
+      },
     );
 
     state = AsyncData(
       current.copyWith(
         isStreaming: true,
+        isMuted: true, // Start muted — user must tap mic to unmute
         connectionState: WsConnectionState.connected,
       ),
     );
+  }
+
+  /// Toggle the microphone mute state. When muted, audio chunks are
+  /// still captured but NOT forwarded to the backend.
+  void toggleMute() {
+    final current = state.valueOrNull ?? const LiveSessionState();
+    if (!current.isStreaming) return;
+    final newMuted = !current.isMuted;
+    _log.info('toggleMute: isMuted=$newMuted');
+    state = AsyncData(current.copyWith(isMuted: newMuted));
   }
 
   Future<void> stopSession() async {
@@ -354,10 +427,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     amplitudeNotifier.value = 0.0;
     await _audio?.stop();
     await _audio?.stopPlayback();
+
+    // Tell the backend to save the session NOW (before WS teardown).
+    _ws?.send(const WsInbound(type: 'end_session'));
+
     state = AsyncData(
       (state.valueOrNull ?? const LiveSessionState()).copyWith(
         isStreaming: false,
         isResponding: false,
+        isMuted: true,
       ),
     );
     // Re-establish the WS so the green indicator stays on.
@@ -398,6 +476,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void _handleServerMessage(WsOutbound msg) {
     final current = state.valueOrNull ?? const LiveSessionState();
+    _trackLatency(msg);
 
     switch (msg.type) {
       case 'audio':
@@ -414,10 +493,16 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'transcript':
+        if (msg.text != null && msg.text!.isNotEmpty) {
+          _turnAiTexts.add(msg.text!);
+        }
         state = AsyncData(current.copyWith(transcript: msg.text));
         break;
 
       case 'user_transcript':
+        if (msg.text != null && msg.text!.isNotEmpty) {
+          _turnUserTexts.add(msg.text!);
+        }
         state = AsyncData(current.copyWith(userTranscript: msg.text));
         break;
 
@@ -492,15 +577,40 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // (handled by onPlaybackDone callback).
         _log.info('turn_complete received from backend');
         _audio?.flushAndPlay();
+        // Save accumulated turn text as chat messages.
+        final newMessages = <ChatMessage>[...current.chatMessages];
+        final userText = _turnUserTexts.join(' ').trim();
+        final aiText = _turnAiTexts.join(' ').trim();
+        if (userText.isNotEmpty) {
+          newMessages.add(ChatMessage(text: userText, isUser: true));
+        }
+        if (aiText.isNotEmpty) {
+          newMessages.add(ChatMessage(text: aiText));
+        }
+        _turnUserTexts.clear();
+        _turnAiTexts.clear();
         state = AsyncData(
-          current.copyWith(clearTranscript: true, clearUserTranscript: true),
+          current.copyWith(
+            clearTranscript: true,
+            clearUserTranscript: true,
+            chatMessages: newMessages,
+          ),
         );
         break;
 
       case 'interrupted':
         // User barged in — stop playback immediately and clear ALL stale overlays.
         _log.info('interrupted received from backend');
-        _audio?.stopPlayback();
+        // Stop playback first, THEN restart recorder to avoid audio-focus
+        // conflicts on Android where the player disposal kills the mic.
+        _audio?.stopPlayback().then((_) {
+          // Ensure the mic is alive AFTER playback disposal completes.
+          final cur = state.valueOrNull ?? const LiveSessionState();
+          if (cur.isStreaming) {
+            _log.info('restarting recorder after barge-in playback stop');
+            _audio?.ensureRecording();
+          }
+        });
         state = AsyncData(
           current.copyWith(
             isResponding: false,
@@ -516,8 +626,22 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'pong':
         break;
 
+      case 'session_saved':
+        _log.info('Session saved by backend');
+        break;
+
       case 'error':
-        state = AsyncError(msg.text ?? 'Unknown error', StackTrace.current);
+        // Log but do NOT set AsyncError — that destroys the entire session
+        // state (mode, streaming, connection). Recoverable errors (mode switch
+        // failed, AI temporarily unavailable) should be surfaced as a SnackBar
+        // without tearing down the session.
+        _log.warning('Server error: ${msg.text}');
+        // Add as system message in chat so the user sees it.
+        if (msg.text != null && msg.text!.isNotEmpty) {
+          final msgs = <ChatMessage>[...current.chatMessages];
+          msgs.add(ChatMessage(text: msg.text!, isSystem: true));
+          state = AsyncData(current.copyWith(chatMessages: msgs));
+        }
         break;
     }
   }
@@ -527,6 +651,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _stateSub?.cancel();
     _audioSub?.cancel();
     _ampSub?.cancel();
+    _modeSwitchDebounce?.cancel();
     amplitudeNotifier.dispose();
     _ws?.dispose();
     _audio?.dispose();

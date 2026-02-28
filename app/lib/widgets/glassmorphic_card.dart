@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 
-/// Clean card — coffee brown × white theme. Replaces old glassmorphism card.
+/// Clean card — warm golden × cream theme. Replaces old glassmorphism card.
 class GlassmorphicCard extends StatelessWidget {
   const GlassmorphicCard({
     super.key,
@@ -33,13 +33,13 @@ class GlassmorphicCard extends StatelessWidget {
         color: isDark ? ArqivonTheme.darkCard : ArqivonTheme.white,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: isDark ? const Color(0xFF2A2A3E) : const Color(0xFFDDDDF0),
+          color: isDark ? const Color(0xFF3A2A1A) : const Color(0xFFF0E0D0),
         ),
         boxShadow: isDark
             ? const []
             : const [
                 BoxShadow(
-                  color: Color(0x085B5FEF),
+                  color: Color(0x08C98B4E),
                   blurRadius: 16,
                   offset: Offset(0, 2),
                 ),

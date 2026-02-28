@@ -2,11 +2,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-/// Glowing volumetric orb — inspired by premium AI assistant UIs.
+/// Glowing volumetric orb — ChatGPT-inspired white × light blue.
 ///
-/// Idle: soft breathing sphere with cyan→blue→purple radial gradient.
+/// Idle: soft breathing sphere with white→light-blue radial gradient.
 /// Listening: orb expands, outer glow intensifies, ripple rings emanate.
-/// Responding: orb pulses with warmer magenta shift.
+/// Responding: orb pulses with warmer white shift.
 class LiveWave extends StatefulWidget {
   const LiveWave({
     super.key,
@@ -165,13 +165,13 @@ class _OrbPainter extends CustomPainter {
   final bool isResponding;
   final Color? accentColor;
 
-  // Orb color palette — matches the reference image
-  static const _cyanHi = Color(0xFF7FFFF4);
-  static const _blueCore = Color(0xFF1E90FF);
-  static const _indigoBod = Color(0xFF4B5EFC);
-  static const _purpleEdge = Color(0xFF7C3AED);
-  static const _magentaEdge = Color(0xFFC026D3);
-  static const _deepEdge = Color(0xFF1A003A);
+  // Orb color palette — ChatGPT-inspired white × light blue
+  static const _whiteHi = Color(0xFFFFFFFF);
+  static const _lightBlue = Color(0xFFB0D4F1);
+  static const _skyBlue = Color(0xFF8ABFE0);
+  static const _softBlue = Color(0xFF7FB5E0);
+  static const _paleBlue = Color(0xFFD0E8F8);
+  static const _edgeBlue = Color(0xFFE8F4FD);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -187,8 +187,8 @@ class _OrbPainter extends CustomPainter {
         cx,
         cy,
         orbR * 1.95,
-        _purpleEdge.withValues(alpha: 0.08 + 0.06 * active + 0.06 * amplitude),
-        _purpleEdge.withValues(alpha: 0.0),
+        _softBlue.withValues(alpha: 0.08 + 0.06 * active + 0.06 * amplitude),
+        _softBlue.withValues(alpha: 0.0),
         blurSigma: orbR * 0.6);
 
     _paintGlow(
@@ -196,8 +196,8 @@ class _OrbPainter extends CustomPainter {
         cx,
         cy,
         orbR * 1.58,
-        _indigoBod.withValues(alpha: 0.14 + 0.10 * active + 0.08 * amplitude),
-        _indigoBod.withValues(alpha: 0.0),
+        _lightBlue.withValues(alpha: 0.14 + 0.10 * active + 0.08 * amplitude),
+        _lightBlue.withValues(alpha: 0.0),
         blurSigma: orbR * 0.4);
 
     // ── 2. Ripple rings (visible when active) ─────────────────────────
@@ -211,19 +211,19 @@ class _OrbPainter extends CustomPainter {
       orbR,
       isResponding
           ? [
-              const Color(0xFFE0B0FF), // warm lavender highlight
-              const Color(0xFF9B59F5),
-              _indigoBod,
-              _magentaEdge,
-              _deepEdge,
+              _whiteHi, // bright white highlight
+              const Color(0xFFE0EFFA), // very light blue
+              _lightBlue, // mid light blue
+              _skyBlue, // deeper sky blue
+              _paleBlue, // pale edge
             ]
           : [
-              _cyanHi, // bright highlight (top-left)
-              const Color(0xFF56CCF2), // sky
-              _blueCore, // mid blue
-              _indigoBod, // indigo body
-              _purpleEdge, // purple edge
-              _deepEdge, // deep shadow
+              _whiteHi, // bright highlight (top-left)
+              const Color(0xFFF0F8FF), // alice blue
+              _paleBlue, // pale blue mid
+              _lightBlue, // light blue body
+              _skyBlue, // sky blue edge
+              _edgeBlue, // edge fade
             ],
       isResponding
           ? [0.0, 0.22, 0.50, 0.80, 1.0]
@@ -242,7 +242,7 @@ class _OrbPainter extends CustomPainter {
         Offset(cx - orbR * 0.28, cy - orbR * 0.28),
         orbR * 0.38,
         [
-          Colors.white.withValues(alpha: 0.55),
+          Colors.white.withValues(alpha: 0.85),
           Colors.white.withValues(alpha: 0.0),
         ],
       );
@@ -256,11 +256,11 @@ class _OrbPainter extends CustomPainter {
       ..shader = ui.Gradient.sweep(
         Offset(cx, cy),
         [
-          _cyanHi.withValues(alpha: 0.0),
-          _cyanHi.withValues(alpha: 0.6),
-          _purpleEdge.withValues(alpha: 0.5),
-          _magentaEdge.withValues(alpha: 0.3),
-          _cyanHi.withValues(alpha: 0.0),
+          _lightBlue.withValues(alpha: 0.0),
+          _lightBlue.withValues(alpha: 0.5),
+          _skyBlue.withValues(alpha: 0.4),
+          _paleBlue.withValues(alpha: 0.3),
+          _lightBlue.withValues(alpha: 0.0),
         ],
         [0.0, 0.18, 0.5, 0.75, 1.0],
       )
@@ -273,8 +273,8 @@ class _OrbPainter extends CustomPainter {
         Offset(cx, cy),
         orbR * 0.45,
         [
-          _blueCore.withValues(alpha: 0.25),
-          _blueCore.withValues(alpha: 0.0),
+          _whiteHi.withValues(alpha: 0.35),
+          _whiteHi.withValues(alpha: 0.0),
         ],
       );
     canvas.drawCircle(Offset(cx, cy), orbR * 0.45, corePaint);
@@ -308,7 +308,7 @@ class _OrbPainter extends CustomPainter {
     final alpha = (1.0 - curved) * 0.35 * activeAmt;
     if (alpha < 0.01) return;
     final paint = Paint()
-      ..color = _indigoBod.withValues(alpha: alpha)
+      ..color = _softBlue.withValues(alpha: alpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);

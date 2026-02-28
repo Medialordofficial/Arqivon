@@ -20,16 +20,16 @@ class TutorGuidanceCard extends StatelessWidget {
     switch (step.tool) {
       case 'grade_step':
         return step.isCorrect == true
-            ? const Color(0xFF10B981)
-            : const Color(0xFFEF4444);
+            ? const Color(0xFF6B9F5B) // warm sage
+            : const Color(0xFFCC5544); // warm red
       case 'provide_hint':
-        return const Color(0xFFF59E0B);
+        return const Color(0xFFE8943A); // warm amber
       case 'analyze_homework':
-        return const Color(0xFF6366F1);
+        return const Color(0xFFC98B4E); // gold
       case 'solve_problem':
-        return const Color(0xFF8B5CF6);
+        return const Color(0xFFB07D3A); // bronze
       case 'explain_concept':
-        return const Color(0xFF06B6D4);
+        return const Color(0xFF7B9E8C); // sage-teal
       default:
         return AgentMode.tutor.color;
     }
@@ -193,16 +193,16 @@ class TutorGuidanceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                color: const Color(0xFFE8943A).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                    color: const Color(0xFFE8943A).withValues(alpha: 0.3)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.lightbulb_outline,
-                      size: 16, color: Color(0xFFF59E0B)),
+                      size: 16, color: Color(0xFFE8943A)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -224,8 +224,8 @@ class TutorGuidanceCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 color: step.isCorrect == true
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFEF4444),
+                    ? const Color(0xFF6B9F5B)
+                    : const Color(0xFFCC5544),
                 fontWeight: FontWeight.w500,
                 height: 1.3,
               ),
@@ -278,7 +278,7 @@ class TutorGuidanceCard extends StatelessWidget {
                         height: 22,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                          color: const Color(0xFFB07D3A).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(11),
                         ),
                         child: Text(
@@ -286,7 +286,7 @@ class TutorGuidanceCard extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF8B5CF6),
+                            color: Color(0xFFB07D3A),
                           ),
                         ),
                       ),
@@ -311,10 +311,10 @@ class TutorGuidanceCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                color: const Color(0xFF6B9F5B).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                    color: const Color(0xFF6B9F5B).withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +325,7 @@ class TutorGuidanceCard extends StatelessWidget {
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
-                      color: Color(0xFF10B981),
+                      color: Color(0xFF6B9F5B),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -351,7 +351,7 @@ class TutorGuidanceCard extends StatelessWidget {
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
-                color: Color(0xFF06B6D4),
+                color: Color(0xFF7B9E8C),
               ),
             ),
             const SizedBox(height: 4),
@@ -362,7 +362,7 @@ class TutorGuidanceCard extends StatelessWidget {
                     children: [
                       const Text('• ',
                           style: TextStyle(
-                              color: Color(0xFF06B6D4), fontSize: 13)),
+                              color: Color(0xFF7B9E8C), fontSize: 13)),
                       Expanded(
                         child: Text(
                           ex,
@@ -412,7 +412,7 @@ class TutorGuidanceCard extends StatelessWidget {
                   icon: const Icon(Icons.lightbulb_outline, size: 16),
                   label: const Text('Need a hint'),
                   style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFFF59E0B),
+                    foregroundColor: const Color(0xFFE8943A),
                   ),
                 ),
               if (onDismiss != null) ...[

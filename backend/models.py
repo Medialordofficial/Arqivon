@@ -27,6 +27,7 @@ class InboundType(str, Enum):
     TEXT = "text"
     PING = "ping"
     END_TURN = "end_turn"
+    END_SESSION = "end_session"     # explicitly save & end the current session
     SET_MODE = "set_mode"           # client selects agent mode
     SET_LANGUAGE = "set_language"   # for translator mode
 

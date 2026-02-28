@@ -20,7 +20,8 @@ void main() {
       expect(json['voice'], 'Puck');
       expect(json['source_lang'], 'es');
       expect(json['target_lang'], 'en');
-      expect(json.containsKey('timestamp'), true);
+      // timestamp is injected by WebSocketService.send(), not toJson()
+      expect(json.containsKey('timestamp'), false);
     });
 
     test('toJson omits null fields', () {
