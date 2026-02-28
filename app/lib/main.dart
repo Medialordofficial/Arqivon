@@ -19,9 +19,11 @@ import 'screens/archive_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/notes_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/fcm_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/offline_banner.dart';
 
 void main() async {
@@ -59,6 +61,9 @@ void main() async {
   // Request permissions, obtain device token, and save it to Firestore
   // so the backend can send push notifications.
   unawaited(FcmService.init());
+
+  // ── Local Notifications (Reminders) ───────────────────────────────
+  unawaited(NotificationService.instance.init());
 
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
@@ -465,9 +470,12 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> {
           ? LiveScreen(tabNotifier: _tabNotifier)
           : const SizedBox.shrink(),
       _activatedTabs.contains(2)
-          ? const ArchiveScreen()
+          ? const NotesScreen()
           : const SizedBox.shrink(),
       _activatedTabs.contains(3)
+          ? const ArchiveScreen()
+          : const SizedBox.shrink(),
+      _activatedTabs.contains(4)
           ? const SettingsScreen()
           : const SizedBox.shrink(),
     ];
@@ -509,6 +517,11 @@ class _MainNavigatorState extends ConsumerState<MainNavigator> {
               icon: Icon(Icons.camera_alt_outlined),
               selectedIcon: Icon(Icons.camera_alt_rounded),
               label: 'Live',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.note_alt_outlined),
+              selectedIcon: Icon(Icons.note_alt_rounded),
+              label: 'Notes',
             ),
             NavigationDestination(
               icon: Icon(Icons.archive_outlined),

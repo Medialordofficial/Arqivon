@@ -109,6 +109,63 @@ async def create_ui_action(
     })
 
 
+# ── Notes & Reminders ────────────────────────────────────────────────────────
+
+async def save_note(
+    *, title: str, content: str = "", is_todo: bool = False,
+    priority: str = "normal",
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Save a note or to-do item to and persist it in Firestore."""
+    logger.info("Tool: save_note title=%s is_todo=%s user=%s", title, is_todo, user_id)
+    note_data = {
+        "title": title,
+        "content": content,
+        "isTodo": is_todo,
+        "isDone": False,
+        "priority": priority,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "userId": user_id,
+    }
+    note_id = None
+    if db is not None:
+        _, doc_ref = await asyncio.to_thread(
+            db.collection("users").document(user_id)
+            .collection("notes").add, note_data,
+        )
+        note_id = doc_ref.id
+    return json.dumps({"status": "note_saved", "noteId": note_id, **note_data})
+
+
+async def set_reminder(
+    *, title: str, description: str = "", remind_in_minutes: int = 60,
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Set a timed reminder that fires as a local notification on the user's device."""
+    remind_at = datetime.now(timezone.utc).timestamp() + (remind_in_minutes * 60)
+    logger.info(
+        "Tool: set_reminder title=%s in=%d min user=%s",
+        title, remind_in_minutes, user_id,
+    )
+    reminder_data = {
+        "title": title,
+        "description": description,
+        "remindAt": remind_at,
+        "remindInMinutes": remind_in_minutes,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "isFired": False,
+        "userId": user_id,
+    }
+    reminder_id = None
+    if db is not None:
+        _, doc_ref = await asyncio.to_thread(
+            db.collection("users").document(user_id)
+            .collection("reminders").add, reminder_data,
+        )
+        reminder_id = doc_ref.id
+    return json.dumps({"status": "reminder_set", "reminderId": reminder_id, **reminder_data})
+
+
 # ── Translator Mode ──────────────────────────────────────────────────────────
 
 async def live_translate(
@@ -442,6 +499,46 @@ _SHARED_DECLARATIONS: list[types.FunctionDeclaration] = [
             "required": ["action_type", "title"],
         },
     ),
+    types.FunctionDeclaration(
+        name="save_note",
+        description=(
+            "Save a note or to-do item for the user. Use when the user says things like "
+            "'note that down', 'remember to', 'add to my list', 'save this', 'to-do', "
+            "'make a note', or mentions something they want to track. Set is_todo=true "
+            "for actionable tasks and false for plain notes."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Short title for the note or task."},
+                "content": {"type": "STRING", "description": "Detailed content or description."},
+                "is_todo": {"type": "BOOLEAN", "description": "True if this is a to-do/task, false for a plain note."},
+                "priority": {"type": "STRING", "description": "Priority level: low, normal, high, urgent."},
+            },
+            "required": ["title"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="set_reminder",
+        description=(
+            "Set a timed reminder for the user. The reminder will fire as a notification "
+            "on their device. Use when the user says 'remind me in …', 'set a reminder', "
+            "'alert me in …', 'don't let me forget', etc. Convert the time expression "
+            "to minutes (e.g. '2 hours' → 120, '30 minutes' → 30, '1 day' → 1440)."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Reminder title."},
+                "description": {"type": "STRING", "description": "Additional details."},
+                "remind_in_minutes": {
+                    "type": "INTEGER",
+                    "description": "Number of minutes from now until the reminder fires.",
+                },
+            },
+            "required": ["title", "remind_in_minutes"],
+        },
+    ),
 ]
 
 _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
@@ -728,6 +825,8 @@ TOOL_MAP: dict[str, Any] = {
     "upsert_firestore_memory": upsert_firestore_memory,
     "recall_memories": recall_memories,
     "create_ui_action": create_ui_action,
+    "save_note": save_note,
+    "set_reminder": set_reminder,
     # Translator
     "live_translate": live_translate,
     "detect_language": detect_language,

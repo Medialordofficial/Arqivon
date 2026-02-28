@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../config/logger.dart';
+import '../models/note_model.dart';
+import '../models/reminder_model.dart';
 import '../models/session_model.dart';
 
 /// Firestore operations for sessions and user memories.
@@ -79,5 +81,109 @@ class FirestoreService {
       _log.severe('loadUserSettings error', e, st);
       return {};
     }
+  }
+
+  // ── Notes ──────────────────────────────────────────────────────────
+
+  /// Fetch all notes for a user, newest first.
+  Future<List<NoteModel>> getNotes(String userId) async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(userId)
+          .collection('notes')
+          .orderBy('createdAt', descending: true)
+          .limit(200)
+          .get();
+      return snap.docs.map((d) => NoteModel.fromFirestore(d)).toList();
+    } catch (e, st) {
+      _log.severe('getNotes error', e, st);
+      rethrow;
+    }
+  }
+
+  /// Stream notes in real-time.
+  Stream<List<NoteModel>> notesStream(String userId) {
+    return _db
+        .collection('users')
+        .doc(userId)
+        .collection('notes')
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map((d) => NoteModel.fromFirestore(d)).toList());
+  }
+
+  /// Toggle a to-do's done state.
+  Future<void> toggleNoteDone(String userId, String noteId, bool isDone) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notes')
+        .doc(noteId)
+        .update({'isDone': isDone});
+  }
+
+  /// Delete a note.
+  Future<void> deleteNote(String userId, String noteId) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notes')
+        .doc(noteId)
+        .delete();
+  }
+
+  // ── Reminders ──────────────────────────────────────────────────────
+
+  /// Fetch all reminders for a user, soonest first.
+  Future<List<ReminderModel>> getReminders(String userId) async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(userId)
+          .collection('reminders')
+          .orderBy('remindAt', descending: false)
+          .limit(100)
+          .get();
+      return snap.docs.map((d) => ReminderModel.fromFirestore(d)).toList();
+    } catch (e, st) {
+      _log.severe('getReminders error', e, st);
+      rethrow;
+    }
+  }
+
+  /// Stream reminders in real-time.
+  Stream<List<ReminderModel>> remindersStream(String userId) {
+    return _db
+        .collection('users')
+        .doc(userId)
+        .collection('reminders')
+        .orderBy('remindAt', descending: false)
+        .limit(100)
+        .snapshots()
+        .map((snap) =>
+            snap.docs.map((d) => ReminderModel.fromFirestore(d)).toList());
+  }
+
+  /// Mark a reminder as fired.
+  Future<void> markReminderFired(String userId, String reminderId) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('reminders')
+        .doc(reminderId)
+        .update({'isFired': true});
+  }
+
+  /// Delete a reminder.
+  Future<void> deleteReminder(String userId, String reminderId) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('reminders')
+        .doc(reminderId)
+        .delete();
   }
 }

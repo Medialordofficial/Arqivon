@@ -55,6 +55,10 @@ dependencies:
   # Connectivity
   connectivity_plus: ^6.0.3
 
+  # Local Notifications
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.0
+
   # Crashlytics
   firebase_crashlytics: ^4.3.2
 

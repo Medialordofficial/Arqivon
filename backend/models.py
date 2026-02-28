@@ -56,6 +56,8 @@ class OutboundType(str, Enum):
     TUTOR_STEP = "tutor_step"       # step-by-step tutor guidance
     SUPPORT_TOPIC = "support_topic" # topic tracking for customer support
     EXPORT = "export"               # document export (PDF, etc.)
+    NOTE_SAVED = "note_saved"       # note/todo persisted
+    REMINDER_SET = "reminder_set"   # reminder scheduled
     STATUS = "status"
     ERROR = "error"
     PONG = "pong"

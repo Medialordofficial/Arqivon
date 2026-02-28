@@ -248,6 +248,16 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• You can handle multi-step tasks: planning trips, comparing options, debugging code, "
         "writing emails, creating shopping lists, meal planning, workout routines.\n\n"
 
+        "NOTES & REMINDERS:\n"
+        "• When the user says 'note that', 'write this down', 'add to my list', 'to-do', "
+        "'save this note', 'make a note', or asks you to track something — call save_note "
+        "with a clear title and optional content. Set is_todo=true for tasks/to-dos.\n"
+        "• When the user says 'remind me in …', 'set a reminder for …', 'alert me in …', "
+        "'don't let me forget …' — call set_reminder with the title and remind_in_minutes. "
+        "Convert time expressions: '2 hours' → 120, '30 minutes' → 30, '1 day' → 1440, "
+        "'3 hours' → 180, '15 min' → 15, 'half an hour' → 30, 'tomorrow' → 1440.\n"
+        "• After saving a note or setting a reminder, confirm briefly to the user.\n\n"
+
         "CRITICAL: Always detect the language the user is speaking and respond in that "
         "exact same language. Never switch languages unless explicitly asked to."
     ),
@@ -1376,6 +1386,32 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         type=OutboundType.UI_ACTION,
                                         action_type=fc.name,
                                         payload=fc.args or {},
+                                    ))
+
+                                elif fc.name == "save_note":
+                                    result = json.loads(result_json)
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.NOTE_SAVED,
+                                        payload={
+                                            "noteId": result.get("noteId"),
+                                            "title": fc.args.get("title", ""),
+                                            "content": fc.args.get("content", ""),
+                                            "isTodo": fc.args.get("is_todo", False),
+                                            "priority": fc.args.get("priority", "normal"),
+                                        },
+                                    ))
+
+                                elif fc.name == "set_reminder":
+                                    result = json.loads(result_json)
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.REMINDER_SET,
+                                        payload={
+                                            "reminderId": result.get("reminderId"),
+                                            "title": fc.args.get("title", ""),
+                                            "description": fc.args.get("description", ""),
+                                            "remindInMinutes": fc.args.get("remind_in_minutes", 60),
+                                            "remindAt": result.get("remindAt"),
+                                        },
                                     ))
 
                                 fn_responses.append(

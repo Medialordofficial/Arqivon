@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
 import '../models/chat_message.dart';
+import '../models/reminder_model.dart';
 import '../models/smart_action.dart';
 import '../models/ws_message.dart';
 import '../config/logger.dart';
+import '../providers/notes_provider.dart';
 import '../services/audio_service.dart';
 import '../services/websocket_service.dart';
 import 'auth_provider.dart';
@@ -667,6 +669,47 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         if (msg.payload != null) {
           final doc = ExportDocument.fromPayload(msg.payload!);
           state = AsyncData(current.copyWith(pendingExport: doc));
+        }
+        break;
+
+      case 'note_saved':
+        _log.info('Note saved: ${msg.payload?['title']}');
+        // The note is already persisted in Firestore by the backend.
+        // Show a confirmation card via SmartAction.
+        final action = SmartAction.fromPayload('save_note', {
+          'title': 'Note Saved',
+          'description': msg.payload?['title'] ?? 'Note saved',
+          'icon': (msg.payload?['isTodo'] == true) ? 'check_box' : 'note',
+          'primary_action_label': 'View Notes',
+        });
+        state = AsyncData(
+          current.copyWith(
+            currentAction: action,
+            actionHistory: [...current.actionHistory, action],
+          ),
+        );
+        break;
+
+      case 'reminder_set':
+        _log.info('Reminder set: ${msg.payload?['title']}');
+        // Schedule local notification
+        if (msg.payload != null) {
+          final reminder = ReminderModel.fromPayload(msg.payload!);
+          scheduleReminderNotification(reminder);
+          // Show confirmation card
+          final action = SmartAction.fromPayload('add_reminder', {
+            'title': 'Reminder Set',
+            'description':
+                '${msg.payload?['title']} — in ${msg.payload?['remindInMinutes']} min',
+            'icon': 'alarm',
+            'primary_action_label': 'View Reminders',
+          });
+          state = AsyncData(
+            current.copyWith(
+              currentAction: action,
+              actionHistory: [...current.actionHistory, action],
+            ),
+          );
         }
         break;
 
