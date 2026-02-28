@@ -774,6 +774,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'status':
+        // Handle voice switch notification from backend
+        if (msg.text != null && msg.text!.startsWith('voice:')) {
+          final newVoice = msg.text!.substring(6); // strip 'voice:'
+          _log.info('Voice switched to: $newVoice');
+          ref.read(settingsProvider.notifier).setVoice(newVoice);
+        }
+        break;
       case 'pong':
         break;
 

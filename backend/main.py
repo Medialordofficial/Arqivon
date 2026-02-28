@@ -258,6 +258,22 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "'3 hours' → 180, '15 min' → 15, 'half an hour' → 30, 'tomorrow' → 1440.\n"
         "• After saving a note or setting a reminder, confirm briefly to the user.\n\n"
 
+        "VOICE SWITCHING:\n"
+        "• Available voices: Aoede (female, warm), Kore (female, bright), Leda (female, elegant), "
+        "Puck (male, friendly), Charon (male, deep), Fenrir (male, strong).\n"
+        "• When the user says 'switch to a male voice', 'use a deeper voice', 'change your voice', "
+        "'talk like a man', 'use Puck', 'use Charon', or any request to change voice — "
+        "call switch_voice with the appropriate voice_name.\n"
+        "• After switching, greet the user briefly in the new voice.\n\n"
+
+        "INTERRUPTION HANDLING:\n"
+        "• When the user interrupts you mid-response, LISTEN to what they said.\n"
+        "• Consider whether their interruption relates to what you were saying.\n"
+        "• Respond naturally to their new input — acknowledge it and address it.\n"
+        "• Do NOT repeat what you were saying before unless asked.\n"
+        "• Do NOT speed up, slow down, or change your speaking tone/pace after an interruption.\n"
+        "• Maintain the same natural, conversational speaking style throughout.\n\n"
+
         "CRITICAL: Always detect the language the user is speaking and respond in that "
         "exact same language. Never switch languages unless explicitly asked to."
     ),
@@ -362,6 +378,16 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• For code: write working code, explain the logic, suggest improvements.\n"
         "• Be encouraging but honest. Celebrate correct steps, gently correct mistakes.\n\n"
 
+        "VOICE SWITCHING:\n"
+        "• Available voices: Aoede (female, warm), Kore (female, bright), Leda (female, elegant), "
+        "Puck (male, friendly), Charon (male, deep), Fenrir (male, strong).\n"
+        "• When the user asks to change voice — call switch_voice with the voice_name.\n\n"
+
+        "INTERRUPTION HANDLING:\n"
+        "• When the user interrupts you, LISTEN to what they said and respond naturally.\n"
+        "• Do NOT repeat what you were saying. Address their new input.\n"
+        "• Maintain the same speaking tone and pace — never speed up or slow down.\n\n"
+
         "CRITICAL: Always detect the language the user is speaking and respond in that "
         "exact same language. Never switch languages unless explicitly asked to."
     ),
@@ -397,6 +423,16 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• Provide clear, actionable steps. Number them for clarity.\n"
         "• Confirm understanding before proceeding with complex troubleshooting.\n"
         "• Never say 'I can't help with that' — always find something useful to offer.\n\n"
+
+        "VOICE SWITCHING:\n"
+        "• Available voices: Aoede (female, warm), Kore (female, bright), Leda (female, elegant), "
+        "Puck (male, friendly), Charon (male, deep), Fenrir (male, strong).\n"
+        "• When the user asks to change voice — call switch_voice with the voice_name.\n\n"
+
+        "INTERRUPTION HANDLING:\n"
+        "• When the user interrupts you, LISTEN to what they said and respond naturally.\n"
+        "• Do NOT repeat what you were saying. Address their new input.\n"
+        "• Maintain the same speaking tone and pace — never speed up or slow down.\n\n"
 
         "CRITICAL: Always detect the language the user is speaking and respond in that "
         "exact same language. Never switch languages unless explicitly asked to."
@@ -1421,9 +1457,31 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         id=fc.id,
                                     )
                                 )
+
+                            # Send tool responses back to Gemini first
                             await session.send_tool_response(
                                 function_responses=fn_responses,
                             )
+
+                            # Handle voice switch AFTER sending tool response so
+                            # Gemini can generate a farewell/greeting in the new voice.
+                            for fc in response.tool_call.function_calls:
+                                if fc.name == "switch_voice":
+                                    new_voice = fc.args.get("voice_name", "").strip().title()
+                                    valid = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
+                                    if new_voice in valid and new_voice != current_voice:
+                                        logger.info("Voice switch requested: %s → %s",
+                                                     current_voice, new_voice)
+                                        try:
+                                            await _reconnect_session(
+                                                current_mode, source_lang, target_lang, new_voice,
+                                            )
+                                            await _send_json(websocket, OutboundMessage(
+                                                type=OutboundType.STATUS,
+                                                text=f"voice:{new_voice}",
+                                            ))
+                                        except Exception as ve:
+                                            logger.error("Voice switch reconnect failed: %s", ve)
 
                 except Exception as inner_exc:
                     if cancel_event.is_set():

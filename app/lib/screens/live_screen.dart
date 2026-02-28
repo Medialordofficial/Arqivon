@@ -26,7 +26,6 @@ import '../widgets/support_topic_tracker.dart';
 import '../widgets/translation_overlay.dart';
 import '../widgets/tutor_guidance_card.dart';
 import '../widgets/export_document_card.dart';
-import '../services/wake_word_service.dart';
 
 enum _LiveInputMode { audioOnly, audioVideo }
 
@@ -56,10 +55,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   final ScrollController _chatScrollController = ScrollController();
 
-  // ── Wake word ─────────────────────────────────────────────────────
-  late final WakeWordService _wakeWord;
-  bool _wakeWordActive = false;
-
   // ── Adaptive video frame rate ─────────────────────────────────────
   Duration _currentFrameInterval = AppConstants.frameCaptureInterval;
   static const Duration _minFrameInterval =
@@ -74,75 +69,20 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.tabNotifier.addListener(_onTabChanged);
-    _wakeWord = WakeWordService(onDetected: _onWakeWord);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(liveSessionProvider.notifier).connectOnly();
-        _startWakeWord();
       }
     });
   }
 
   void _onTabChanged() {
     if (widget.tabNotifier.index != 1) {
-      _stopWakeWord();
       final current = ref.read(liveSessionProvider).valueOrNull;
       if (current?.isStreaming ?? false) {
         _stopFrameCapture();
         ref.read(liveSessionProvider.notifier).stopSession();
       }
-    } else {
-      // Returned to Live tab — restart wake word if idle/muted.
-      _syncWakeWord();
-    }
-  }
-
-  // ── Wake word helpers ─────────────────────────────────────────────
-
-  void _onWakeWord() {
-    if (!mounted) return;
-    _log.info('Wake word triggered');
-    HapticFeedback.heavyImpact();
-
-    final session = ref.read(liveSessionProvider).valueOrNull;
-    if (session == null) return;
-
-    if (!session.isStreaming) {
-      // Idle → start a new session.
-      _toggleSession();
-    } else if (session.isMuted) {
-      // Streaming but muted → unmute.
-      ref.read(liveSessionProvider.notifier).toggleMute();
-    }
-  }
-
-  /// Start wake-word listening if conditions allow.
-  void _startWakeWord() {
-    if (_wakeWordActive) return;
-    final session = ref.read(liveSessionProvider).valueOrNull;
-    // Listen when idle (not streaming) OR streaming-but-muted.
-    final shouldListen =
-        session == null || !session.isStreaming || session.isMuted;
-    if (shouldListen) {
-      _wakeWordActive = true;
-      _wakeWord.start();
-    }
-  }
-
-  void _stopWakeWord() {
-    _wakeWordActive = false;
-    _wakeWord.stop();
-  }
-
-  /// Sync wake-word state with the current session state.
-  void _syncWakeWord() {
-    final session = ref.read(liveSessionProvider).valueOrNull;
-    final shouldListen =
-        session == null || !session.isStreaming || session.isMuted;
-    if (shouldListen && !_wakeWordActive) {
-      _startWakeWord();
-    } else if (!shouldListen && _wakeWordActive) {
-      _stopWakeWord();
     }
   }
 
@@ -320,7 +260,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   @override
   void dispose() {
-    _wakeWord.dispose();
     widget.tabNotifier.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     _frameTimer?.cancel();
@@ -337,11 +276,6 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
     // ── Listeners ──────────────────────────────────────────────────
-    // Wake word sync: start/stop based on streaming & mute state.
-    ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
-      _syncWakeWord();
-    });
-
     ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
       if (next is AsyncError && prev is! AsyncError) {
         final errMsg = next.error?.toString() ?? 'Unknown error';

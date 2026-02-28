@@ -430,6 +430,26 @@ async def support_card(
     })
 
 
+# ── Voice switching ──────────────────────────────────────────────────────────
+
+VALID_VOICES = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
+
+async def switch_voice(
+    *, voice_name: str,
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Request a voice change. The actual reconnection happens in the WebSocket handler."""
+    logger.info("Tool: switch_voice voice=%s user=%s", voice_name, user_id)
+    # Normalise to title-case and validate
+    normalised = voice_name.strip().title()
+    if normalised not in VALID_VOICES:
+        return json.dumps({
+            "status": "error",
+            "reason": f"Unknown voice '{voice_name}'. Available: {', '.join(sorted(VALID_VOICES))}",
+        })
+    return json.dumps({"status": "voice_switch_requested", "voice": normalised})
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tool Declarations for Gemini Function Calling
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -537,6 +557,25 @@ _SHARED_DECLARATIONS: list[types.FunctionDeclaration] = [
                 },
             },
             "required": ["title", "remind_in_minutes"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="switch_voice",
+        description=(
+            "Switch the AI voice to a different preset. Available voices: "
+            "Aoede (female, warm), Kore (female, bright), Leda (female, elegant), "
+            "Puck (male, friendly), Charon (male, deep), Fenrir (male, strong). "
+            "Use when the user asks to change voice, use a male/female voice, etc."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "voice_name": {
+                    "type": "STRING",
+                    "description": "The voice to switch to: Aoede, Puck, Charon, Kore, Fenrir, or Leda.",
+                },
+            },
+            "required": ["voice_name"],
         },
     ),
 ]
@@ -827,6 +866,7 @@ TOOL_MAP: dict[str, Any] = {
     "create_ui_action": create_ui_action,
     "save_note": save_note,
     "set_reminder": set_reminder,
+    "switch_voice": switch_voice,
     # Translator
     "live_translate": live_translate,
     "detect_language": detect_language,
