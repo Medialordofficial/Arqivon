@@ -339,8 +339,48 @@ Our production stack:
 | **Secret Manager** | `GEMINI_API_KEY` injection |
 | **Artifact Registry** | Docker image storage |
 | **Firebase Hosting** | Landing page + Privacy Policy + Terms of Service |
-| **Firestore** | User data, sessions, memories (with strict `uid`-based security rules) |
+| **Firestore** | User data, sessions, memories, exports (with strict `uid`-based security rules) |
 | **Firebase Auth** | Google Sign-In + Apple Sign-In + Email/Password |
+| **Cloud Storage for Firebase** | Exported documents (translations, solutions, support notes) stored for download |
+| **Firebase Cloud Messaging (FCM)** | Push notifications when sessions are saved with AI-generated summaries |
+| **Firebase Crashlytics** | Crash reporting and error monitoring in production |
+
+### Firebase Cloud Messaging
+
+When a session ends, the backend generates an AI summary and saves it to Firestore. It then sends a push notification to the user's device via FCM:
+
+```python
+message = fb_messaging.Message(
+    notification=fb_messaging.Notification(
+        title=f"💾 {session_title}",
+        body=ai_summary[:200],
+    ),
+    data={"session_id": session_id, "mode": mode},
+    token=fcm_token,  # Retrieved from user's Firestore doc
+)
+await asyncio.to_thread(fb_messaging.send, message)
+```
+
+On the Flutter side, we request notification permissions at startup, save the FCM device token to the user's Firestore document, and listen for token refreshes:
+
+```dart
+final messaging = FirebaseMessaging.instance;
+await messaging.requestPermission(alert: true, badge: true, sound: true);
+final token = await messaging.getToken();
+// Save to Firestore: users/{uid}/fcmToken
+```
+
+### Cloud Storage for Firebase
+
+Exported documents (translated texts, solved problems, support notes) are uploaded to Cloud Storage, giving users persistent download URLs they can access later from the Archive screen:
+
+```python
+bucket = fb_storage.bucket()
+blob = bucket.blob(f"exports/{user_id}/{timestamp}_{title}.txt")
+await asyncio.to_thread(blob.upload_from_string, content)
+await asyncio.to_thread(blob.make_public)
+download_url = blob.public_url
+```
 
 We automated deployment with a GitHub Actions workflow that runs tests, builds the Docker image, pushes to Artifact Registry, deploys to Cloud Run, and verifies the health endpoint — all triggered on push to `main`.
 

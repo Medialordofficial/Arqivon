@@ -20,6 +20,7 @@ import 'screens/live_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/fcm_service.dart';
 import 'widgets/offline_banner.dart';
 
 void main() async {
@@ -52,6 +53,11 @@ void main() async {
 
   // Structured logging — replaces raw print() everywhere.
   AppLogger.init();
+
+  // ── Firebase Cloud Messaging ──────────────────────────────────────
+  // Request permissions, obtain device token, and save it to Firestore
+  // so the backend can send push notifications.
+  unawaited(FcmService.init());
 
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(
@@ -157,6 +163,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           error: (_, __) => const LoginScreen(),
           data: (user) {
             if (user == null) return const LoginScreen();
+            // Save/refresh FCM token whenever user signs in.
+            unawaited(FcmService.onUserSignIn());
             return const MainNavigator();
           },
         );

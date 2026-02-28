@@ -28,7 +28,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 import firebase_admin
-from firebase_admin import credentials, firestore as fb_firestore, storage, auth as fb_auth
+from firebase_admin import credentials, firestore as fb_firestore, storage, auth as fb_auth, messaging as fb_messaging
 
 from google import genai
 from google.genai import types
@@ -482,8 +482,44 @@ async def _save_session(user_id: str, record: SessionRecord) -> None:
             )
         await asyncio.to_thread(_sync_save)
         logger.info("Session %s saved for user %s", record.session_id, user_id)
+        # Send FCM push notification to the user's device.
+        await _send_session_notification(user_id, record)
     except Exception as exc:
         logger.error("Failed to save session: %s", exc)
+
+
+async def _send_session_notification(user_id: str, record: SessionRecord) -> None:
+    """Send a push notification via FCM when a session is saved."""
+    if db is None:
+        return
+    try:
+        user_doc = await asyncio.to_thread(
+            db.collection("users").document(user_id).get
+        )
+        if not user_doc.exists:
+            return
+        fcm_token = user_doc.to_dict().get("fcmToken")
+        if not fcm_token:
+            logger.debug("No FCM token for user %s — skipping notification", user_id)
+            return
+        title = record.title or "Session Saved"
+        body = record.summary or f"Your {record.mode} session has been archived."
+        message = fb_messaging.Message(
+            notification=fb_messaging.Notification(
+                title=f"\U0001f4be {title}",
+                body=body[:200],
+            ),
+            data={
+                "session_id": record.session_id,
+                "mode": record.mode,
+            },
+            token=fcm_token,
+        )
+        await asyncio.to_thread(fb_messaging.send, message)
+        logger.info("FCM notification sent to user %s", user_id)
+    except Exception as exc:
+        # Non-critical — don't let notification failure break the flow.
+        logger.warning("FCM notification failed for %s: %s", user_id, exc)
 
 
 def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:

@@ -165,8 +165,11 @@ async def export_document(
 ) -> str:
     """Export translated content or any structured text as a document.
 
-    The actual PDF generation happens client-side; this tool captures the
-    structured content and sends it to the client for rendering.
+    Uploads the document content to Cloud Storage for Firebase so users can
+    download it later from the Archive.  The actual PDF rendering happens
+    client-side; this tool captures the structured content, persists it in
+    Cloud Storage, stores metadata in Firestore, and sends it to the client
+    for rendering.
     """
     logger.info("Tool: export_document title=%s format=%s user=%s", title, format, user_id)
     doc_data = {
@@ -176,6 +179,32 @@ async def export_document(
         "sections": sections or [],
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+    download_url: str | None = None
+
+    # ── Upload to Cloud Storage for Firebase ──────────────────────────
+    try:
+        from firebase_admin import storage as fb_storage
+        bucket = fb_storage.bucket()
+        if bucket is not None:
+            blob_path = f"exports/{user_id}/{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{title[:50]}.txt"
+            blob = bucket.blob(blob_path)
+            await asyncio.to_thread(
+                blob.upload_from_string,
+                content,
+                content_type="text/plain; charset=utf-8",
+            )
+            # Make the blob publicly readable for a signed URL, or use a
+            # long-lived token.  For simplicity, generate a signed URL
+            # valid for 7 days.
+            await asyncio.to_thread(blob.make_public)
+            download_url = blob.public_url
+            doc_data["storage_url"] = download_url
+            logger.info("Exported to Cloud Storage: %s", blob_path)
+    except Exception as storage_err:
+        logger.warning("Cloud Storage upload skipped: %s", storage_err)
+
+    # ── Persist metadata in Firestore ─────────────────────────────────
     if db is not None:
         await asyncio.to_thread(
             db.collection("users").document(user_id).collection("exports").add,

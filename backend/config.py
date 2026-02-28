@@ -19,7 +19,7 @@ class Settings:
     gemini_api_key: str = field(default_factory=lambda: os.environ.get("GEMINI_API_KEY", ""))
     gemini_model: str = field(default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest"))
     gcp_project_id: str = field(default_factory=lambda: os.environ.get("GCP_PROJECT_ID", ""))
-    gcs_bucket: str = field(default_factory=lambda: os.environ.get("GCS_BUCKET", ""))
+    gcs_bucket: str = field(default_factory=lambda: os.environ.get("GCS_BUCKET", "arqivon-inc.firebasestorage.app"))
 
     # Server
     host: str = "0.0.0.0"
