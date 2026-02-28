@@ -78,18 +78,9 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   void _onTabChanged() {
     if (widget.tabNotifier.index != 1) {
-      // Leaving Live tab — stop the session regardless.
+      // Leaving Live tab — stop the session.
       final current = ref.read(liveSessionProvider).valueOrNull;
       if (current?.isStreaming ?? false) {
-        _stopFrameCapture();
-        ref.read(liveSessionProvider.notifier).stopSession();
-      }
-    } else {
-      // Returning to Live tab — ensure we're in a clean idle state.
-      // This catches any edge case where stopSession's async cleanup left
-      // the state as isStreaming: true (the "stuck on Listening" bug).
-      final current = ref.read(liveSessionProvider).valueOrNull;
-      if (current != null && current.isStreaming) {
         _stopFrameCapture();
         ref.read(liveSessionProvider.notifier).stopSession();
       }

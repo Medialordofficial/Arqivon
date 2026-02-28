@@ -600,7 +600,7 @@ async def send_daily_briefing(user_id: str, api_key: str | None = None):
 
     try:
         resp = await genai_client.aio.models.generate_content(
-            model="gemini-2.0-flash-lite",
+            model="gemini-2.0-flash",
             contents=briefing_prompt,
         )
         briefing_text = resp.text.strip() if resp.text else "Good morning! Open Arqivon to start your day."
@@ -1021,7 +1021,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Client → queue router ──────────────────────────────────────────
 
     async def receive_from_client() -> None:
-        nonlocal current_mode, source_lang, target_lang
+        nonlocal current_mode, source_lang, target_lang, session_record
         msg_count = 0
         RATE_LIMIT = 60
         RATE_WINDOW = 10.0
@@ -1183,7 +1183,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 f"Conversation transcript:\n{transcript_text}"
                             )
                             summary_response = await genai_client.aio.models.generate_content(
-                                model="gemini-2.0-flash-lite",
+                                model="gemini-2.0-flash",
                                 contents=summary_prompt,
                             )
                             if summary_response.text:
@@ -1625,7 +1625,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     f"Conversation transcript:\n{transcript_text}"
                 )
                 summary_response = await genai_client.aio.models.generate_content(
-                    model="gemini-2.0-flash-lite",
+                    model="gemini-2.0-flash",
                     contents=summary_prompt,
                 )
                 if summary_response.text:

@@ -350,26 +350,23 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       }
     };
 
-    // Only send set_mode when the mode changes so the backend does NOT tear
-    // down and rebuild the Gemini Live session on every mic tap.  On the very
-    // first tap after connectOnly() the mode will differ (null vs actual), so
-    // we always send it at least once per connection.
+    // ALWAYS send set_mode so the backend creates a Gemini session even
+    // after a WS reconnect to a fresh Cloud Run instance.  The backend
+    // handles duplicate set_mode cheaply (skips reconnect if same mode).
     final selectedVoice = ref.read(settingsProvider).selectedVoice;
     final resumeId = ref.read(resumeSessionProvider);
-    if (_lastSentMode != current.mode || resumeId != null) {
-      _ws!.send(
-        WsInbound(
-          type: 'set_mode',
-          mode: current.mode.wsValue,
-          voice: selectedVoice,
-          resumeSessionId: resumeId,
-        ),
-      );
-      _lastSentMode = current.mode;
-      // Clear resume after use
-      if (resumeId != null) {
-        ref.read(resumeSessionProvider.notifier).state = null;
-      }
+    _ws!.send(
+      WsInbound(
+        type: 'set_mode',
+        mode: current.mode.wsValue,
+        voice: selectedVoice,
+        resumeSessionId: resumeId,
+      ),
+    );
+    _lastSentMode = current.mode;
+    // Clear resume after use
+    if (resumeId != null) {
+      ref.read(resumeSessionProvider.notifier).state = null;
     }
 
     // If translator, send language prefs
@@ -565,9 +562,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _log.warning('stopSession end_session send error: $e');
     }
 
+    // Force _lastSentMode to null so the next startSession() always
+    // sends set_mode — vital after WS reconnects to a fresh backend.
+    _lastSentMode = null;
     // Re-establish the WS so the green indicator stays on.
-    // Keep _lastSentMode intact so if user re-taps mic (same mode) we do not
-    // send another set_mode and force an unnecessary Gemini reconnect.
     unawaited(connectOnly());
   }
 
