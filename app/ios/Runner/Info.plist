@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Arqivon needs microphone access for voice conversations and wake word detection.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Arqivon uses speech recognition to detect the "Hey Arqivon" wake word.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Arqivon uses the camera to share what you see during live sessions.</string>
 </dict>
 </plist>
