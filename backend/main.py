@@ -191,6 +191,11 @@ class FrameThrottle:
     def dropped(self) -> int:
         return self._dropped
 
+    @property
+    def last_sent_time(self) -> float:
+        """Monotonic timestamp of the last frame actually sent."""
+        return self._last_sent
+
 
 # ── Mode-specific system instructions ────────────────────────────────────────
 
@@ -216,6 +221,20 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "'compare to the couch we saw before', 'what was the price', 'remember when I "
         "showed you…' — call recall_memories to retrieve stored information. Use the "
         "recalled details to answer accurately.\n\n"
+
+        "PROACTIVE AMBIENT INTELLIGENCE:\n"
+        "• When you receive a system nudge like '[AMBIENT]', it means the user is silently "
+        "showing you their camera. Look at the current video frames carefully.\n"
+        "• If you see something genuinely interesting, useful, or actionable — SPEAK UP "
+        "proactively without being asked. Examples:\n"
+        "  – 'I notice that product has a recall warning.'\n"
+        "  – 'The WiFi password on that sign is ABC123.'\n"
+        "  – 'That receipt shows you were overcharged — the total should be $12.50.'\n"
+        "  – 'That's the Eiffel Tower — built in 1889 for the World's Fair.'\n"
+        "  – 'I can see an error message on your screen — try restarting the app.'\n"
+        "• If nothing notable is visible or you've already commented, stay completely silent. "
+        "Do NOT say 'I don't see anything interesting' — just say nothing.\n"
+        "• Keep proactive observations brief (1-2 sentences). Be helpful, not noisy.\n\n"
 
         "BEHAVIOR GUIDELINES:\n"
         "• Be concise but thorough — give the complete answer the user needs.\n"
@@ -459,6 +478,138 @@ async def list_sessions(user_id: str, token: str | None = None):
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 
+# ── Daily Briefing endpoint (triggered by Cloud Scheduler) ────────────────
+
+@app.post("/api/daily-briefing/{user_id}")
+async def send_daily_briefing(user_id: str, api_key: str | None = None):
+    """Generate and send a personalized daily briefing via FCM.
+
+    Designed to be triggered by Google Cloud Scheduler via an HTTP POST.
+    For security, requires internal API key or service account auth.
+    """
+    # Simple API key auth for Cloud Scheduler (check env BRIEFING_API_KEY)
+    expected_key = settings.briefing_api_key if hasattr(settings, 'briefing_api_key') else ""
+    if expected_key and api_key != expected_key:
+        raise HTTPException(403, "Invalid API key")
+
+    if db is None or genai_client is None:
+        raise HTTPException(503, "Backend services unavailable")
+
+    # Fetch user's FCM token
+    user_doc = await asyncio.to_thread(
+        db.collection("users").document(user_id).get
+    )
+    if not user_doc.exists:
+        raise HTTPException(404, "User not found")
+    user_data = user_doc.to_dict()
+    fcm_token = user_data.get("fcmToken")
+    if not fcm_token:
+        raise HTTPException(404, "No FCM token for user")
+
+    # Gather context: memories + recent sessions
+    memories_text = ""
+    try:
+        mem_docs = await asyncio.to_thread(
+            lambda: list(
+                db.collection("users").document(user_id)
+                .collection("memories").stream()
+            )
+        )
+        if mem_docs:
+            items = [f"• {d.id}: {d.to_dict().get('details', '')}" for d in mem_docs]
+            memories_text = "\n".join(items[:20])
+    except Exception:
+        pass
+
+    sessions_text = ""
+    try:
+        sess_docs = await asyncio.to_thread(
+            lambda: list(
+                db.collection("users").document(user_id)
+                .collection("sessions")
+                .order_by("started_at", direction=fb_firestore.Query.DESCENDING)
+                .limit(5)
+                .stream()
+            )
+        )
+        if sess_docs:
+            items = []
+            for d in sess_docs:
+                sd = d.to_dict()
+                items.append(f"• [{sd.get('mode', 'general')}] {sd.get('title', 'Untitled')}: {sd.get('summary', 'No summary')}")
+            sessions_text = "\n".join(items)
+    except Exception:
+        pass
+
+    # Generate briefing with Gemini
+    briefing_prompt = (
+        "You are generating a personalized daily briefing notification for a user of Arqivon, "
+        "an AI assistant app. Based on their stored memories and recent sessions, create a "
+        "brief, engaging morning update (2-3 sentences max). Focus on actionable insights, "
+        "follow-ups, or interesting observations. Be warm and helpful.\n\n"
+        f"User's stored memories:\n{memories_text or 'None'}\n\n"
+        f"Recent sessions:\n{sessions_text or 'None'}\n\n"
+        "Generate a concise, personalized daily briefing:"
+    )
+
+    try:
+        resp = await genai_client.aio.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=briefing_prompt,
+        )
+        briefing_text = resp.text.strip() if resp.text else "Good morning! Open Arqivon to start your day."
+    except Exception as exc:
+        logger.warning("Briefing generation failed: %s", exc)
+        briefing_text = "Good morning! Open Arqivon — your AI assistant is ready."
+
+    # Send via FCM
+    message = fb_messaging.Message(
+        notification=fb_messaging.Notification(
+            title="☀️ Your Daily Briefing",
+            body=briefing_text[:200],
+        ),
+        data={"type": "daily_briefing"},
+        token=fcm_token,
+    )
+    await asyncio.to_thread(fb_messaging.send, message)
+    logger.info("Daily briefing sent to user %s", user_id)
+    return {"status": "sent", "briefing": briefing_text}
+
+
+@app.post("/api/daily-briefing-all")
+async def send_daily_briefing_all(api_key: str | None = None):
+    """Send daily briefings to all users with FCM tokens.
+
+    Designed for Cloud Scheduler: POST /api/daily-briefing-all?api_key=...
+    """
+    expected_key = settings.briefing_api_key if hasattr(settings, 'briefing_api_key') else ""
+    if expected_key and api_key != expected_key:
+        raise HTTPException(403, "Invalid API key")
+
+    if db is None:
+        raise HTTPException(503, "Firestore unavailable")
+
+    # Find all users with FCM tokens
+    users_ref = db.collection("users")
+    user_docs = await asyncio.to_thread(lambda: list(users_ref.stream()))
+
+    sent = 0
+    errors = 0
+    for user_doc in user_docs:
+        data = user_doc.to_dict()
+        if not data.get("fcmToken"):
+            continue
+        try:
+            await send_daily_briefing(user_doc.id, api_key=api_key)
+            sent += 1
+        except Exception as exc:
+            logger.warning("Briefing failed for %s: %s", user_doc.id, exc)
+            errors += 1
+
+    logger.info("Daily briefing batch: sent=%d errors=%d", sent, errors)
+    return {"status": "complete", "sent": sent, "errors": errors}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _send_json(ws: WebSocket, msg: OutboundMessage) -> None:
@@ -527,11 +678,13 @@ def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:
     return delay + random.uniform(0, delay * 0.1)
 
 
-async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous"):
+async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous", prior_context: str | None = None):
     """Build a LiveConnectConfig for the given mode and open a session.
 
     Fetches stored memories for the user and injects them into the system
     prompt so the AI has cross-session context from the start.
+    If *prior_context* is provided (session resume), it is appended to the
+    system prompt so the AI can continue a previous conversation.
     """
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS[AgentMode.GENERAL])
     # Inject language context for translator mode
@@ -570,6 +723,17 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                                 len(memory_lines), user_id)
         except Exception as mem_err:
             logger.warning("Failed to load memories for prompt injection: %s", mem_err)
+
+    # ── Inject previous session context for conversation continuity ───
+    if prior_context:
+        prompt += (
+            "\n\nPREVIOUS SESSION CONTEXT (the user is resuming this conversation):\n"
+            + prior_context
+            + "\n\nContinue naturally where this conversation left off. "
+            "Reference relevant points from the previous session when helpful. "
+            "Greet the user warmly and acknowledge you remember the previous conversation."
+        )
+        logger.info("Injected prior session context for user=%s", user_id)
 
     # Validate voice name against known Gemini voices
     valid_voices = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
@@ -656,6 +820,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     input_q = InputQueue()
     frame_throttle = FrameThrottle(min_interval=0.30)
 
+    # Track last user audio timestamp for ambient nudge timing.
+    _last_audio_time: float = time.monotonic()
+
     # ── Gemini session is lazy ─────────────────────────────────────────────
     # Defer Gemini connection until the client sends the first set_mode
     # (triggered by startSession / mic tap). This keeps the WebSocket alive
@@ -666,7 +833,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await _send_json(websocket, OutboundMessage(type=OutboundType.STATUS, text="connected"))
 
     # ── Reconnect helper (for mode switches) ──────────────────────────────
-    async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede"):
+    async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede", prior_context: str | None = None):
         nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice
         # Signal receiver BEFORE closing so it recognises this is a mode
         # switch rather than an unexpected error.
@@ -688,7 +855,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 except Exception as exc:
                     logger.debug("Error closing old Gemini context: %s", exc)
             # Open new
-            live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id)
+            live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context)
             logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
         finally:
             # Always release forwarders, even on failure, to prevent
@@ -710,7 +877,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         By running in its own task, audio forwarding is NEVER blocked by
         video encoding, rate-limit checks, or mode-switch reconnects.
         """
-        nonlocal client_audio_count
+        nonlocal client_audio_count, _last_audio_time
         while not cancel_event.is_set():
             try:
                 audio_bytes = await asyncio.wait_for(
@@ -722,6 +889,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 break
 
             client_audio_count += 1
+            _last_audio_time = time.monotonic()
             # Pause while a mode switch is in progress to avoid sending
             # to a closed session.
             if _switching.is_set() or session is None:
@@ -823,7 +991,30 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 # Mode switching
                 if msg.type == InboundType.SET_MODE and msg.mode:
                     voice = msg.voice or current_voice
-                    if session is not None and msg.mode == current_mode and voice == current_voice:
+
+                    # ── Conversation continuity: load prior session context ──
+                    prior_context: str | None = None
+                    if msg.resume_session_id and db:
+                        try:
+                            session_doc = await asyncio.to_thread(
+                                db.collection("users").document(user_id)
+                                .collection("sessions").document(msg.resume_session_id).get
+                            )
+                            if session_doc.exists:
+                                sd = session_doc.to_dict()
+                                prior_context = (
+                                    f"Session title: {sd.get('title', 'Unknown')}\n"
+                                    f"Mode: {sd.get('mode', 'general')}\n"
+                                    f"Summary: {sd.get('summary', 'No summary available')}\n"
+                                    f"Topics discussed: {', '.join(sd.get('topics', []))}\n"
+                                    f"Number of conversation turns: {sd.get('turn_count', 0)}"
+                                )
+                                logger.info("Resuming session %s for user %s",
+                                            msg.resume_session_id, user_id)
+                        except Exception as resume_err:
+                            logger.warning("Failed to load resume session: %s", resume_err)
+
+                    if session is not None and msg.mode == current_mode and voice == current_voice and not prior_context:
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
@@ -835,7 +1026,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         # Flush the input queue so stale audio from the old
                         # mode doesn't contaminate the new session.
                         input_q.flush()
-                        await _reconnect_session(msg.mode, source_lang, target_lang, voice)
+                        await _reconnect_session(msg.mode, source_lang, target_lang, voice, prior_context=prior_context)
                         # _mode_switch_event is now set inside _reconnect_session
                         ms = tracer.end("mode_switch")
                         logger.info("Mode switch completed in %.0fms", ms)
@@ -1229,6 +1420,49 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception:
                 cancel_event.set()
 
+    # ── Proactive ambient nudge (vision-triggered insights) ───────────────
+
+    async def _ambient_nudge() -> None:
+        """Periodically nudge Gemini to proactively comment on the camera view.
+
+        Triggers ONLY when:
+          1. Video frames are actively flowing (camera is on)
+          2. No user audio has been received for ≥15 seconds (user is silent)
+          3. At least 30 seconds since the last nudge (avoid spam)
+          4. Mode is general or tutor (vision-relevant modes)
+        """
+        last_nudge_time = 0.0
+        nudge_interval = 30.0    # min seconds between nudges
+        silence_threshold = 15.0  # seconds of silence before nudging
+        while not cancel_event.is_set():
+            await asyncio.sleep(5.0)
+            if session is None or _switching.is_set():
+                continue
+            if current_mode not in (AgentMode.GENERAL, AgentMode.TUTOR):
+                continue
+            now = time.monotonic()
+            # Check that video is actively flowing
+            if now - frame_throttle.last_sent_time > 5.0:
+                continue  # No recent video frames — camera is off
+            # Check user silence duration
+            if now - _last_audio_time < silence_threshold:
+                continue  # User spoke recently
+            # Rate-limit nudges
+            if now - last_nudge_time < nudge_interval:
+                continue
+            try:
+                await session.send_client_content(
+                    turns=types.Content(
+                        role="user",
+                        parts=[types.Part(text="[AMBIENT]")],
+                    ),
+                    turn_complete=True,
+                )
+                last_nudge_time = now
+                logger.info("Ambient nudge sent (silence=%.0fs)", now - _last_audio_time)
+            except Exception as exc:
+                logger.debug("Ambient nudge failed: %s", exc)
+
     # ── Run all ───────────────────────────────────────────────────────────
 
     try:
@@ -1238,6 +1472,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             _video_forwarder(),
             receive_from_gemini(),
             heartbeat(),
+            _ambient_nudge(),
             return_exceptions=True,
         )
     finally:

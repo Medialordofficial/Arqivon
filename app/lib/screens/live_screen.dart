@@ -5,8 +5,10 @@ import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/constants.dart';
 import '../config/logger.dart';
@@ -1124,6 +1126,18 @@ class _ChatBubble extends StatelessWidget {
   final bool isLive;
   final ThemeData theme;
 
+  /// Whether the text contains markdown formatting worth rendering.
+  static bool _hasMarkdown(String text) {
+    return text.contains('```') ||
+        text.contains('**') ||
+        text.contains('##') ||
+        text.contains('- ') ||
+        text.contains('1. ') ||
+        text.contains('`') ||
+        text.contains('\$\$') ||
+        text.contains('[') && text.contains('](');
+  }
+
   @override
   Widget build(BuildContext context) {
     final bubbleColor = isUser
@@ -1131,6 +1145,7 @@ class _ChatBubble extends StatelessWidget {
         : theme.colorScheme.surfaceContainerHighest;
     final textColor = theme.colorScheme.onSurface;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final useMarkdown = !isUser && !isLive && _hasMarkdown(text);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1170,15 +1185,84 @@ class _ChatBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Flexible(
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: isLive ? 0.6 : 1.0),
-                      fontSize: 15,
-                      height: 1.4,
-                      fontStyle: isLive ? FontStyle.italic : FontStyle.normal,
-                    ),
-                  ),
+                  child: useMarkdown
+                      ? MarkdownBody(
+                          data: text,
+                          selectable: true,
+                          shrinkWrap: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: TextStyle(
+                              color: textColor,
+                              fontSize: 15,
+                              height: 1.4,
+                            ),
+                            code: TextStyle(
+                              color: theme.colorScheme.primary,
+                              backgroundColor: theme.colorScheme.primary
+                                  .withValues(alpha: 0.08),
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                            ),
+                            codeblockDecoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            codeblockPadding: const EdgeInsets.all(12),
+                            h1: TextStyle(
+                              color: textColor,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            h2: TextStyle(
+                              color: textColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            h3: TextStyle(
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            listBullet: TextStyle(
+                              color: textColor.withValues(alpha: 0.7),
+                              fontSize: 15,
+                            ),
+                            strong: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            em: TextStyle(
+                              color: textColor,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            blockquoteDecoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: theme.colorScheme.primary
+                                      .withValues(alpha: 0.5),
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                          ),
+                          onTapLink: (text, href, title) {
+                            if (href != null) {
+                              final uri = Uri.tryParse(href);
+                              if (uri != null) launchUrl(uri);
+                            }
+                          },
+                        )
+                      : Text(
+                          text,
+                          style: TextStyle(
+                            color:
+                                textColor.withValues(alpha: isLive ? 0.6 : 1.0),
+                            fontSize: 15,
+                            height: 1.4,
+                            fontStyle:
+                                isLive ? FontStyle.italic : FontStyle.normal,
+                          ),
+                        ),
                 ),
                 if (isLive) ...[
                   const SizedBox(width: 6),

@@ -14,6 +14,12 @@ import '../services/websocket_service.dart';
 import 'auth_provider.dart';
 import 'settings_provider.dart';
 
+/// Session ID to resume when the next session starts.
+final resumeSessionProvider = StateProvider<String?>((ref) => null);
+
+/// Controls the active tab index in MainNavigator.
+final activeTabProvider = StateProvider<int>((ref) => 0);
+
 /// Exposed live session state.
 class LiveSessionState {
   final WsConnectionState connectionState;
@@ -336,15 +342,21 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // first tap after connectOnly() the mode will differ (null vs actual), so
     // we always send it at least once per connection.
     final selectedVoice = ref.read(settingsProvider).selectedVoice;
-    if (_lastSentMode != current.mode) {
+    final resumeId = ref.read(resumeSessionProvider);
+    if (_lastSentMode != current.mode || resumeId != null) {
       _ws!.send(
         WsInbound(
           type: 'set_mode',
           mode: current.mode.wsValue,
           voice: selectedVoice,
+          resumeSessionId: resumeId,
         ),
       );
       _lastSentMode = current.mode;
+      // Clear resume after use
+      if (resumeId != null) {
+        ref.read(resumeSessionProvider.notifier).state = null;
+      }
     }
 
     // If translator, send language prefs

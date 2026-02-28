@@ -7,6 +7,7 @@ class WsInbound {
   final String? sourceLang;
   final String? targetLang;
   final String? voice;
+  final String? resumeSessionId;
 
   const WsInbound({
     required this.type,
@@ -16,6 +17,7 @@ class WsInbound {
     this.sourceLang,
     this.targetLang,
     this.voice,
+    this.resumeSessionId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -26,6 +28,7 @@ class WsInbound {
         if (sourceLang != null) 'source_lang': sourceLang,
         if (targetLang != null) 'target_lang': targetLang,
         if (voice != null) 'voice': voice,
+        if (resumeSessionId != null) 'resume_session_id': resumeSessionId,
         // timestamp injected by WebSocketService.send() for latency tracking
       };
 }

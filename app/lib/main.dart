@@ -13,6 +13,7 @@ import 'config/theme.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/firebase_provider.dart';
+import 'providers/live_session_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/archive_screen.dart';
 import 'screens/home_screen.dart';
@@ -418,14 +419,14 @@ class TabIndexNotifier extends ChangeNotifier {
   }
 }
 
-class MainNavigator extends StatefulWidget {
+class MainNavigator extends ConsumerStatefulWidget {
   const MainNavigator({super.key});
 
   @override
-  State<MainNavigator> createState() => _MainNavigatorState();
+  ConsumerState<MainNavigator> createState() => _MainNavigatorState();
 }
 
-class _MainNavigatorState extends State<MainNavigator> {
+class _MainNavigatorState extends ConsumerState<MainNavigator> {
   int _currentIndex = 0;
   final TabIndexNotifier _tabNotifier = TabIndexNotifier();
 
@@ -452,6 +453,11 @@ class _MainNavigatorState extends State<MainNavigator> {
   Widget build(BuildContext context) {
     // Mark current tab as activated
     _activatedTabs.add(_currentIndex);
+
+    // Watch for external tab changes (e.g., from session resume).
+    ref.listen<int>(activeTabProvider, (prev, next) {
+      if (next != _currentIndex) _selectTab(next);
+    });
 
     final screens = <Widget>[
       HomeScreen(onGoLive: _goLive),

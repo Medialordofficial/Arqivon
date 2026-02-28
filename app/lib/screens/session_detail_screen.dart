@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/session_model.dart';
+import '../providers/live_session_provider.dart';
 
 /// Full session detail / replay screen accessible from the Archive.
-class SessionDetailScreen extends StatelessWidget {
+class SessionDetailScreen extends ConsumerWidget {
   const SessionDetailScreen({super.key, required this.session});
 
   final SessionModel session;
@@ -21,7 +23,7 @@ class SessionDetailScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final dateStr = DateFormat('EEEE, MMM d, y').format(session.startedAt);
     final timeStr = DateFormat('h:mm a').format(session.startedAt);
     final endTimeStr = session.endedAt != null
@@ -39,6 +41,21 @@ class SessionDetailScreen extends StatelessWidget {
             Navigator.of(context).pop();
           },
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          HapticFeedback.heavyImpact();
+          // Set the session to resume and the mode to match.
+          ref.read(resumeSessionProvider.notifier).state = session.id;
+          ref.read(liveSessionProvider.notifier).setMode(session.mode);
+          // Navigate back to the main navigator and switch to Live tab.
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          ref.read(activeTabProvider.notifier).state = 1;
+        },
+        icon: const Icon(Icons.play_arrow_rounded),
+        label: const Text('Continue Session'),
+        backgroundColor: session.mode.color,
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),

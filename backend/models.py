@@ -40,6 +40,7 @@ class InboundMessage(BaseModel):
     voice: str | None = None         # AI voice selection (Aoede, Puck, etc.)
     source_lang: str | None = None   # for SET_LANGUAGE (translator)
     target_lang: str | None = None   # for SET_LANGUAGE (translator)
+    resume_session_id: str | None = None  # Resume context from a previous session
     timestamp: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
 
 
