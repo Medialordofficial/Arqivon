@@ -526,19 +526,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   Future<void> stopSession() async {
     _stopWatchdogs();
-    // Cancel the audio subscription before stopping capture to prevent stale
-    // chunks being sent over a half-closed socket.
-    await _audioSub?.cancel();
-    _audioSub = null;
-    _ampSub?.cancel();
-    _ampSub = null;
-    amplitudeNotifier.value = 0.0;
-    await _audio?.stop();
-    await _audio?.stopPlayback();
 
-    // Tell the backend to save the session NOW (before WS teardown).
-    _ws?.send(const WsInbound(type: 'end_session'));
-
+    // ── 1. Update state FIRST so UI shows idle immediately ──────────
+    //    This prevents the "stuck on Listening" bug when async cleanup
+    //    below hangs or throws.
     state = AsyncData(
       (state.valueOrNull ?? const LiveSessionState()).copyWith(
         isStreaming: false,
@@ -546,6 +537,34 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         isMuted: true,
       ),
     );
+
+    // ── 2. Async cleanup — wrapped in try-catch so state is never
+    //    left inconsistent even if individual operations fail. ────────
+    try {
+      // Cancel the audio subscription before stopping capture to prevent
+      // stale chunks being sent over a half-closed socket.
+      await _audioSub?.cancel();
+      _audioSub = null;
+      _ampSub?.cancel();
+      _ampSub = null;
+      amplitudeNotifier.value = 0.0;
+      await _audio?.stop();
+      await _audio?.stopPlayback();
+    } catch (e) {
+      _log.warning('stopSession cleanup error (non-fatal): $e');
+      // Force-null subscriptions even on error.
+      _audioSub = null;
+      _ampSub = null;
+      amplitudeNotifier.value = 0.0;
+    }
+
+    // Tell the backend to save the session NOW (before WS teardown).
+    try {
+      _ws?.send(const WsInbound(type: 'end_session'));
+    } catch (e) {
+      _log.warning('stopSession end_session send error: $e');
+    }
+
     // Re-establish the WS so the green indicator stays on.
     // Keep _lastSentMode intact so if user re-taps mic (same mode) we do not
     // send another set_mode and force an unnecessary Gemini reconnect.
