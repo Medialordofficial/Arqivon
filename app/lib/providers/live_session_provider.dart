@@ -165,6 +165,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   int _lastWatchdogServerMsgCount = 0;
   DateTime? _lastAudioChunkAt;
   bool _restartInFlight = false;
+  Timer? _turnCompleteTimer;
 
   /// Accumulated user/AI text within the current Gemini turn.
   /// Saved as ChatMessages on turn_complete.
@@ -619,6 +620,36 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(current.copyWith(clearExport: true));
   }
 
+  void _scheduleTurnCompleteFinalize() {
+    _turnCompleteTimer?.cancel();
+    // Give a tiny grace window for late audio chunks that can arrive right
+    // around turn_complete, especially after interruptions.
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 180), () {
+      final current = state.valueOrNull ?? const LiveSessionState();
+      _log.info('finalizing turn_complete (debounced)');
+      _audio?.flushAndPlay();
+
+      final newMessages = <ChatMessage>[...current.chatMessages];
+      final userText = _turnUserTexts.join(' ').trim();
+      final aiText = _turnAiTexts.join(' ').trim();
+      if (userText.isNotEmpty) {
+        newMessages.add(ChatMessage(text: userText, isUser: true));
+      }
+      if (aiText.isNotEmpty) {
+        newMessages.add(ChatMessage(text: aiText));
+      }
+      _turnUserTexts.clear();
+      _turnAiTexts.clear();
+      state = AsyncData(
+        current.copyWith(
+          clearTranscript: true,
+          clearUserTranscript: true,
+          chatMessages: newMessages,
+        ),
+      );
+    });
+  }
+
   // ── Message handling ──────────────────────────────────────────────────
 
   void _handleServerMessage(WsOutbound msg) {
@@ -630,6 +661,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     switch (msg.type) {
       case 'audio':
         if (msg.data != null) {
+          // If turn_complete just arrived, allow this trailing audio to be
+          // included before finalizing playback.
+          if (_turnCompleteTimer != null && _turnCompleteTimer!.isActive) {
+            _scheduleTurnCompleteFinalize();
+          }
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
@@ -762,35 +798,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'turn_complete':
-        // Flush remaining audio to the streaming queue.
-        // isResponding stays true until playback actually finishes
-        // (handled by onPlaybackDone callback).
-        _log.info('turn_complete received from backend');
-        _audio?.flushAndPlay();
-        // Save accumulated turn text as chat messages.
-        final newMessages = <ChatMessage>[...current.chatMessages];
-        final userText = _turnUserTexts.join(' ').trim();
-        final aiText = _turnAiTexts.join(' ').trim();
-        if (userText.isNotEmpty) {
-          newMessages.add(ChatMessage(text: userText, isUser: true));
-        }
-        if (aiText.isNotEmpty) {
-          newMessages.add(ChatMessage(text: aiText));
-        }
-        _turnUserTexts.clear();
-        _turnAiTexts.clear();
-        state = AsyncData(
-          current.copyWith(
-            clearTranscript: true,
-            clearUserTranscript: true,
-            chatMessages: newMessages,
-          ),
-        );
+        _log.info('turn_complete received from backend (debounced)');
+        _scheduleTurnCompleteFinalize();
         break;
 
       case 'interrupted':
         // User barged in — stop playback immediately and clear ALL stale overlays.
         _log.info('interrupted received from backend');
+        _turnCompleteTimer?.cancel();
         // Stop playback first, THEN restart recorder to avoid audio-focus
         // conflicts on Android where the player disposal kills the mic.
         _audio?.stopPlayback().whenComplete(() {
@@ -805,6 +820,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         state = AsyncData(
           current.copyWith(
             isResponding: false,
+            clearTranscript: true,
+            clearUserTranscript: true,
             clearTranslation: true,
             clearAction: true,
             clearTutorStep: true,
@@ -851,6 +868,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audioSub?.cancel();
     _ampSub?.cancel();
     _modeSwitchDebounce?.cancel();
+    _turnCompleteTimer?.cancel();
     amplitudeNotifier.dispose();
     _ws?.dispose();
     _audio?.dispose();

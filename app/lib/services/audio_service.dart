@@ -264,8 +264,9 @@ class AudioService {
 
   /// Write buffered PCM to a temp WAV file, add it to the turn's playlist,
   /// and start (or resume) the player.
-  Future<void> _flushPartial() async {
-    if (_pcmBuffer.length < _minFlushBytes) return;
+  Future<void> _flushPartial({bool force = false}) async {
+    if (!force && _pcmBuffer.length < _minFlushBytes) return;
+    if (_pcmBuffer.isEmpty) return;
 
     final pcm = Uint8List.fromList(_pcmBuffer);
     _pcmBuffer.clear();
@@ -340,7 +341,9 @@ class AudioService {
 
     // Flush remaining PCM.
     if (_pcmBuffer.isNotEmpty) {
-      await _flushPartial();
+      // Force-flush the final tail so short replies (common after
+      // interruption) are never dropped.
+      await _flushPartial(force: true);
     }
 
     // Listen for playback completion, then reset for the next turn.
