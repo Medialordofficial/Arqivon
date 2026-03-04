@@ -344,10 +344,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       if (cur.isResponding) {
         state = AsyncData(cur.copyWith(isResponding: false));
       }
-      // CRITICAL: explicitly restart recorder if it died during playback.
-      // Android may kill the mic when audio focus changes.
-      if (cur.isStreaming) {
-        _log.info('calling ensureRecording after playback done');
+      // Restart recorder ONLY when it is actually dead.
+      // Forcing a restart on every turn can steal audio focus from the
+      // next AI response and cause "text appears but voice is silent".
+      if (cur.isStreaming && !(_audio?.isCapturing ?? false)) {
+        _log.info(
+            'recorder not capturing after playback — calling ensureRecording');
         _audio?.ensureRecording();
       }
     };
@@ -792,10 +794,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Stop playback first, THEN restart recorder to avoid audio-focus
         // conflicts on Android where the player disposal kills the mic.
         _audio?.stopPlayback().whenComplete(() {
-          // Ensure the mic is alive AFTER playback disposal completes.
+          // Ensure the mic is alive AFTER playback disposal completes,
+          // but only if it actually stopped.
           final cur = state.valueOrNull ?? const LiveSessionState();
-          if (cur.isStreaming) {
-            _log.info('restarting recorder after barge-in playback stop');
+          if (cur.isStreaming && !(_audio?.isCapturing ?? false)) {
+            _log.info('recorder stopped after barge-in — restarting');
             _audio?.ensureRecording();
           }
         });
