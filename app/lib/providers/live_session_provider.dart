@@ -163,6 +163,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   int _lastResponseChunkCount = 0;
   int _serverMessageCount = 0;
   int _lastWatchdogServerMsgCount = 0;
+  DateTime? _lastAudioChunkAt;
+  bool _restartInFlight = false;
 
   /// Accumulated user/AI text within the current Gemini turn.
   /// Saved as ChatMessages on turn_complete.
@@ -387,12 +389,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // Start audio capture and pipe to WebSocket
     await _audio!.start();
     _audioChunksSent = 0;
+    _lastAudioChunkAt = null;
     _audioSub = _audio!.audioStream.listen(
       (b64) {
         // Only send audio when NOT muted.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
         _audioChunksSent++;
+        _lastAudioChunkAt = DateTime.now();
         if (_audioChunksSent % 50 == 1) {
           _log.fine(
             'audio chunk #$_audioChunksSent → WS (state=${_ws?.state})',
@@ -458,22 +462,29 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _lastWatchdogChunkCount = _audioChunksSent;
     });
 
-    // Response watchdog: every 10s check if server is responding.
+    // Response watchdog: every 8s check if server is responding after
+    // the user has likely FINISHED speaking. This avoids false restarts
+    // during long utterances.
     _lastWatchdogServerMsgCount = _serverMessageCount;
     _lastResponseChunkCount = _audioChunksSent;
-    _responseWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
+    _responseWatchdog = Timer.periodic(const Duration(seconds: 8), (_) {
       final cur = state.valueOrNull;
       if (cur == null || !cur.isStreaming || cur.isMuted) {
         _lastWatchdogServerMsgCount = _serverMessageCount;
         _lastResponseChunkCount = _audioChunksSent;
         return;
       }
-      // Only trigger if we've been sending audio but got zero responses.
-      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 50;
+      // Require a real utterance in this window (~0.75s audio at 50ms chunks).
+      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 15;
+      // Only restart after user likely finished speaking.
+      final sinceLastAudio = _lastAudioChunkAt == null
+          ? const Duration(days: 1)
+          : DateTime.now().difference(_lastAudioChunkAt!);
+      final userLikelyFinished = sinceLastAudio.inMilliseconds > 1200;
       final noResponse = _serverMessageCount == _lastWatchdogServerMsgCount;
-      if (sentAudio && noResponse) {
+      if (sentAudio && userLikelyFinished && noResponse) {
         _log.warning(
-          'Response watchdog: sent audio but no server messages for 10s — '
+          'Response watchdog: user finished speaking but no server messages for 8s — '
           'forcing session restart',
         );
         _forceSessionRestart();
@@ -492,23 +503,32 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   /// Tear down and restart the entire audio + Gemini session.
   Future<void> _forceSessionRestart() async {
+    if (_restartInFlight) {
+      _log.info('force restart ignored (already in flight)');
+      return;
+    }
+    _restartInFlight = true;
     _log.warning('Force-restarting session');
     _stopWatchdogs();
-    // Send end_session so the backend saves what it has.
-    _ws?.send(const WsInbound(type: 'end_session'));
-    // Brief pause for the backend to process.
-    await Future.delayed(const Duration(milliseconds: 300));
-    // Tear down audio.
-    await _audioSub?.cancel();
-    _audioSub = null;
-    _ampSub?.cancel();
-    _ampSub = null;
-    await _audio?.stop();
-    await _audio?.stopPlayback();
-    // Force _lastSentMode to null so startSession() sends a fresh set_mode.
-    _lastSentMode = null;
-    // Restart.
-    await startSession();
+    try {
+      // Send end_session so the backend saves what it has.
+      _ws?.send(const WsInbound(type: 'end_session'));
+      // Brief pause for the backend to process.
+      await Future.delayed(const Duration(milliseconds: 300));
+      // Tear down audio.
+      await _audioSub?.cancel();
+      _audioSub = null;
+      _ampSub?.cancel();
+      _ampSub = null;
+      await _audio?.stop();
+      await _audio?.stopPlayback();
+      // Force _lastSentMode to null so startSession() sends a fresh set_mode.
+      _lastSentMode = null;
+      // Restart.
+      await startSession();
+    } finally {
+      _restartInFlight = false;
+    }
   }
 
   /// Toggle the microphone mute state. When muted, audio chunks are

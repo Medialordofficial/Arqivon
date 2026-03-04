@@ -128,7 +128,9 @@ class InputQueue:
     """
 
     def __init__(self):
-        self._audio_q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
+        # 50ms client chunks at 16kHz => ~20 chunks/sec.
+        # 400 chunks buffers ~20s of speech during transient reconnects.
+        self._audio_q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=400)
         self._video_frame: bytes | None = None  # latest-wins slot
         self._video_ready = asyncio.Event()
 
@@ -755,11 +757,21 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
             )
             if docs:
                 memory_lines = []
-                for doc in docs:
+                # Bound memory injection to avoid slow first-token latency.
+                max_memories = 20
+                max_total_chars = 3500
+                consumed = 0
+                for doc in docs[:max_memories]:
                     data = doc.to_dict()
                     topic = doc.id
-                    details = data.get("details", "")
-                    memory_lines.append(f"  • {topic}: {details}")
+                    details = str(data.get("details", "")).strip()
+                    if len(details) > 180:
+                        details = f"{details[:177]}..."
+                    line = f"  • {topic}: {details}"
+                    if consumed + len(line) > max_total_chars:
+                        break
+                    memory_lines.append(line)
+                    consumed += len(line)
                 if memory_lines:
                     prompt += (
                         "\n\nUSER'S STORED MEMORIES (from previous sessions):\n"
@@ -809,8 +821,8 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 disabled=False,
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                prefix_padding_ms=100,
-                silence_duration_ms=300,
+                prefix_padding_ms=80,
+                silence_duration_ms=220,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
