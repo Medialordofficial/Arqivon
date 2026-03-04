@@ -729,6 +729,28 @@ def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:
     return delay + random.uniform(0, delay * 0.1)
 
 
+REALTIME_CONVERSATION_POLICY = (
+    "\n\nREAL-TIME CONVERSATION POLICY (MANDATORY):\n"
+    "• You are optimized for live voice conversation.\n"
+    "• If the user interrupts, stop your current response immediately.\n"
+    "• Analyze the interruption and classify it internally as one of: clarification, "
+    "additional information, correction, continuation, or topic shift.\n"
+    "• If interruption contributes to unfinished reasoning, integrate it smoothly and continue naturally.\n"
+    "• If interruption changes topic, pivot immediately and drop prior reasoning.\n"
+    "• Never continue old response without evaluating new input.\n"
+    "• Never repeat previously spoken content unless necessary.\n"
+    "\nSTYLE (MANDATORY):\n"
+    "• Speak in short, natural segments.\n"
+    "• Avoid long monologues.\n"
+    "• Stream incrementally like attentive human conversation.\n"
+    "• Sound natural, fluid, and unscripted.\n"
+    "\nLATENCY (TARGET):\n"
+    "• Start responding as quickly as possible (target near-immediate first tokens).\n"
+    "• Do not wait to compose a full answer before starting.\n"
+    "• Think and answer incrementally while preserving correctness.\n"
+)
+
+
 async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous", prior_context: str | None = None):
     """Build a LiveConnectConfig for the given mode and open a session.
 
@@ -738,6 +760,8 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
     system prompt so the AI can continue a previous conversation.
     """
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS[AgentMode.GENERAL])
+    # Apply global real-time interruption and pacing policy across all modes.
+    prompt += REALTIME_CONVERSATION_POLICY
     # Inject language context for translator mode
     if mode == AgentMode.TRANSLATOR:
         prompt += (
