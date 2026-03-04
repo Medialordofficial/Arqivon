@@ -38,8 +38,13 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback (fresh per turn) ──────────────────────────────────────
-  AudioPlayer? _turnPlayer;
+  // ── Playback (fresh player per turn) ──────────────────────────────
+  /// Each AI response turn gets its own [AudioPlayer].  The previous
+  /// turn's player is disposed lazily when the NEW turn starts, so
+  /// audio focus is never released between turns (the root-cause of the
+  /// "no voice after N turns" bug on Android).
+  AudioPlayer? _player;
+  AudioPlayer? _oldPlayer; // kept alive until the next turn starts
   ConcatenatingAudioSource? _turnPlaylist;
   StreamSubscription<PlayerState>? _playbackSub;
   bool _playbackStarted = false;
@@ -271,31 +276,38 @@ class AudioService {
     await File(filePath).writeAsBytes(wav, flush: true);
     _tempFiles.add(filePath);
 
-    // Lazily create a brand-new player + playlist for this turn.
-    _turnPlayer ??= AudioPlayer();
-    _turnPlaylist ??= ConcatenatingAudioSource(
-      useLazyPreparation: true,
-      children: [],
-    );
+    // First chunk of a new turn → create a fresh player & playlist.
+    if (_turnPlaylist == null) {
+      // Dispose the OLD turn's player in the background — but only now,
+      // so audio focus was held continuously between turns.
+      _disposeOldPlayer();
+      await _ensureAudioSession();
+      _player = AudioPlayer();
+      _turnPlaylist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: [],
+      );
+      _playbackStarted = false;
+    }
 
     await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
 
     if (!_playbackStarted) {
       _playbackStarted = true;
       try {
-        await _turnPlayer!.setAudioSource(_turnPlaylist!);
-        _turnPlayer!.play();
+        await _player!.setAudioSource(_turnPlaylist!);
+        _player!.play();
         _log.info('turn playback started');
       } catch (e) {
         _log.severe('turn playback start error', e);
         _playbackStarted = false;
       }
-    } else if (_turnPlayer!.processingState == ProcessingState.completed) {
+    } else if (_player!.processingState == ProcessingState.completed) {
       // Player reached end before the new chunk was added — seek to it.
       try {
         final idx = _turnPlaylist!.length - 1;
-        await _turnPlayer!.seek(Duration.zero, index: idx);
-        _turnPlayer!.play();
+        await _player!.seek(Duration.zero, index: idx);
+        _player!.play();
         _log.info('resumed playback at index $idx');
       } catch (e) {
         _log.severe('seek-to-new-chunk error', e);
@@ -303,68 +315,50 @@ class AudioService {
     }
   }
 
+  /// Dispose the previous turn's player in the background.
+  void _disposeOldPlayer() {
+    final old = _oldPlayer;
+    _oldPlayer = null;
+    if (old == null) return;
+    unawaited(Future(() async {
+      try {
+        await old.stop();
+      } catch (_) {}
+      try {
+        await old.dispose();
+      } catch (_) {}
+    }));
+  }
+
   /// Called on `turn_complete` — flush any remaining PCM, then wait for the
   /// turn player to finish before calling [onPlaybackDone].
   Future<void> flushAndPlay() async {
     _flushTimer?.cancel();
     _log.info(
-      'flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, turnPlayer=${_turnPlayer != null}',
+      'flushAndPlay called, pcmBuffer=${_pcmBuffer.length} bytes, player=${_player != null}',
     );
 
     // Flush remaining PCM.
     if (_pcmBuffer.isNotEmpty) {
-      final pcm = Uint8List.fromList(_pcmBuffer);
-      _pcmBuffer.clear();
-
-      final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/ai_chunk_${_chunkIndex++}.wav';
-      final wav = _buildWav(pcm, sampleRate: 24000);
-      await File(filePath).writeAsBytes(wav, flush: true);
-      _tempFiles.add(filePath);
-
-      _turnPlayer ??= AudioPlayer();
-      _turnPlaylist ??= ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: [],
-      );
-      await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
-
-      if (!_playbackStarted) {
-        _playbackStarted = true;
-        try {
-          await _turnPlayer!.setAudioSource(_turnPlaylist!);
-          _turnPlayer!.play();
-        } catch (e) {
-          _log.severe('flush play error', e);
-          _playbackStarted = false;
-        }
-      } else if (_turnPlayer!.processingState == ProcessingState.completed) {
-        try {
-          final idx = _turnPlaylist!.length - 1;
-          await _turnPlayer!.seek(Duration.zero, index: idx);
-          _turnPlayer!.play();
-        } catch (e) {
-          _log.severe('flush seek error', e);
-        }
-      }
+      await _flushPartial();
     }
 
-    // Listen for playback completion, then dispose the turn player.
-    if (_turnPlayer != null) {
+    // Listen for playback completion, then reset for the next turn.
+    if (_player != null && _turnPlaylist != null) {
       // Cancel any previous listener.
       _playbackSub?.cancel();
 
       // Check if already completed *before* subscribing.
-      if (_turnPlayer!.processingState == ProcessingState.completed) {
-        _disposeTurnPlayer();
+      if (_player!.processingState == ProcessingState.completed) {
+        _resetForNextTurn();
         return;
       }
 
-      _playbackSub = _turnPlayer!.playerStateStream.listen((s) {
+      _playbackSub = _player!.playerStateStream.listen((s) {
         if (s.processingState == ProcessingState.completed) {
           _playbackSub?.cancel();
           _playbackSub = null;
-          _disposeTurnPlayer();
+          _resetForNextTurn();
         }
       });
     } else {
@@ -374,49 +368,38 @@ class AudioService {
     }
   }
 
-  /// Tear down the current turn's player and playlist, then notify caller.
-  void _disposeTurnPlayer() {
+  /// Reset playback state for the next AI turn.
+  ///
+  /// The current player is moved to [_oldPlayer] and kept alive so Android
+  /// does NOT release audio focus between turns.  It will be disposed when
+  /// the next turn's first audio chunk arrives (in [_flushPartial]).
+  void _resetForNextTurn() {
     _playbackStarted = false;
-    final player = _turnPlayer;
-    final playlist = _turnPlaylist;
-    final files = List<String>.from(_tempFiles);
-    _turnPlayer = null;
+    _playbackSub?.cancel();
+    _playbackSub = null;
+
+    // Stash the current player as "old" — _flushPartial will dispose it
+    // only when the NEW turn's player is ready to take over.
+    _disposeOldPlayer(); // dispose any previously stashed player first
+    _oldPlayer = _player;
+    _player = null;
     _turnPlaylist = null;
+
+    // Delete temp files in background.
+    final files = List<String>.from(_tempFiles);
     _tempFiles.clear();
-
-    // Run disposal asynchronously to avoid re-entrance inside the player
-    // state listener callback.
-    unawaited(
-      Future(() async {
+    unawaited(Future(() async {
+      for (final path in files) {
         try {
-          await player?.stop();
+          await File(path).delete();
         } catch (e) {
-          _log.fine('turn player stop: $e');
+          _log.fine('temp file delete: $e');
         }
-        try {
-          await player?.dispose();
-        } catch (e) {
-          _log.fine('turn player dispose: $e');
-        }
-        // Clear the ConcatenatingAudioSource children (optional but tidy).
-        try {
-          await playlist?.clear();
-        } catch (e) {
-          _log.fine('turn playlist clear: $e');
-        }
+      }
+    }));
 
-        for (final path in files) {
-          try {
-            await File(path).delete();
-          } catch (e) {
-            _log.fine('temp file delete: $e');
-          }
-        }
-
-        _log.info('turn player disposed — calling onPlaybackDone');
-        onPlaybackDone?.call();
-      }),
-    );
+    _log.info('turn reset complete — calling onPlaybackDone');
+    onPlaybackDone?.call();
   }
 
   /// Stop playback immediately (barge-in from user).
@@ -427,27 +410,30 @@ class AudioService {
     _playbackSub = null;
     _playbackStarted = false;
 
-    final player = _turnPlayer;
     final files = List<String>.from(_tempFiles);
-    _turnPlayer = null;
     _turnPlaylist = null;
     _tempFiles.clear();
 
-    // Stop the player synchronously for instant silence, then dispose in
-    // the background so we return fast and the caller can restart the
-    // recorder without audio-focus contention.
-    try {
-      await player?.stop();
-    } catch (e) {
-      _log.fine('stopPlayback stop: $e');
-    }
-    // Dispose player + delete temp files in background to not block caller.
-    unawaited(Future(() async {
+    // Stop + dispose player immediately for instant silence.
+    // On barge-in we don't need to hold audio focus — the recorder is
+    // about to reclaim it via ensureRecording() in the provider.
+    final player = _player;
+    _player = null;
+    _disposeOldPlayer(); // also dispose any stashed old player
+    if (player != null) {
       try {
-        await player?.dispose();
+        await player.stop();
       } catch (e) {
-        _log.fine('stopPlayback dispose: $e');
+        _log.fine('stopPlayback stop: $e');
       }
+      unawaited(Future(() async {
+        try {
+          await player.dispose();
+        } catch (_) {}
+      }));
+    }
+    // Delete temp files in background.
+    unawaited(Future(() async {
       for (final path in files) {
         try {
           await File(path).delete();
@@ -543,16 +529,18 @@ class AudioService {
     _amplitudeController.close();
     _recorder.dispose();
 
-    try {
-      _turnPlayer?.stop();
-    } catch (e) {
-      _log.fine('dispose stop: $e');
+    for (final p in [_player, _oldPlayer]) {
+      if (p != null) {
+        try {
+          p.stop();
+        } catch (_) {}
+        try {
+          p.dispose();
+        } catch (_) {}
+      }
     }
-    try {
-      _turnPlayer?.dispose();
-    } catch (e) {
-      _log.fine('dispose player: $e');
-    }
+    _player = null;
+    _oldPlayer = null;
 
     for (final path in _tempFiles) {
       try {
