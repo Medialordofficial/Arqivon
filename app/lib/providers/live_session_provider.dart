@@ -465,29 +465,28 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _lastWatchdogChunkCount = _audioChunksSent;
     });
 
-    // Response watchdog: every 8s check if server is responding after
-    // the user has likely FINISHED speaking. This avoids false restarts
-    // during long utterances.
+    // Response watchdog: every 5s check if server is responding after
+    // the user has likely FINISHED speaking.
     _lastWatchdogServerMsgCount = _serverMessageCount;
     _lastResponseChunkCount = _audioChunksSent;
-    _responseWatchdog = Timer.periodic(const Duration(seconds: 8), (_) {
+    _responseWatchdog = Timer.periodic(const Duration(seconds: 5), (_) {
       final cur = state.valueOrNull;
       if (cur == null || !cur.isStreaming || cur.isMuted) {
         _lastWatchdogServerMsgCount = _serverMessageCount;
         _lastResponseChunkCount = _audioChunksSent;
         return;
       }
-      // Require a real utterance in this window (~0.75s audio at 50ms chunks).
-      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 15;
-      // Only restart after user likely finished speaking.
+      // Require a real utterance (at least 10 chunks = ~0.5s audio).
+      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 10;
+      // User finished speaking (900ms of silence — tighter than before).
       final sinceLastAudio = _lastAudioChunkAt == null
           ? const Duration(days: 1)
           : DateTime.now().difference(_lastAudioChunkAt!);
-      final userLikelyFinished = sinceLastAudio.inMilliseconds > 1200;
+      final userLikelyFinished = sinceLastAudio.inMilliseconds > 900;
       final noResponse = _serverMessageCount == _lastWatchdogServerMsgCount;
       if (sentAudio && userLikelyFinished && noResponse) {
         _log.warning(
-          'Response watchdog: user finished speaking but no server messages for 8s — '
+          'Response watchdog: user finished speaking but no server messages for 5s — '
           'forcing session restart',
         );
         _forceSessionRestart();
@@ -514,10 +513,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _log.warning('Force-restarting session');
     _stopWatchdogs();
     try {
-      // Send end_session so the backend saves what it has.
+      // Send end_session so the backend CLOSES the Gemini session.
+      // This is critical: without it, the backend's set_mode handler
+      // sees session!=None and skips the reconnect, leaving the dead
+      // Gemini session in place.
       _ws?.send(const WsInbound(type: 'end_session'));
-      // Brief pause for the backend to process.
-      await Future.delayed(const Duration(milliseconds: 300));
+      // Wait long enough for the backend to close the Gemini session.
+      // The backend closes the Live API context synchronously on
+      // end_session before sending session_saved.
+      await Future.delayed(const Duration(milliseconds: 800));
       // Tear down audio.
       await _audioSub?.cancel();
       _audioSub = null;
@@ -527,7 +531,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       await _audio?.stopPlayback();
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
-      // Restart.
+      // Restart — this sends a new set_mode which will create a fresh
+      // Gemini session because end_session set session=None on the backend.
       await startSession();
     } finally {
       _restartInFlight = false;

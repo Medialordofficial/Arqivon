@@ -446,7 +446,7 @@ class AudioService {
       // Failsafe: if playback never completes (player stuck), force-reset
       // so subsequent turns aren't permanently broken.
       _playbackTimeout?.cancel();
-      _playbackTimeout = Timer(const Duration(seconds: 45), () {
+      _playbackTimeout = Timer(const Duration(seconds: 15), () {
         _log.warning('playback timeout — force-resetting turn');
         _playbackSub?.cancel();
         _playbackSub = null;
