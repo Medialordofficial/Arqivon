@@ -311,6 +311,18 @@ Our backend runs on **Google Cloud Run** at:
 
 ---
 
+## Devpost Submission Assets
+
+To make judging fast and clear, these prepared assets are included:
+
+- [`docs/DEVPOST_SUBMISSION_PACKAGE.md`](docs/DEVPOST_SUBMISSION_PACKAGE.md) — requirement-to-evidence mapping for the Gemini Live Agent Challenge
+- [`docs/DEMO_VIDEO_SCRIPT_LIVE_AGENTS.md`](docs/DEMO_VIDEO_SCRIPT_LIVE_AGENTS.md) — judge-focused <4-minute narration + shot list
+- [`demo_storyboard.md`](demo_storyboard.md) — alternate visual-first storyboard
+- [`architecture.png`](architecture.png) + [`architecture.svg`](architecture.svg) + [`architecture.mmd`](architecture.mmd) — architecture diagram pack
+- [`QA_LIVE_CONVERSATION_STRESS_CHECKLIST.md`](QA_LIVE_CONVERSATION_STRESS_CHECKLIST.md) — reliability gate for interruption and long-session flow
+
+---
+
 ## Tool Registry — 17 Agentic Tools
 
 | Category | Tool | Purpose |
