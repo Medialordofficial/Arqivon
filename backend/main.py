@@ -907,6 +907,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # Track last user audio timestamp for ambient nudge timing.
     _last_audio_time: float = time.monotonic()
+    _last_gemini_response_time: float = time.monotonic()
+    _server_audio_chunk_count: int = 0
 
     # ── Gemini session is lazy ─────────────────────────────────────────────
     # Defer Gemini connection until the client sends the first set_mode
@@ -1259,7 +1261,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Gemini → Client ───────────────────────────────────────────────────
 
     async def receive_from_gemini() -> None:
-        nonlocal session, live_ctx
+        nonlocal session, live_ctx, _last_gemini_response_time, _server_audio_chunk_count
         max_inner_retries = 5
         inner_retry_count = 0
         try:
@@ -1280,6 +1282,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     first_token_traced = False
                     tracer.start("gemini_turn")
                     async for response in turn:
+                        # Bail out immediately on mode switch / reconnect so
+                        # we re-attach to the new Gemini session without delay.
+                        if _mode_switch_event.is_set():
+                            logger.info("Mode switch mid-turn — breaking receive loop")
+                            break
+                        _last_gemini_response_time = time.monotonic()
                         # Model audio / text
                         if response.server_content is not None:
                             sc = response.server_content
@@ -1291,7 +1299,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                             first_token_traced = True
                                         tracer.start("audio_out")
                                         audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
-                                        logger.info("Audio chunk → client: %d bytes", len(part.inline_data.data))
+                                        _server_audio_chunk_count += 1
+                                        if _server_audio_chunk_count % 20 == 1:
+                                            logger.info("Audio chunk #%d → client: %d bytes",
+                                                        _server_audio_chunk_count, len(part.inline_data.data))
                                         await _send_json(websocket, OutboundMessage(
                                             type=OutboundType.AUDIO, data=audio_b64,
                                         ))
@@ -1627,6 +1638,31 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception as exc:
                 logger.debug("Ambient nudge failed: %s", exc)
 
+    # ── Session health check ──────────────────────────────────────────────
+
+    async def _session_health_check() -> None:
+        """Detect a stuck/dead Gemini session and force-reconnect.
+
+        Triggers when the user has actively sent audio in the last 3 seconds
+        but Gemini has been completely silent for 30+ seconds.
+        """
+        while not cancel_event.is_set():
+            await asyncio.sleep(10.0)
+            if session is None or _switching.is_set():
+                continue
+            since_response = time.monotonic() - _last_gemini_response_time
+            since_audio = time.monotonic() - _last_audio_time
+            active_audio = client_audio_count > 20 and since_audio < 3.0
+            if since_response > 30.0 and active_audio:
+                logger.warning(
+                    "Session health: Gemini silent %.0fs while audio active — reconnecting",
+                    since_response,
+                )
+                try:
+                    await _reconnect_session(current_mode, source_lang, target_lang, current_voice)
+                except Exception as exc:
+                    logger.error("Session health reconnect failed: %s", exc)
+
     # ── Run all ───────────────────────────────────────────────────────────
 
     try:
@@ -1637,6 +1673,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             receive_from_gemini(),
             heartbeat(),
             _ambient_nudge(),
+            _session_health_check(),
             return_exceptions=True,
         )
     finally:

@@ -52,10 +52,12 @@ class AudioService {
   // PCM accumulation buffer – flushed periodically into WAV temp files.
   final List<int> _pcmBuffer = [];
   Timer? _flushTimer;
+  Timer? _playbackTimeout;
   static const int _flushIntervalMs = 40; // lower = faster first-audio
   static const int _minFlushBytes = 480; // ~10 ms @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
+  bool _flushing = false;
 
   /// Called when the AI turn's playback finishes (or if no audio was queued).
   VoidCallback? onPlaybackDone;
@@ -264,7 +266,23 @@ class AudioService {
 
   /// Write buffered PCM to a temp WAV file, add it to the turn's playlist,
   /// and start (or resume) the player.
+  ///
+  /// Serialized with [_flushing] to prevent async re-entrancy which caused
+  /// player state corruption and audio dropout on long AI responses.
   Future<void> _flushPartial({bool force = false}) async {
+    if (_flushing) {
+      _log.fine('_flushPartial re-entrant call skipped');
+      return;
+    }
+    _flushing = true;
+    try {
+      await _doFlush(force: force);
+    } finally {
+      _flushing = false;
+    }
+  }
+
+  Future<void> _doFlush({bool force = false}) async {
     if (!force && _pcmBuffer.length < _minFlushBytes) return;
     if (_pcmBuffer.isEmpty) return;
 
@@ -279,19 +297,22 @@ class AudioService {
 
     // First chunk of a new turn → create a fresh player & playlist.
     if (_turnPlaylist == null) {
-      // Dispose the OLD turn's player in the background — but only now,
-      // so audio focus was held continuously between turns.
       _disposeOldPlayer();
       await _ensureAudioSession();
       _player = AudioPlayer();
       _turnPlaylist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
+        useLazyPreparation: false,
         children: [],
       );
       _playbackStarted = false;
     }
 
     await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
+
+    if (_player == null) {
+      _log.warning('_player is null after playlist setup — skipping');
+      return;
+    }
 
     if (!_playbackStarted) {
       _playbackStarted = true;
@@ -303,16 +324,72 @@ class AudioService {
         _log.severe('turn playback start error', e);
         _playbackStarted = false;
       }
-    } else if (_player!.processingState == ProcessingState.completed) {
-      // Player reached end before the new chunk was added — seek to it.
-      try {
+    } else {
+      // Detect and recover from ALL stalled player states.
+      final ps = _player!.processingState;
+      if (ps == ProcessingState.completed) {
+        try {
+          final idx = _turnPlaylist!.length - 1;
+          await _player!.seek(Duration.zero, index: idx);
+          _player!.play();
+          _log.info('resumed playback at index $idx');
+        } catch (e) {
+          _log.severe('seek-to-new-chunk error — recreating player', e);
+          await _recreatePlayerForTurn();
+        }
+      } else if (ps == ProcessingState.idle) {
+        _log.warning('player in idle state — re-attaching audio source');
+        try {
+          await _player!.setAudioSource(_turnPlaylist!);
+          final idx = _turnPlaylist!.length - 1;
+          await _player!.seek(Duration.zero, index: idx);
+          _player!.play();
+        } catch (e) {
+          _log.severe('idle recovery failed — recreating player', e);
+          await _recreatePlayerForTurn();
+        }
+      } else if (ps == ProcessingState.ready && !_player!.playing) {
+        _log.warning('player ready but not playing — kicking');
+        _player!.play();
+      }
+    }
+  }
+
+  /// Last-resort recovery: create a brand-new player from the turn's
+  /// temp files.  Seeks to the latest chunk to resume close to where
+  /// the old player stalled.
+  Future<void> _recreatePlayerForTurn() async {
+    _log.info('recreating player for current turn');
+    final oldPlayer = _player;
+    try {
+      _player = AudioPlayer();
+      _turnPlaylist = ConcatenatingAudioSource(
+        useLazyPreparation: false,
+        children: _tempFiles
+            .map<AudioSource>((f) => AudioSource.uri(Uri.file(f)))
+            .toList(),
+      );
+      await _player!.setAudioSource(_turnPlaylist!);
+      if (_turnPlaylist!.length > 0) {
         final idx = _turnPlaylist!.length - 1;
         await _player!.seek(Duration.zero, index: idx);
-        _player!.play();
-        _log.info('resumed playback at index $idx');
-      } catch (e) {
-        _log.severe('seek-to-new-chunk error', e);
       }
+      _player!.play();
+      _playbackStarted = true;
+      _log.info('player recreated with ${_turnPlaylist!.length} items');
+    } catch (e) {
+      _log.severe('player recreation failed', e);
+      _playbackStarted = false;
+    }
+    if (oldPlayer != null) {
+      unawaited(Future(() async {
+        try {
+          await oldPlayer.stop();
+        } catch (_) {}
+        try {
+          await oldPlayer.dispose();
+        } catch (_) {}
+      }));
     }
   }
 
@@ -348,11 +425,11 @@ class AudioService {
 
     // Listen for playback completion, then reset for the next turn.
     if (_player != null && _turnPlaylist != null) {
-      // Cancel any previous listener.
       _playbackSub?.cancel();
 
-      // Check if already completed *before* subscribing.
-      if (_player!.processingState == ProcessingState.completed) {
+      // If already done or in a broken idle state, reset immediately.
+      final ps = _player!.processingState;
+      if (ps == ProcessingState.completed || ps == ProcessingState.idle) {
         _resetForNextTurn();
         return;
       }
@@ -361,8 +438,19 @@ class AudioService {
         if (s.processingState == ProcessingState.completed) {
           _playbackSub?.cancel();
           _playbackSub = null;
+          _playbackTimeout?.cancel();
           _resetForNextTurn();
         }
+      });
+
+      // Failsafe: if playback never completes (player stuck), force-reset
+      // so subsequent turns aren't permanently broken.
+      _playbackTimeout?.cancel();
+      _playbackTimeout = Timer(const Duration(seconds: 45), () {
+        _log.warning('playback timeout — force-resetting turn');
+        _playbackSub?.cancel();
+        _playbackSub = null;
+        _resetForNextTurn();
       });
     } else {
       // No audio arrived this turn — fire done immediately.
@@ -377,6 +465,7 @@ class AudioService {
   /// does NOT release audio focus between turns.  It will be disposed when
   /// the next turn's first audio chunk arrives (in [_flushPartial]).
   void _resetForNextTurn() {
+    _playbackTimeout?.cancel();
     _playbackStarted = false;
     _playbackSub?.cancel();
     _playbackSub = null;
@@ -407,6 +496,7 @@ class AudioService {
 
   /// Stop playback immediately (barge-in from user).
   Future<void> stopPlayback() async {
+    _playbackTimeout?.cancel();
     _flushTimer?.cancel();
     _pcmBuffer.clear();
     _playbackSub?.cancel();
@@ -525,6 +615,7 @@ class AudioService {
 
   void dispose() {
     _disposed = true;
+    _playbackTimeout?.cancel();
     _flushTimer?.cancel();
     _recordSub?.cancel();
     _playbackSub?.cancel();
