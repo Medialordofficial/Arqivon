@@ -124,7 +124,7 @@ class TestOutboundMessage:
             "audio", "text", "ui_action", "transcript", "user_transcript",
             "translation", "tutor_step", "support_topic", "export",
             "status", "error", "pong", "session_saved", "turn_complete",
-            "interrupted", "mode_changed",
+            "interrupted", "mode_changed", "note_saved", "reminder_set",
         }
         actual = {t.value for t in OutboundType}
         assert expected == actual

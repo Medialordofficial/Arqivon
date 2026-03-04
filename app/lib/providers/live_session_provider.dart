@@ -771,7 +771,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _log.info('interrupted received from backend');
         // Stop playback first, THEN restart recorder to avoid audio-focus
         // conflicts on Android where the player disposal kills the mic.
-        _audio?.stopPlayback().then((_) {
+        _audio?.stopPlayback().whenComplete(() {
           // Ensure the mic is alive AFTER playback disposal completes.
           final cur = state.valueOrNull ?? const LiveSessionState();
           if (cur.isStreaming) {

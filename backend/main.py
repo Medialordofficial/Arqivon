@@ -143,6 +143,9 @@ class InputQueue:
                 pass
             self._audio_q.put_nowait(data)
 
+    async def get_audio(self, timeout: float = 1.0) -> bytes:
+        return await asyncio.wait_for(self._audio_q.get(), timeout=timeout)
+
     def put_video(self, data: bytes) -> None:
         """Latest-wins: only keep the most recent video frame."""
         self._video_frame = data
@@ -926,10 +929,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         nonlocal client_audio_count, _last_audio_time
         consecutive_send_fails = 0
         while not cancel_event.is_set():
+            # Never consume queued mic audio while Gemini is unavailable.
+            # Keeping chunks queued avoids dropping the first user words
+            # during short reconnect/switch windows.
+            if _switching.is_set() or session is None:
+                await asyncio.sleep(0.05)
+                continue
             try:
-                audio_bytes = await asyncio.wait_for(
-                    input_q._audio_q.get(), timeout=1.0,
-                )
+                audio_bytes = await input_q.get_audio(timeout=1.0)
             except asyncio.TimeoutError:
                 continue
             except Exception:
@@ -937,11 +944,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
             client_audio_count += 1
             _last_audio_time = time.monotonic()
-            # Pause while a mode switch is in progress to avoid sending
-            # to a closed session.
-            if _switching.is_set() or session is None:
-                consecutive_send_fails = 0
-                continue
             tracer.start("audio_send")
             if client_audio_count % 50 == 1:
                 logger.info("Client audio chunk #%d (%d bytes) → Gemini",
@@ -1293,10 +1295,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
-                                # Flush the input queue on barge-in so stale
-                                # buffered audio doesn't play into the new turn.
+                                # Flush pending non-audio inputs on barge-in so
+                                # stale video frames don't contaminate the new turn.
                                 input_q.flush()
-                                logger.info(">>> interrupted from Gemini — flushing queue")
+                                logger.info(">>> interrupted from Gemini — flushed pending video")
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
 
                         # Tool / function calls
