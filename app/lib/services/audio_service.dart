@@ -53,11 +53,21 @@ class AudioService {
   final List<int> _pcmBuffer = [];
   Timer? _flushTimer;
   Timer? _playbackTimeout;
-  static const int _flushIntervalMs = 40; // lower = faster first-audio
-  static const int _minFlushBytes = 480; // ~10 ms @ 24 kHz 16-bit mono
+  static const int _flushIntervalMs =
+      80; // fast first-audio, moderate file count
+  static const int _minFlushBytes = 960; // ~20 ms @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
   bool _flushing = false;
+
+  /// Track the playlist length when the player last completed,
+  /// so recovery seeks to the first UNPLAYED track rather than the last.
+  int _completedAtLength = 0;
+
+  /// Monotonically increasing turn counter.  Incremented by [stopPlayback]
+  /// and checked by [_doFlush] so an in-flight flush from a previous turn
+  /// bails out instead of creating a stale player.
+  int _turnId = 0;
 
   /// Called when the AI turn's playback finishes (or if no audio was queued).
   VoidCallback? onPlaybackDone;
@@ -286,13 +296,26 @@ class AudioService {
     if (!force && _pcmBuffer.length < _minFlushBytes) return;
     if (_pcmBuffer.isEmpty) return;
 
+    // Snapshot the current turn so we can detect if stopPlayback fired
+    // during one of our awaits (invalidating player/playlist).
+    final flushTurn = _turnId;
+
     final pcm = Uint8List.fromList(_pcmBuffer);
     _pcmBuffer.clear();
 
     final dir = await getTemporaryDirectory();
+    // Bail if the turn changed while we were awaiting.
+    if (_turnId != flushTurn) return;
+
     final filePath = '${dir.path}/ai_chunk_${_chunkIndex++}.wav';
     final wav = _buildWav(pcm, sampleRate: 24000);
     await File(filePath).writeAsBytes(wav, flush: true);
+    // Bail if the turn changed while writing.
+    if (_turnId != flushTurn) {
+      // Clean up the orphaned file.
+      unawaited(File(filePath).delete().catchError((_) => File(filePath)));
+      return;
+    }
     _tempFiles.add(filePath);
 
     // First chunk of a new turn → create a fresh player & playlist.
@@ -305,7 +328,21 @@ class AudioService {
         children: [],
       );
       _playbackStarted = false;
+      _completedAtLength = 0;
+
+      // Track when the player finishes all currently-queued tracks so
+      // _doFlush can resume at the right index when new chunks arrive.
+      _playbackSub?.cancel();
+      _playbackSub = _player!.playerStateStream.listen((s) {
+        if (s.processingState == ProcessingState.completed) {
+          _completedAtLength = _turnPlaylist?.length ?? 0;
+          _log.fine('player completed mid-turn at index $_completedAtLength');
+        }
+      });
     }
+
+    // Bail if the turn changed during player setup.
+    if (_turnId != flushTurn) return;
 
     await _turnPlaylist!.add(AudioSource.uri(Uri.file(filePath)));
 
@@ -313,6 +350,9 @@ class AudioService {
       _log.warning('_player is null after playlist setup — skipping');
       return;
     }
+
+    // Final bail-out check after async playlist add.
+    if (_turnId != flushTurn) return;
 
     if (!_playbackStarted) {
       _playbackStarted = true;
@@ -329,10 +369,16 @@ class AudioService {
       final ps = _player!.processingState;
       if (ps == ProcessingState.completed) {
         try {
-          final idx = _turnPlaylist!.length - 1;
+          // Seek to the first UNPLAYED track — not the last — so we don't
+          // skip intermediate chunks added while the player was stalled.
+          final firstNew = _completedAtLength;
+          final idx = firstNew < _turnPlaylist!.length
+              ? firstNew
+              : _turnPlaylist!.length - 1;
           await _player!.seek(Duration.zero, index: idx);
           _player!.play();
-          _log.info('resumed playback at index $idx');
+          _log.info(
+              'resumed playback at index $idx (completedAt=$_completedAtLength, total=${_turnPlaylist!.length})');
         } catch (e) {
           _log.severe('seek-to-new-chunk error — recreating player', e);
           await _recreatePlayerForTurn();
@@ -444,10 +490,11 @@ class AudioService {
       });
 
       // Failsafe: if playback never completes (player stuck), force-reset
-      // so subsequent turns aren't permanently broken.
+      // so subsequent turns aren't permanently broken.  60s is generous enough
+      // for even very long AI responses.
       _playbackTimeout?.cancel();
-      _playbackTimeout = Timer(const Duration(seconds: 15), () {
-        _log.warning('playback timeout — force-resetting turn');
+      _playbackTimeout = Timer(const Duration(seconds: 60), () {
+        _log.warning('playback timeout (60s) — force-resetting turn');
         _playbackSub?.cancel();
         _playbackSub = null;
         _resetForNextTurn();
@@ -467,6 +514,7 @@ class AudioService {
   void _resetForNextTurn() {
     _playbackTimeout?.cancel();
     _playbackStarted = false;
+    _completedAtLength = 0;
     _playbackSub?.cancel();
     _playbackSub = null;
 
@@ -502,6 +550,9 @@ class AudioService {
     _playbackSub?.cancel();
     _playbackSub = null;
     _playbackStarted = false;
+    _completedAtLength = 0;
+    // Increment turn counter so any in-flight _doFlush bails out.
+    _turnId++;
 
     final files = List<String>.from(_tempFiles);
     _turnPlaylist = null;

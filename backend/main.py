@@ -843,10 +843,12 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
+                # HIGH start = reliably detects real speech for interruptions.
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                prefix_padding_ms=80,
-                silence_duration_ms=220,
+                # LOW end = allows natural pauses without premature cutoff.
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                prefix_padding_ms=100,
+                silence_duration_ms=300,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
@@ -909,6 +911,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     _last_audio_time: float = time.monotonic()
     _last_gemini_response_time: float = time.monotonic()
     _server_audio_chunk_count: int = 0
+    # Flag: set by end_session so the next set_mode always reconnects.
+    _force_next_reconnect: bool = False
 
     # ── Gemini session is lazy ─────────────────────────────────────────────
     # Defer Gemini connection until the client sends the first set_mode
@@ -921,7 +925,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # ── Reconnect helper (for mode switches) ──────────────────────────────
     async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede", prior_context: str | None = None):
-        nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice
+        nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice, _last_gemini_response_time
         # Signal receiver BEFORE closing so it recognises this is a mode
         # switch rather than an unexpected error.
         _mode_switch_event.set()
@@ -943,6 +947,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     logger.debug("Error closing old Gemini context: %s", exc)
             # Open new
             live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context)
+            # Reset the response timer so the health check doesn't
+            # immediately fire after a fresh reconnect.
+            _last_gemini_response_time = time.monotonic()
             logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
         finally:
             # Always release forwarders, even on failure, to prevent
@@ -1132,24 +1139,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         except Exception as resume_err:
                             logger.warning("Failed to load resume session: %s", resume_err)
 
-                    # Only skip reconnect if the Gemini session is HEALTHY.
-                    # Previously the check was `session is not None and same mode`,
-                    # which caused the client's force-restart (end_session + set_mode)
-                    # to silently skip the reconnect — keeping the dead Gemini session.
-                    session_healthy = (
+                    # Skip reconnect ONLY when session is alive, same mode,
+                    # and no force-reconnect flag is set.  The flag is set by
+                    # end_session (client watchdog recovery / explicit stop)
+                    # to ensure the next set_mode always creates a fresh session.
+                    skip_reconnect = (
                         session is not None
                         and msg.mode == current_mode
                         and voice == current_voice
                         and not prior_context
-                        and (time.monotonic() - _last_gemini_response_time) < 15.0
+                        and not _force_next_reconnect
                     )
-                    if session_healthy:
+                    if skip_reconnect:
                         await _send_json(websocket, OutboundMessage(
                             type=OutboundType.MODE_CHANGED,
                             text=msg.mode,
                             payload={"mode": msg.mode},
                         ))
                         continue
+                    _force_next_reconnect = False
                     try:
                         tracer.start("mode_switch")
                         # Flush the input queue so stale audio from the old
@@ -1211,23 +1219,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
                 # ── Explicit session save (client tapped Stop) ─────────
                 elif msg.type == InboundType.END_SESSION:
-                    # Close the Gemini session so the next set_mode creates
-                    # a FRESH one.  This is critical for recovery: when the
-                    # client watchdog force-restarts, it sends end_session
-                    # then set_mode — if we don't close here, set_mode sees
-                    # `session is not None` and skips the reconnect.
-                    if live_ctx is not None:
-                        _switching.set()
-                        try:
-                            old_ctx = live_ctx
-                            live_ctx = None
-                            session = None
-                            await old_ctx.__aexit__(None, None, None)
-                            logger.info("Gemini session closed on end_session")
-                        except Exception as close_exc:
-                            logger.debug("Error closing Gemini on end_session: %s", close_exc)
-                        finally:
-                            _switching.clear()
+                    # Set flag so the next set_mode ALWAYS creates a fresh
+                    # Gemini session.  We do NOT close the Gemini session here
+                    # to avoid racing with receive_from_gemini's iterator.
+                    # The closing happens safely inside _reconnect_session.
+                    _force_next_reconnect = True
 
                     session_record.ended_at = datetime.now(timezone.utc).timestamp()
                     # Auto-title based on mode
@@ -1672,30 +1668,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     async def _session_health_check() -> None:
         """Detect a stuck/dead Gemini session and force-reconnect.
 
-        Triggers when:
-        - Gemini has been silent for 15+ seconds, AND
-        - The user has spoken recently (within last 12 seconds)
-        This catches the scenario where the user asks a question, waits,
-        gets no response, and stops speaking.  The old check required the
-        user to be actively speaking RIGHT NOW (< 3s), which would never
-        fire because the user stops after hearing nothing.
+        Conservative: only triggers after 30s of total Gemini silence
+        AND the user has spoken within the last 20s.  Resets the timer
+        after reconnecting to prevent loops.
         """
         while not cancel_event.is_set():
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(10.0)
             if session is None or _switching.is_set():
                 continue
             since_response = time.monotonic() - _last_gemini_response_time
             since_audio = time.monotonic() - _last_audio_time
-            # User spoke within the last 12 seconds (not ancient silence)
-            user_spoke_recently = client_audio_count > 10 and since_audio < 12.0
-            if since_response > 15.0 and user_spoke_recently:
+            user_spoke_recently = client_audio_count > 20 and since_audio < 20.0
+            if since_response > 30.0 and user_spoke_recently:
                 logger.warning(
                     "Session health: Gemini silent %.0fs, user spoke %.0fs ago — reconnecting",
                     since_response, since_audio,
                 )
                 try:
                     await _reconnect_session(current_mode, source_lang, target_lang, current_voice)
-                    _last_gemini_response_time = time.monotonic()  # reset after reconnect
                 except Exception as exc:
                     logger.error("Session health reconnect failed: %s", exc)
 

@@ -465,28 +465,28 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _lastWatchdogChunkCount = _audioChunksSent;
     });
 
-    // Response watchdog: every 5s check if server is responding after
+    // Response watchdog: every 10s check if server is responding after
     // the user has likely FINISHED speaking.
     _lastWatchdogServerMsgCount = _serverMessageCount;
     _lastResponseChunkCount = _audioChunksSent;
-    _responseWatchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+    _responseWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
       final cur = state.valueOrNull;
       if (cur == null || !cur.isStreaming || cur.isMuted) {
         _lastWatchdogServerMsgCount = _serverMessageCount;
         _lastResponseChunkCount = _audioChunksSent;
         return;
       }
-      // Require a real utterance (at least 10 chunks = ~0.5s audio).
-      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 10;
-      // User finished speaking (900ms of silence — tighter than before).
+      // Require a real utterance (~1s audio at 50ms chunks).
+      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 20;
+      // User finished speaking (2s of silence).
       final sinceLastAudio = _lastAudioChunkAt == null
           ? const Duration(days: 1)
           : DateTime.now().difference(_lastAudioChunkAt!);
-      final userLikelyFinished = sinceLastAudio.inMilliseconds > 900;
+      final userLikelyFinished = sinceLastAudio.inMilliseconds > 2000;
       final noResponse = _serverMessageCount == _lastWatchdogServerMsgCount;
       if (sentAudio && userLikelyFinished && noResponse) {
         _log.warning(
-          'Response watchdog: user finished speaking but no server messages for 5s — '
+          'Response watchdog: user finished speaking but no server messages for 10s — '
           'forcing session restart',
         );
         _forceSessionRestart();
