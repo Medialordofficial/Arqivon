@@ -53,9 +53,12 @@ class AudioService {
   final List<int> _pcmBuffer = [];
   Timer? _flushTimer;
   Timer? _playbackTimeout;
-  static const int _flushIntervalMs =
-      200; // balance first-audio latency vs. WAV file count
+  // Two-phase flush: fast first-audio, then large sustained chunks so
+  // the player never outruns the source and hits ProcessingState.completed.
+  static const int _firstFlushMs = 150; // first audio: fast
+  static const int _sustainedFlushMs = 2500; // subsequent: 2.5 s chunks
   static const int _minFlushBytes = 960; // ~20 ms @ 24 kHz 16-bit mono
+  static const int _hardCapBytes = 240000; // ~5 s @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
   bool _flushing = false;
@@ -255,19 +258,19 @@ class AudioService {
     _pcmBuffer.addAll(bytes);
 
     // Throttle (NOT debounce): start a timer on the first chunk, and
-    // do NOT reset it when subsequent chunks arrive. This guarantees
-    // audio starts playing within _flushIntervalMs of the very first
-    // chunk, even if Gemini sends chunks in rapid succession.
+    // do NOT reset it when subsequent chunks arrive.
+    // Phase 1 (first audio): flush in 150 ms for fast time-to-voice.
+    // Phase 2 (sustained):   flush every 2.5 s so each WAV is long enough
+    //                        that the player never outruns the source.
     if (_flushTimer == null || !_flushTimer!.isActive) {
+      final ms = _playbackStarted ? _sustainedFlushMs : _firstFlushMs;
       _flushTimer = Timer(
-        const Duration(milliseconds: _flushIntervalMs),
+        Duration(milliseconds: ms),
         _flushPartial,
       );
     }
-    // Hard cap: if buffer grows beyond ~1 s of audio (48 000 bytes at
-    // 24 kHz 16-bit mono), flush immediately to prevent unbounded
-    // buffering during fast Gemini responses.
-    if (_pcmBuffer.length >= 48000) {
+    // Hard cap: ~5 s of audio to prevent unbounded buffering.
+    if (_pcmBuffer.length >= _hardCapBytes) {
       _flushTimer?.cancel();
       _flushTimer = null;
       _flushPartial();
@@ -445,13 +448,17 @@ class AudioService {
     _playbackSub = _player!.playerStateStream.listen((s) {
       if (s.processingState == ProcessingState.completed) {
         _completedAtLength = _turnPlaylist?.length ?? 0;
-        _log.fine('player completed mid-turn at index $_completedAtLength');
-        // Proactively flush any buffered PCM so the fresh-player path
-        // in _doFlush triggers immediately instead of waiting for the
-        // next queueChunk timer.
+        _log.info('player completed mid-turn at index $_completedAtLength, '
+            'pcmBuf=${_pcmBuffer.length}, tempFiles=${_tempFiles.length}');
+        // Kick the flush timer to fire quickly so we recover without
+        // waiting the full sustained interval — but do NOT call
+        // _flushPartial directly to avoid async re-entrancy deadlocks.
         if (_pcmBuffer.isNotEmpty) {
           _flushTimer?.cancel();
-          _flushPartial(force: true);
+          _flushTimer = Timer(
+            const Duration(milliseconds: 50),
+            () => _flushPartial(force: true),
+          );
         }
       }
     });
