@@ -53,15 +53,16 @@ class AudioService {
   final List<int> _pcmBuffer = [];
   Timer? _flushTimer;
   Timer? _playbackTimeout;
-  // Two-phase flush: fast first-audio, then large sustained chunks so
-  // the player never outruns the source and hits ProcessingState.completed.
-  static const int _firstFlushMs = 150; // first audio: fast
-  static const int _sustainedFlushMs = 2500; // subsequent: 2.5 s chunks
+  // Two-phase flush: generous first-audio buffer, then ~1 s sustained
+  // chunks so the player never outruns the source.
+  static const int _firstFlushMs = 800; // buffer 800 ms before starting
+  static const int _sustainedFlushMs = 1000; // subsequent: ~1 s chunks
   static const int _minFlushBytes = 960; // ~20 ms @ 24 kHz 16-bit mono
   static const int _hardCapBytes = 240000; // ~5 s @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
   bool _flushing = false;
+  bool _reflushNeeded = false;
 
   /// Track the playlist length when the player last completed,
   /// so recovery seeks to the first UNPLAYED track rather than the last.
@@ -284,7 +285,9 @@ class AudioService {
   /// player state corruption and audio dropout on long AI responses.
   Future<void> _flushPartial({bool force = false}) async {
     if (_flushing) {
-      _log.fine('_flushPartial re-entrant call skipped');
+      // Don't drop the flush — flag for retry after current flush completes.
+      _reflushNeeded = true;
+      _log.fine('_flushPartial re-entrant — flagged for retry');
       return;
     }
     _flushing = true;
@@ -292,6 +295,11 @@ class AudioService {
       await _doFlush(force: force);
     } finally {
       _flushing = false;
+      // If someone tried to flush while we were busy, do it now.
+      if (_reflushNeeded && _pcmBuffer.isNotEmpty) {
+        _reflushNeeded = false;
+        scheduleMicrotask(() => _flushPartial(force: true));
+      }
     }
   }
 
@@ -364,10 +372,18 @@ class AudioService {
       // Detect and recover from ALL stalled player states.
       final ps = _player!.processingState;
       if (ps == ProcessingState.completed) {
-        // Seeking in a completed ConcatenatingAudioSource is unreliable
-        // on Android — causes permanent "audio death" on long responses.
-        // Instead, create a fresh player with only the unplayed chunks.
-        await _freshPlayerFromUnplayed(flushTurn);
+        // Simple seek + play: fast (<10 ms), doesn't block _flushing.
+        try {
+          final idx = _completedAtLength < _turnPlaylist!.length
+              ? _completedAtLength
+              : _turnPlaylist!.length - 1;
+          await _player!.seek(Duration.zero, index: idx);
+          _player!.play();
+          _log.info('resumed at index $idx / ${_turnPlaylist!.length}');
+        } catch (e) {
+          _log.severe('seek-resume failed — recreating player', e);
+          await _recreatePlayerForTurn();
+        }
       } else if (ps == ProcessingState.idle) {
         _log.warning('player in idle state — re-attaching audio source');
         try {
@@ -448,84 +464,20 @@ class AudioService {
     _playbackSub = _player!.playerStateStream.listen((s) {
       if (s.processingState == ProcessingState.completed) {
         _completedAtLength = _turnPlaylist?.length ?? 0;
-        _log.info('player completed mid-turn at index $_completedAtLength, '
+        _log.info('player completed at index $_completedAtLength, '
             'pcmBuf=${_pcmBuffer.length}, tempFiles=${_tempFiles.length}');
-        // Kick the flush timer to fire quickly so we recover without
-        // waiting the full sustained interval — but do NOT call
-        // _flushPartial directly to avoid async re-entrancy deadlocks.
-        if (_pcmBuffer.isNotEmpty) {
-          _flushTimer?.cancel();
+        // Don't call _flushPartial here — the re-flush loop in
+        // _flushPartial's finally block will handle it.  Just kick
+        // the sustained timer to fire sooner if there's buffered PCM.
+        if (_pcmBuffer.isNotEmpty &&
+            (_flushTimer == null || !_flushTimer!.isActive)) {
           _flushTimer = Timer(
-            const Duration(milliseconds: 50),
+            const Duration(milliseconds: 30),
             () => _flushPartial(force: true),
           );
         }
       }
     });
-  }
-
-  /// Replace the current (completed) player with a fresh one that contains
-  /// only the unplayed chunks.  This avoids the fragile "seek in completed
-  /// ConcatenatingAudioSource" pattern that causes audio death on Android
-  /// during long AI responses.
-  Future<void> _freshPlayerFromUnplayed(int flushTurn) async {
-    final cutoff = _completedAtLength.clamp(0, _tempFiles.length);
-    final unplayed = _tempFiles.sublist(cutoff);
-    if (unplayed.isEmpty) {
-      _log.warning('completed but no unplayed files');
-      return;
-    }
-
-    final oldPlayer = _player;
-    _playbackSub?.cancel();
-
-    // Trim bookkeeping to only unplayed files.
-    final played = _tempFiles.sublist(0, cutoff);
-    _tempFiles
-      ..clear()
-      ..addAll(unplayed);
-
-    _player = AudioPlayer();
-    if (_turnId != flushTurn) return;
-
-    _turnPlaylist = ConcatenatingAudioSource(
-      useLazyPreparation: false,
-      children: unplayed
-          .map<AudioSource>((f) => AudioSource.uri(Uri.file(f)))
-          .toList(),
-    );
-    _completedAtLength = 0;
-    _setupCompletionListener();
-
-    try {
-      await _player!.setAudioSource(_turnPlaylist!);
-      if (_turnId != flushTurn) return;
-      _player!.play();
-      _log.info('fresh player started with ${unplayed.length} unplayed chunks');
-    } catch (e) {
-      _log.severe('fresh player start failed', e);
-      _playbackStarted = false;
-    }
-
-    // Dispose old player in background.
-    if (oldPlayer != null) {
-      unawaited(Future(() async {
-        try {
-          await oldPlayer.stop();
-        } catch (_) {}
-        try {
-          await oldPlayer.dispose();
-        } catch (_) {}
-      }));
-    }
-    // Delete already-played temp files in background.
-    unawaited(Future(() async {
-      for (final f in played) {
-        try {
-          await File(f).delete();
-        } catch (_) {}
-      }
-    }));
   }
 
   /// Called on `turn_complete` — flush any remaining PCM, then wait for the
