@@ -54,7 +54,7 @@ class AudioService {
   Timer? _flushTimer;
   Timer? _playbackTimeout;
   static const int _flushIntervalMs =
-      80; // fast first-audio, moderate file count
+      200; // balance first-audio latency vs. WAV file count
   static const int _minFlushBytes = 960; // ~20 ms @ 24 kHz 16-bit mono
   int _chunkIndex = 0;
   final List<String> _tempFiles = [];
@@ -264,10 +264,10 @@ class AudioService {
         _flushPartial,
       );
     }
-    // Hard cap: if buffer grows beyond 0.5 s of audio (24 000 bytes at
+    // Hard cap: if buffer grows beyond ~1 s of audio (48 000 bytes at
     // 24 kHz 16-bit mono), flush immediately to prevent unbounded
     // buffering during fast Gemini responses.
-    if (_pcmBuffer.length >= 24000) {
+    if (_pcmBuffer.length >= 48000) {
       _flushTimer?.cancel();
       _flushTimer = null;
       _flushPartial();
@@ -330,15 +330,8 @@ class AudioService {
       _playbackStarted = false;
       _completedAtLength = 0;
 
-      // Track when the player finishes all currently-queued tracks so
-      // _doFlush can resume at the right index when new chunks arrive.
-      _playbackSub?.cancel();
-      _playbackSub = _player!.playerStateStream.listen((s) {
-        if (s.processingState == ProcessingState.completed) {
-          _completedAtLength = _turnPlaylist?.length ?? 0;
-          _log.fine('player completed mid-turn at index $_completedAtLength');
-        }
-      });
+      // Track when the player finishes all currently-queued tracks.
+      _setupCompletionListener();
     }
 
     // Bail if the turn changed during player setup.
@@ -368,21 +361,10 @@ class AudioService {
       // Detect and recover from ALL stalled player states.
       final ps = _player!.processingState;
       if (ps == ProcessingState.completed) {
-        try {
-          // Seek to the first UNPLAYED track — not the last — so we don't
-          // skip intermediate chunks added while the player was stalled.
-          final firstNew = _completedAtLength;
-          final idx = firstNew < _turnPlaylist!.length
-              ? firstNew
-              : _turnPlaylist!.length - 1;
-          await _player!.seek(Duration.zero, index: idx);
-          _player!.play();
-          _log.info(
-              'resumed playback at index $idx (completedAt=$_completedAtLength, total=${_turnPlaylist!.length})');
-        } catch (e) {
-          _log.severe('seek-to-new-chunk error — recreating player', e);
-          await _recreatePlayerForTurn();
-        }
+        // Seeking in a completed ConcatenatingAudioSource is unreliable
+        // on Android — causes permanent "audio death" on long responses.
+        // Instead, create a fresh player with only the unplayed chunks.
+        await _freshPlayerFromUnplayed(flushTurn);
       } else if (ps == ProcessingState.idle) {
         _log.warning('player in idle state — re-attaching audio source');
         try {
@@ -451,6 +433,91 @@ class AudioService {
       try {
         await old.dispose();
       } catch (_) {}
+    }));
+  }
+
+  /// Set up a [playerStateStream] listener that:
+  /// 1. Records which items have been played ([_completedAtLength]).
+  /// 2. Proactively flushes buffered PCM so audio resumes without waiting
+  ///    for the next chunk from Gemini.
+  void _setupCompletionListener() {
+    _playbackSub?.cancel();
+    _playbackSub = _player!.playerStateStream.listen((s) {
+      if (s.processingState == ProcessingState.completed) {
+        _completedAtLength = _turnPlaylist?.length ?? 0;
+        _log.fine('player completed mid-turn at index $_completedAtLength');
+        // Proactively flush any buffered PCM so the fresh-player path
+        // in _doFlush triggers immediately instead of waiting for the
+        // next queueChunk timer.
+        if (_pcmBuffer.isNotEmpty) {
+          _flushTimer?.cancel();
+          _flushPartial(force: true);
+        }
+      }
+    });
+  }
+
+  /// Replace the current (completed) player with a fresh one that contains
+  /// only the unplayed chunks.  This avoids the fragile "seek in completed
+  /// ConcatenatingAudioSource" pattern that causes audio death on Android
+  /// during long AI responses.
+  Future<void> _freshPlayerFromUnplayed(int flushTurn) async {
+    final cutoff = _completedAtLength.clamp(0, _tempFiles.length);
+    final unplayed = _tempFiles.sublist(cutoff);
+    if (unplayed.isEmpty) {
+      _log.warning('completed but no unplayed files');
+      return;
+    }
+
+    final oldPlayer = _player;
+    _playbackSub?.cancel();
+
+    // Trim bookkeeping to only unplayed files.
+    final played = _tempFiles.sublist(0, cutoff);
+    _tempFiles
+      ..clear()
+      ..addAll(unplayed);
+
+    _player = AudioPlayer();
+    if (_turnId != flushTurn) return;
+
+    _turnPlaylist = ConcatenatingAudioSource(
+      useLazyPreparation: false,
+      children: unplayed
+          .map<AudioSource>((f) => AudioSource.uri(Uri.file(f)))
+          .toList(),
+    );
+    _completedAtLength = 0;
+    _setupCompletionListener();
+
+    try {
+      await _player!.setAudioSource(_turnPlaylist!);
+      if (_turnId != flushTurn) return;
+      _player!.play();
+      _log.info('fresh player started with ${unplayed.length} unplayed chunks');
+    } catch (e) {
+      _log.severe('fresh player start failed', e);
+      _playbackStarted = false;
+    }
+
+    // Dispose old player in background.
+    if (oldPlayer != null) {
+      unawaited(Future(() async {
+        try {
+          await oldPlayer.stop();
+        } catch (_) {}
+        try {
+          await oldPlayer.dispose();
+        } catch (_) {}
+      }));
+    }
+    // Delete already-played temp files in background.
+    unawaited(Future(() async {
+      for (final f in played) {
+        try {
+          await File(f).delete();
+        } catch (_) {}
+      }
     }));
   }
 
