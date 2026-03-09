@@ -65,6 +65,7 @@ class OutboundType(str, Enum):
     TURN_COMPLETE = "turn_complete"
     INTERRUPTED = "interrupted"
     MODE_CHANGED = "mode_changed"
+    CAPTURE_PHOTO = "capture_photo"  # tell client to take a high-res photo
 
 
 class OutboundMessage(BaseModel):

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -187,21 +188,37 @@ class _SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<_SplashScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _ctrl;
+  late final AnimationController _spinCtrl;
+  late final AnimationController _pulseCtrl;
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
   late final Animation<double> _titleOpacity;
   late final Animation<double> _wordsOpacity;
   late final Animation<double> _glowRadius;
+  late final Animation<double> _ringOpacity;
 
   @override
   void initState() {
     super.initState();
+    // ── Intro animation ──
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+
+    // ── Continuous spin for orbital ring ──
+    _spinCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat();
+
+    // ── Pulsing glow ──
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
 
     _logoScale = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(
@@ -227,6 +244,11 @@ class _SplashScreenState extends State<_SplashScreen>
           parent: _ctrl,
           curve: const Interval(0.1, 0.6, curve: Curves.easeOut)),
     );
+    _ringOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.3, 0.7, curve: Curves.easeOut)),
+    );
 
     _ctrl.forward();
   }
@@ -234,6 +256,8 @@ class _SplashScreenState extends State<_SplashScreen>
   @override
   void dispose() {
     _ctrl.dispose();
+    _spinCtrl.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
@@ -243,7 +267,7 @@ class _SplashScreenState extends State<_SplashScreen>
 
     return Scaffold(
       body: AnimatedBuilder(
-        animation: _ctrl,
+        animation: Listenable.merge([_ctrl, _spinCtrl, _pulseCtrl]),
         builder: (context, _) {
           return Container(
             width: double.infinity,
@@ -261,33 +285,59 @@ class _SplashScreenState extends State<_SplashScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Spacer(flex: 3),
-                // ── Glowing logo ──
+                // ── Glowing logo with spinning orbital ring ──
                 Opacity(
                   opacity: _logoOpacity.value,
                   child: Transform.scale(
                     scale: _logoScale.value,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                const Color(0xFFC98B4E).withValues(alpha: 0.5),
-                            blurRadius: _glowRadius.value,
-                            spreadRadius: _glowRadius.value * 0.3,
+                    child: SizedBox(
+                      width: 180,
+                      height: 180,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Spinning orbital ring
+                          Opacity(
+                            opacity: _ringOpacity.value,
+                            child: Transform.rotate(
+                              angle: _spinCtrl.value * 2 * math.pi,
+                              child: CustomPaint(
+                                size: const Size(180, 180),
+                                painter: _OrbitalRingPainter(
+                                  progress: _spinCtrl.value,
+                                  pulseValue: _pulseCtrl.value,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Pulsing glow + logo
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFC98B4E).withValues(
+                                      alpha: 0.35 + 0.2 * _pulseCtrl.value),
+                                  blurRadius:
+                                      _glowRadius.value + 8 * _pulseCtrl.value,
+                                  spreadRadius: _glowRadius.value * 0.3 +
+                                      4 * _pulseCtrl.value,
+                                ),
+                              ],
+                            ),
+                            child: const ClipOval(
+                              child: Image(
+                                image: AssetImage('assets/images/logo.png'),
+                                width: 120,
+                                height: 120,
+                                fit: BoxFit.cover,
+                                errorBuilder: _iconFallback,
+                              ),
+                            ),
                           ),
                         ],
-                      ),
-                      child: const ClipOval(
-                        child: Image(
-                          image: AssetImage('assets/images/logo.png'),
-                          width: 120,
-                          height: 120,
-                          fit: BoxFit.cover,
-                          errorBuilder: _iconFallback,
-                        ),
                       ),
                     ),
                   ),
@@ -308,41 +358,18 @@ class _SplashScreenState extends State<_SplashScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                // ── 3 key words ──
+                const SizedBox(height: 16),
+                // ── Slogan ──
                 Opacity(
                   opacity: _wordsOpacity.value,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _WordChip('See', isDark),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Container(
-                          width: 4,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color:
-                                const Color(0xFFC98B4E).withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                      _WordChip('Speak', isDark),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Container(
-                          width: 4,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color:
-                                const Color(0xFFC98B4E).withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                      _WordChip('Know', isDark),
-                    ],
+                  child: Text(
+                    'Speak freely. Remember everything.',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFFC98B4E).withValues(alpha: 0.85),
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
                 const Spacer(flex: 3),
@@ -393,23 +420,72 @@ class _SplashScreenState extends State<_SplashScreen>
   }
 }
 
-class _WordChip extends StatelessWidget {
-  final String text;
-  final bool isDark;
-  const _WordChip(this.text, this.isDark);
+/// Paints a spinning orbital ring with gradient arc and orbiting dots.
+class _OrbitalRingPainter extends CustomPainter {
+  _OrbitalRingPainter({required this.progress, required this.pulseValue});
+  final double progress;
+  final double pulseValue;
 
   @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFFC98B4E),
-        letterSpacing: 3,
-      ),
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4;
+
+    // Gradient arc — sweeps ~270°
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: 0,
+        endAngle: math.pi * 1.5,
+        colors: [
+          const Color(0xFFC98B4E).withValues(alpha: 0.0),
+          const Color(0xFFC98B4E).withValues(alpha: 0.6 + 0.2 * pulseValue),
+          const Color(0xFFE8943A).withValues(alpha: 0.8),
+          const Color(0xFFC98B4E).withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.3, 0.7, 1.0],
+      ).createShader(rect);
+    canvas.drawArc(rect, 0, math.pi * 1.5, false, arcPaint);
+
+    // Orbiting dot at the leading edge
+    final dotAngle = math.pi * 1.5;
+    final dotX = center.dx + radius * math.cos(dotAngle);
+    final dotY = center.dy + radius * math.sin(dotAngle);
+    final dotRadius = 3.5 + 1.0 * pulseValue;
+    canvas.drawCircle(
+      Offset(dotX, dotY),
+      dotRadius,
+      Paint()..color = const Color(0xFFE8943A),
+    );
+
+    // Second smaller dot at ~90° behind
+    final dot2Angle = math.pi * 0.5;
+    final dot2X = center.dx + radius * math.cos(dot2Angle);
+    final dot2Y = center.dy + radius * math.sin(dot2Angle);
+    canvas.drawCircle(
+      Offset(dot2X, dot2Y),
+      2.0 + 0.5 * pulseValue,
+      Paint()
+        ..color =
+            const Color(0xFFC98B4E).withValues(alpha: 0.5 + 0.2 * pulseValue),
+    );
+
+    // Third tiny dot at ~200°
+    final dot3Angle = math.pi * 1.1;
+    final dot3X = center.dx + radius * math.cos(dot3Angle);
+    final dot3Y = center.dy + radius * math.sin(dot3Angle);
+    canvas.drawCircle(
+      Offset(dot3X, dot3Y),
+      1.5,
+      Paint()..color = const Color(0xFFC98B4E).withValues(alpha: 0.3),
     );
   }
+
+  @override
+  bool shouldRepaint(_OrbitalRingPainter oldDelegate) => true;
 }
 
 /// Notifier so child widgets (LiveScreen) can observe tab changes.

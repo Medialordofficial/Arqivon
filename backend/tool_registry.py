@@ -109,6 +109,23 @@ async def create_ui_action(
     })
 
 
+async def capture_photo(
+    *, description: str = "", filename: str = "",
+    db: Any = None, user_id: str = "anonymous",
+) -> str:
+    """Signal the client to capture a high-resolution photo from the camera.
+
+    This is a CLIENT-SIDE action — the backend returns a marker that the
+    WebSocket handler routes as a CAPTURE_PHOTO outbound message.
+    """
+    logger.info("Tool: capture_photo desc=%s user=%s", description, user_id)
+    return json.dumps({
+        "status": "capture_requested",
+        "description": description,
+        "filename": filename,
+    })
+
+
 # ── Notes & Reminders ────────────────────────────────────────────────────────
 
 async def save_note(
@@ -578,6 +595,25 @@ _SHARED_DECLARATIONS: list[types.FunctionDeclaration] = [
             "required": ["voice_name"],
         },
     ),
+    types.FunctionDeclaration(
+        name="capture_photo",
+        description=(
+            "Capture a high-resolution photo from the user's camera and save it to their device. "
+            "Use when the user says things like 'take a picture', 'capture this', "
+            "'snap a photo', 'photograph that', 'save what you see', etc. "
+            "Only available when the camera/video mode is active."
+        ),
+        parameters={
+            "type": "OBJECT",
+            "properties": {
+                "description": {
+                    "type": "STRING",
+                    "description": "Brief description of what is being captured (e.g. 'sunset from balcony').",
+                },
+            },
+            "required": [],
+        },
+    ),
 ]
 
 _TRANSLATOR_DECLARATIONS: list[types.FunctionDeclaration] = [
@@ -864,6 +900,7 @@ TOOL_MAP: dict[str, Any] = {
     "upsert_firestore_memory": upsert_firestore_memory,
     "recall_memories": recall_memories,
     "create_ui_action": create_ui_action,
+    "capture_photo": capture_photo,
     "save_note": save_note,
     "set_reminder": set_reminder,
     "switch_voice": switch_voice,

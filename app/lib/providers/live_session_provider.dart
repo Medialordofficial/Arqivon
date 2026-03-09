@@ -58,6 +58,9 @@ class LiveSessionState {
   // Chat transcript
   final List<ChatMessage> chatMessages;
 
+  // Photo capture
+  final String? pendingPhotoCapture;
+
   const LiveSessionState({
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
@@ -78,6 +81,7 @@ class LiveSessionState {
     this.supportTopics = const [],
     this.pendingExport,
     this.chatMessages = const [],
+    this.pendingPhotoCapture,
   });
 
   LiveSessionState copyWith({
@@ -106,6 +110,8 @@ class LiveSessionState {
     ExportDocument? pendingExport,
     bool clearExport = false,
     List<ChatMessage>? chatMessages,
+    String? pendingPhotoCapture,
+    bool clearPhotoCapture = false,
   }) {
     return LiveSessionState(
       connectionState: connectionState ?? this.connectionState,
@@ -131,6 +137,9 @@ class LiveSessionState {
       supportTopics: supportTopics ?? this.supportTopics,
       pendingExport: clearExport ? null : (pendingExport ?? this.pendingExport),
       chatMessages: chatMessages ?? this.chatMessages,
+      pendingPhotoCapture: clearPhotoCapture
+          ? null
+          : (pendingPhotoCapture ?? this.pendingPhotoCapture),
     );
   }
 }
@@ -625,6 +634,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(current.copyWith(clearExport: true));
   }
 
+  /// Clear pending photo capture request after the UI has consumed it.
+  void clearPhotoCapture() {
+    final current = state.valueOrNull ?? const LiveSessionState();
+    state = AsyncData(current.copyWith(clearPhotoCapture: true));
+  }
+
   void _scheduleTurnCompleteFinalize() {
     _turnCompleteTimer?.cancel();
     // Give a tiny grace window for late audio chunks that can arrive right
@@ -686,14 +701,21 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         if (msg.text != null && msg.text!.isNotEmpty) {
           _turnAiTexts.add(msg.text!);
         }
-        state = AsyncData(current.copyWith(transcript: msg.text));
+        // Show accumulated AI text so the bubble displays full sentences,
+        // not just the latest fragment.
+        state = AsyncData(
+          current.copyWith(transcript: _turnAiTexts.join(' ')),
+        );
         break;
 
       case 'user_transcript':
         if (msg.text != null && msg.text!.isNotEmpty) {
           _turnUserTexts.add(msg.text!);
         }
-        state = AsyncData(current.copyWith(userTranscript: msg.text));
+        // Show accumulated user text for a readable live bubble.
+        state = AsyncData(
+          current.copyWith(userTranscript: _turnUserTexts.join(' ')),
+        );
         break;
 
       case 'ui_action':
@@ -706,6 +728,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             currentAction: action,
             actionHistory: [...current.actionHistory, action],
           ),
+        );
+        break;
+
+      case 'capture_photo':
+        final desc = msg.payload?['description'] as String? ?? '';
+        _log.info('capture_photo requested: $desc');
+        state = AsyncData(
+          current.copyWith(pendingPhotoCapture: desc.isEmpty ? 'photo' : desc),
         );
         break;
 
@@ -808,36 +838,42 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'interrupted':
-        // User barged in — stop playback immediately and clear ALL stale overlays.
+        // User barged in — stop playback and restart mic IMMEDIATELY so
+        // Gemini keeps hearing the user’s speech and can pivot its response.
         _log.info('interrupted received from backend');
         _turnCompleteTimer?.cancel();
 
-        // Commit any partial AI/user text from the interrupted turn to chat
-        // so it’s not lost, then clear the buffers so the new response’s
-        // text doesn’t merge with the old.
+        // Commit partial USER text (what they said before the interrupt).
+        // Do NOT commit the AI’s full accumulated text — the user only
+        // heard part of it as audio; showing the full transcript is misleading.
         final partialMsgs = <ChatMessage>[...current.chatMessages];
         final partialUser = _turnUserTexts.join(' ').trim();
-        final partialAi = _turnAiTexts.join(' ').trim();
         if (partialUser.isNotEmpty) {
           partialMsgs.add(ChatMessage(text: partialUser, isUser: true));
         }
+        // Only show a truncated version of what the user actually heard.
+        final partialAi = _turnAiTexts.join(' ').trim();
         if (partialAi.isNotEmpty) {
-          partialMsgs.add(ChatMessage(text: '$partialAi…'));
+          final heard = partialAi.length > 80
+              ? '${partialAi.substring(0, 80)}…'
+              : '$partialAi…';
+          partialMsgs.add(ChatMessage(text: heard));
         }
         _turnUserTexts.clear();
         _turnAiTexts.clear();
 
-        // Stop playback first, THEN restart recorder to avoid audio-focus
-        // conflicts on Android where the player disposal kills the mic.
-        _audio?.stopPlayback().whenComplete(() {
-          // Ensure the mic is alive AFTER playback disposal completes,
-          // but only if it actually stopped.
-          final cur = state.valueOrNull ?? const LiveSessionState();
-          if (cur.isStreaming && !(_audio?.isCapturing ?? false)) {
-            _log.info('recorder stopped after barge-in — restarting');
+        // Fire-and-forget playback stop — don’t block on it.
+        unawaited(_audio?.stopPlayback() ?? Future.value());
+
+        // IMMEDIATELY restart recorder so Gemini keeps receiving audio.
+        // A short delay lets the player release audio focus first.
+        if (current.isStreaming) {
+          Future.delayed(const Duration(milliseconds: 80), () {
+            _log.info('force-restarting recorder after barge-in');
             _audio?.ensureRecording();
-          }
-        });
+          });
+        }
+
         state = AsyncData(
           current.copyWith(
             isResponding: false,

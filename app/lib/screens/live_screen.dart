@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -245,6 +247,84 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     _textController.clear();
   }
 
+  /// Capture a high-resolution photo and save it to the device.
+  Future<void> _captureHighResPhoto(String description) async {
+    // Clear the pending request so it doesn't re-trigger.
+    ref.read(liveSessionProvider.notifier).clearPhotoCapture();
+
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      _log.warning('Photo capture requested but camera not ready');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Camera not available for photo capture'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      _log.info('Capturing high-res photo: $description');
+      // Pause frame capture briefly so takePicture doesn't conflict.
+      _stopFrameCapture();
+
+      final XFile file = await _cameraController!.takePicture();
+      final bytes = await file.readAsBytes();
+
+      // Save to app documents directory.
+      final dir = await getApplicationDocumentsDirectory();
+      final photosDir = Directory('${dir.path}/ArqivonPhotos');
+      if (!await photosDir.exists()) {
+        await photosDir.create(recursive: true);
+      }
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final safeName = description
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_')
+          .toLowerCase();
+      final filename = safeName.isEmpty
+          ? 'photo_$timestamp.jpg'
+          : '${safeName}_$timestamp.jpg';
+      final savedFile = File('${photosDir.path}/$filename');
+      await savedFile.writeAsBytes(bytes);
+
+      _log.info('Photo saved: ${savedFile.path}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo captured: $description'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Resume frame capture if still in video mode.
+      if (_inputMode == _LiveInputMode.audioVideo &&
+          (ref.read(liveSessionProvider).valueOrNull?.isStreaming ?? false)) {
+        _startFrameCapture();
+      }
+    } catch (e, st) {
+      _log.severe('Photo capture failed', e, st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Photo capture failed: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      // Resume frame capture even on failure.
+      if (_inputMode == _LiveInputMode.audioVideo &&
+          (ref.read(liveSessionProvider).valueOrNull?.isStreaming ?? false)) {
+        _startFrameCapture();
+      }
+    }
+  }
+
   void _scrollToBottom() {
     if (_chatScrollController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -334,6 +414,15 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       final oldLen = prev?.valueOrNull?.chatMessages.length ?? 0;
       final newLen = next.valueOrNull?.chatMessages.length ?? 0;
       if (newLen > oldLen) _scrollToBottom();
+    });
+
+    // Photo capture requested by Gemini
+    ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
+      final desc = next.valueOrNull?.pendingPhotoCapture;
+      final prevDesc = prev?.valueOrNull?.pendingPhotoCapture;
+      if (desc != null && desc != prevDesc) {
+        _captureHighResPhoto(desc);
+      }
     });
 
     final session = sessionAsync.valueOrNull;

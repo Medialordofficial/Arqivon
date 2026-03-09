@@ -890,7 +890,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     source_lang: str = "auto"
     target_lang: str = "en"
     current_voice: str = "Aoede"
-    conversation_transcript: list[str] = []  # accumulate user speech for summary
+    conversation_transcript: list[str] = []  # full sentences per turn for archive
+    # Per-turn accumulators for transcript fragments. Committed to
+    # conversation_transcript as full sentences on turn_complete/interrupted.
+    _turn_user_parts: list[str] = []
+    _turn_ai_parts: list[str] = []
 
     session_record = SessionRecord(
         session_id=session_id,
@@ -1344,7 +1348,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             if sc.input_transcription:
                                 txt = getattr(sc.input_transcription, 'text', None)
                                 if txt:
-                                    conversation_transcript.append(txt)
+                                    _turn_user_parts.append(txt)
                                     await _send_json(websocket, OutboundMessage(
                                         type=OutboundType.USER_TRANSCRIPT, text=txt,
                                     ))
@@ -1353,7 +1357,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             if sc.output_transcription:
                                 txt = getattr(sc.output_transcription, 'text', None)
                                 if txt:
-                                    conversation_transcript.append(f"AI: {txt}")
+                                    _turn_ai_parts.append(txt)
                                     await _send_json(websocket, OutboundMessage(
                                         type=OutboundType.TRANSCRIPT, text=txt,
                                     ))
@@ -1362,6 +1366,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
                                 session_record.turn_count += 1
+                                # Commit accumulated transcript fragments as full sentences.
+                                user_sentence = ' '.join(_turn_user_parts).strip()
+                                ai_sentence = ' '.join(_turn_ai_parts).strip()
+                                if user_sentence:
+                                    conversation_transcript.append(user_sentence)
+                                if ai_sentence:
+                                    conversation_transcript.append(f"AI: {ai_sentence}")
+                                _turn_user_parts.clear()
+                                _turn_ai_parts.clear()
                                 logger.info(">>> turn_complete (%.0fms, audio_in=%d, turns=%d)",
                                             turn_ms, client_audio_count, session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
@@ -1369,9 +1382,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
-                                # Count interrupted turns too so session_record
-                                # reflects actual conversation activity.
                                 session_record.turn_count += 1
+                                # Commit partial transcript for this interrupted turn.
+                                user_sentence = ' '.join(_turn_user_parts).strip()
+                                ai_sentence = ' '.join(_turn_ai_parts).strip()
+                                if user_sentence:
+                                    conversation_transcript.append(user_sentence)
+                                if ai_sentence:
+                                    conversation_transcript.append(f"AI: {ai_sentence}…")
+                                _turn_user_parts.clear()
+                                _turn_ai_parts.clear()
                                 # Flush pending non-audio inputs on barge-in so
                                 # stale video frames don't contaminate the new turn.
                                 input_q.flush()
@@ -1402,6 +1422,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                             "description": fc.args.get("description", ""),
                                             "icon": fc.args.get("icon", "auto_awesome"),
                                             "primary_action_label": fc.args.get("primary_action_label", "OK"),
+                                        },
+                                    ))
+
+                                elif fc.name == "capture_photo":
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.CAPTURE_PHOTO,
+                                        payload={
+                                            "description": fc.args.get("description", ""),
                                         },
                                     ))
 
