@@ -290,6 +290,34 @@ class SessionDetailScreen extends ConsumerWidget {
               const SizedBox(height: 24),
             ],
 
+            // ── Transcript / Conversation ───────────────────────
+            if (session.transcript.isNotEmpty) ...[
+              const _SectionHeader(title: 'Conversation'),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (int i = 0; i < session.transcript.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      _TranscriptBubble(
+                        line: session.transcript[i],
+                        modeColor: session.mode.color,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // ── Session info card ──────────────────────────────────
             const _SectionHeader(title: 'Session Info'),
             const SizedBox(height: 8),
@@ -466,6 +494,70 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Chat-bubble style transcript entry.
+/// Lines starting with "AI: " render as AI (left-aligned, muted).
+/// Everything else renders as user (right-aligned, coloured).
+class _TranscriptBubble extends StatelessWidget {
+  const _TranscriptBubble({
+    required this.line,
+    required this.modeColor,
+  });
+  final String line;
+  final Color modeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isAi = line.startsWith('AI: ');
+    final text =
+        isAi ? line.substring(4) : line.replaceFirst(RegExp(r'^User:\s*'), '');
+
+    return Align(
+      alignment: isAi ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isAi
+              ? cs.surfaceContainerHighest
+              : modeColor.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(14),
+            topRight: const Radius.circular(14),
+            bottomLeft: Radius.circular(isAi ? 4 : 14),
+            bottomRight: Radius.circular(isAi ? 14 : 4),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              isAi ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Text(
+              isAi ? 'Arqivo' : 'You',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+                color: isAi ? cs.onSurface.withValues(alpha: 0.45) : modeColor,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: cs.onSurface.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

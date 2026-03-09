@@ -13,6 +13,7 @@ class SessionModel {
   final List<String> tags;
   final List<String> topics;
   final String? thumbnailUrl;
+  final List<String> transcript;
 
   const SessionModel({
     required this.id,
@@ -26,6 +27,7 @@ class SessionModel {
     this.tags = const [],
     this.topics = const [],
     this.thumbnailUrl,
+    this.transcript = const [],
   });
 
   factory SessionModel.fromFirestore(Map<String, dynamic> data) {
@@ -52,8 +54,12 @@ class SessionModel {
           (data['tags'] as List<dynamic>?)?.whereType<String>().toList() ?? [],
       topics:
           (data['topics'] as List<dynamic>?)?.whereType<String>().toList() ??
-          [],
+              [],
       thumbnailUrl: data['thumbnail_url'] as String?,
+      transcript: (data['transcript'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          [],
     );
   }
 

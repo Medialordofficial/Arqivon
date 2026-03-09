@@ -92,3 +92,4 @@ class SessionRecord(BaseModel):
     tags: list[str] = Field(default_factory=list)
     topics: list[str] = Field(default_factory=list)    # support-agent topic trail
     thumbnail_url: str | None = None
+    transcript: list[str] = Field(default_factory=list)  # full conversation transcript for playback

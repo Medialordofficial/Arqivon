@@ -811,6 +811,22 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // User barged in — stop playback immediately and clear ALL stale overlays.
         _log.info('interrupted received from backend');
         _turnCompleteTimer?.cancel();
+
+        // Commit any partial AI/user text from the interrupted turn to chat
+        // so it’s not lost, then clear the buffers so the new response’s
+        // text doesn’t merge with the old.
+        final partialMsgs = <ChatMessage>[...current.chatMessages];
+        final partialUser = _turnUserTexts.join(' ').trim();
+        final partialAi = _turnAiTexts.join(' ').trim();
+        if (partialUser.isNotEmpty) {
+          partialMsgs.add(ChatMessage(text: partialUser, isUser: true));
+        }
+        if (partialAi.isNotEmpty) {
+          partialMsgs.add(ChatMessage(text: '$partialAi…'));
+        }
+        _turnUserTexts.clear();
+        _turnAiTexts.clear();
+
         // Stop playback first, THEN restart recorder to avoid audio-focus
         // conflicts on Android where the player disposal kills the mic.
         _audio?.stopPlayback().whenComplete(() {
@@ -831,6 +847,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             clearAction: true,
             clearTutorStep: true,
             clearExport: true,
+            chatMessages: partialMsgs,
           ),
         );
         break;

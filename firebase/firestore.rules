@@ -22,6 +22,20 @@ service cloud.firestore {
                       && request.auth.uid == userId;
         allow create, update: if false; // server-only via Admin SDK
       }
+
+      // Notes and to-dos (written by admin SDK, read/delete by user)
+      match /notes/{noteId} {
+        allow read, delete: if request.auth != null
+                            && request.auth.uid == userId;
+        allow create, update: if false; // server-only via Admin SDK
+      }
+
+      // Reminders (written by admin SDK, read/delete by user)
+      match /reminders/{reminderId} {
+        allow read, delete: if request.auth != null
+                            && request.auth.uid == userId;
+        allow create, update: if false; // server-only via Admin SDK
+      }
     }
 
     // Deny everything else

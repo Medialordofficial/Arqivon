@@ -1257,6 +1257,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         except Exception as summary_err:
                             logger.warning("Summary generation failed: %s", summary_err)
 
+                    # Store transcript for archive playback
+                    session_record.transcript = list(conversation_transcript)
                     await _save_session(user_id, session_record)
                     await _send_json(websocket, OutboundMessage(
                         type=OutboundType.SESSION_SAVED,
@@ -1367,10 +1369,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
+                                # Count interrupted turns too so session_record
+                                # reflects actual conversation activity.
+                                session_record.turn_count += 1
                                 # Flush pending non-audio inputs on barge-in so
                                 # stale video frames don't contaminate the new turn.
                                 input_q.flush()
-                                logger.info(">>> interrupted from Gemini — flushed pending video")
+                                logger.info(">>> interrupted from Gemini (turns=%d) — flushed pending video",
+                                            session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
 
                         # Tool / function calls
@@ -1742,9 +1748,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         if frame_throttle.dropped > 0:
             logger.info("Dropped %d redundant video frames", frame_throttle.dropped)
 
-        # Only save on WS teardown if there are unsaved turns (end_session
-        # may have already saved the current session mid-connection).
-        if session_record.turn_count > 0:
+        # Only save on WS teardown if the user actually interacted.
+        # Previously this checked turn_count > 0, which skipped saving
+        # sessions where every turn was interrupted (turn_count stays 0
+        # because only turn_complete increments it).
+        if session_record.turn_count > 0 or client_audio_count > 10:
+            # Store the conversation transcript with the session for
+            # text-based “playback” in the archive.
+            session_record.transcript = list(conversation_transcript)
             await _save_session(user_id, session_record)
         if live_ctx is not None:
             try:
