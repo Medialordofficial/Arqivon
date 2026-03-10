@@ -28,6 +28,7 @@ import '../widgets/support_topic_tracker.dart';
 import '../widgets/translation_overlay.dart';
 import '../widgets/tutor_guidance_card.dart';
 import '../widgets/export_document_card.dart';
+import '../widgets/session_insights_card.dart';
 
 enum _LiveInputMode { audioOnly, audioVideo }
 
@@ -441,6 +442,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     final supportTopics = session?.supportTopics ?? [];
     final pendingExport = session?.pendingExport;
     final chatMessages = session?.chatMessages ?? [];
+    final sessionInsights = session?.sessionInsights;
 
     const orbSize = 180.0;
 
@@ -558,6 +560,22 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                         ),
 
                         // ── Mode-specific overlays ────────────────────
+                        // ── Post-session insights card ────────────────
+                        if (sessionInsights != null && !isStreaming)
+                          SessionInsightsCard(
+                            insights: sessionInsights,
+                            onDismiss: () => ref
+                                .read(liveSessionProvider.notifier)
+                                .dismissSessionInsights(),
+                            onViewDetails: () {
+                              ref
+                                  .read(liveSessionProvider.notifier)
+                                  .dismissSessionInsights();
+                              // Navigate to archive tab to view session
+                              ref.read(activeTabProvider.notifier).state = 2;
+                            },
+                          ),
+
                         if (mode == AgentMode.translator &&
                             currentTranslation != null)
                           Padding(

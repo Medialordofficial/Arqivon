@@ -28,10 +28,22 @@ class SessionListNotifier extends AutoDisposeAsyncNotifier<List<SessionModel>> {
   }
 
   Future<void> deleteSession(String sessionId) async {
+    // Optimistically remove from local state to avoid UI flicker.
+    final current = state.valueOrNull;
+    if (current != null) {
+      state = AsyncData(
+        current.where((s) => s.id != sessionId).toList(),
+      );
+    }
+    // Delete from Firestore in background.
     final userId = ref.read(userIdProvider);
     final fs = ref.read(firestoreServiceProvider);
-    await fs.deleteSession(userId, sessionId);
-    await refresh();
+    try {
+      await fs.deleteSession(userId, sessionId);
+    } catch (_) {
+      // If deletion fails, refresh to restore accurate state.
+      await refresh();
+    }
   }
 }
 

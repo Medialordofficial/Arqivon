@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/agent_mode.dart';
@@ -11,6 +12,7 @@ import '../models/smart_action.dart';
 import '../models/ws_message.dart';
 import '../config/logger.dart';
 import '../providers/notes_provider.dart';
+import '../providers/session_provider.dart';
 import '../services/audio_service.dart';
 import '../services/websocket_service.dart';
 import 'auth_provider.dart';
@@ -61,6 +63,9 @@ class LiveSessionState {
   // Photo capture
   final String? pendingPhotoCapture;
 
+  // Post-session insights card
+  final SessionInsights? sessionInsights;
+
   const LiveSessionState({
     this.connectionState = WsConnectionState.disconnected,
     this.isStreaming = false,
@@ -82,6 +87,7 @@ class LiveSessionState {
     this.pendingExport,
     this.chatMessages = const [],
     this.pendingPhotoCapture,
+    this.sessionInsights,
   });
 
   LiveSessionState copyWith({
@@ -112,6 +118,8 @@ class LiveSessionState {
     List<ChatMessage>? chatMessages,
     String? pendingPhotoCapture,
     bool clearPhotoCapture = false,
+    SessionInsights? sessionInsights,
+    bool clearSessionInsights = false,
   }) {
     return LiveSessionState(
       connectionState: connectionState ?? this.connectionState,
@@ -140,8 +148,34 @@ class LiveSessionState {
       pendingPhotoCapture: clearPhotoCapture
           ? null
           : (pendingPhotoCapture ?? this.pendingPhotoCapture),
+      sessionInsights: clearSessionInsights
+          ? null
+          : (sessionInsights ?? this.sessionInsights),
     );
   }
+}
+
+/// Post-session insights displayed after the user stops a session.
+class SessionInsights {
+  final String sessionId;
+  final String title;
+  final String summary;
+  final int turnCount;
+  final int notesSaved;
+  final List<String> topics;
+  final AgentMode mode;
+  final Duration duration;
+
+  const SessionInsights({
+    required this.sessionId,
+    this.title = 'Session Complete',
+    this.summary = '',
+    this.turnCount = 0,
+    this.notesSaved = 0,
+    this.topics = const [],
+    this.mode = AgentMode.general,
+    this.duration = Duration.zero,
+  });
 }
 
 /// The core Live session provider managing WebSocket + audio pipeline.
@@ -174,12 +208,21 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   int _lastWatchdogServerMsgCount = 0;
   DateTime? _lastAudioChunkAt;
   bool _restartInFlight = false;
+  bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
+
+  /// Timestamp of the last `interrupted` event. Audio chunks arriving within
+  /// 300 ms of this timestamp are trailing chunks from the interrupted
+  /// response and must be silently dropped.
+  DateTime? _interruptedAt;
 
   /// Accumulated user/AI text within the current Gemini turn.
   /// Saved as ChatMessages on turn_complete.
   final List<String> _turnUserTexts = [];
   final List<String> _turnAiTexts = [];
+
+  /// Count of notes saved during the current session for insights.
+  int _notesSavedThisSession = 0;
 
   /// Amplitude notifier for the orb visualizer — avoids high-frequency
 
@@ -301,6 +344,22 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _stateSub = _ws!.stateStream.listen((s) {
         final cur = state.valueOrNull ?? const LiveSessionState();
         state = AsyncData(cur.copyWith(connectionState: s));
+        if (s == WsConnectionState.reconnecting) {
+          _wsWasReconnecting = true;
+        }
+        if (s == WsConnectionState.connected && _wsWasReconnecting) {
+          _wsWasReconnecting = false;
+          if (cur.isStreaming) {
+            _log.info('WS auto-reconnected — re-sending set_mode');
+            final selectedVoice = ref.read(settingsProvider).selectedVoice;
+            _ws?.send(WsInbound(
+              type: 'set_mode',
+              mode: cur.mode.wsValue,
+              voice: selectedVoice,
+            ));
+            _lastSentMode = cur.mode;
+          }
+        }
       });
       _msgSub = _ws!.messageStream.listen(_handleServerMessage);
       await _ws!.connect();
@@ -339,6 +398,22 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _stateSub = _ws!.stateStream.listen((s) {
         final cur = state.valueOrNull ?? const LiveSessionState();
         state = AsyncData(cur.copyWith(connectionState: s));
+        if (s == WsConnectionState.reconnecting) {
+          _wsWasReconnecting = true;
+        }
+        if (s == WsConnectionState.connected && _wsWasReconnecting) {
+          _wsWasReconnecting = false;
+          if (cur.isStreaming) {
+            _log.info('WS auto-reconnected — re-sending set_mode');
+            final selectedVoice = ref.read(settingsProvider).selectedVoice;
+            _ws?.send(WsInbound(
+              type: 'set_mode',
+              mode: cur.mode.wsValue,
+              voice: selectedVoice,
+            ));
+            _lastSentMode = cur.mode;
+          }
+        }
       });
       _msgSub = _ws!.messageStream.listen(_handleServerMessage);
       await _ws!.connect();
@@ -346,6 +421,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Reuse or create AudioService (player + recorder in one)
     _audio ??= AudioService();
+    // Clear interrupt guard so first audio chunk of new session isn't dropped.
+    _interruptedAt = null;
     // When AI finishes speaking (playback complete), clear responding flag
     // and ensure the recorder is still alive for the next turn.
     _audio!.onPlaybackDone = () {
@@ -538,6 +615,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _ampSub = null;
       await _audio?.stop();
       await _audio?.stopPlayback();
+      // Clear accumulated turn texts so stale transcripts from the dying
+      // session don't leak into the new one.
+      _turnUserTexts.clear();
+      _turnAiTexts.clear();
+      _interruptedAt = null;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
       // Restart — this sends a new set_mode which will create a fresh
@@ -634,6 +716,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(current.copyWith(clearExport: true));
   }
 
+  /// Dismiss the post-session insights card.
+  void dismissSessionInsights() {
+    final current = state.valueOrNull ?? const LiveSessionState();
+    state = AsyncData(current.copyWith(clearSessionInsights: true));
+  }
+
   /// Clear pending photo capture request after the UI has consumed it.
   void clearPhotoCapture() {
     final current = state.valueOrNull ?? const LiveSessionState();
@@ -681,6 +769,18 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     switch (msg.type) {
       case 'audio':
         if (msg.data != null) {
+          // Drop trailing audio that arrives right after an interruption.
+          // These are chunks that were already in the WebSocket buffer when
+          // the server detected the barge-in. Playing them would cause the
+          // user to hear old-response audio after they interrupted.
+          if (_interruptedAt != null) {
+            final msSinceInterrupt =
+                DateTime.now().difference(_interruptedAt!).inMilliseconds;
+            if (msSinceInterrupt < 300) {
+              break; // silently drop trailing chunk
+            }
+            _interruptedAt = null; // grace window elapsed
+          }
           // If turn_complete just arrived, allow this trailing audio to be
           // included before finalizing playback.
           if (_turnCompleteTimer != null && _turnCompleteTimer!.isActive) {
@@ -690,6 +790,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
             _log.info('first audio chunk received — setting isResponding=true');
+            HapticFeedback.selectionClick();
             state = AsyncData(
               current.copyWith(isResponding: true, clearUserTranscript: true),
             );
@@ -784,6 +885,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'note_saved':
         _log.info('Note saved: ${msg.payload?['title']}');
+        HapticFeedback.heavyImpact();
+        _notesSavedThisSession++;
         // The note is already persisted in Firestore by the backend.
         // Show a confirmation card via SmartAction.
         final action = SmartAction.fromPayload('save_note', {
@@ -802,6 +905,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'reminder_set':
         _log.info('Reminder set: ${msg.payload?['title']}');
+        HapticFeedback.heavyImpact();
         // Schedule local notification
         if (msg.payload != null) {
           final reminder = ReminderModel.fromPayload(msg.payload!);
@@ -842,7 +946,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Gemini keeps hearing the user’s speech and can pivot its response.
         _log.info('interrupted received from backend');
         _turnCompleteTimer?.cancel();
-
+        _interruptedAt = DateTime.now();
         // Commit partial USER text (what they said before the interrupt).
         // Do NOT commit the AI’s full accumulated text — the user only
         // heard part of it as audio; showing the full transcript is misleading.
@@ -901,6 +1005,26 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'session_saved':
         _log.info('Session saved by backend');
+        HapticFeedback.lightImpact();
+        // Build post-session insights card from the payload.
+        final insights = SessionInsights(
+          sessionId: msg.payload?['session_id'] as String? ?? '',
+          title: msg.payload?['title'] as String? ?? 'Session Complete',
+          summary: msg.payload?['summary'] as String? ?? '',
+          turnCount: (msg.payload?['turn_count'] as num?)?.toInt() ?? 0,
+          notesSaved: _notesSavedThisSession,
+          topics: (msg.payload?['topics'] as List<dynamic>?)
+                  ?.whereType<String>()
+                  .toList() ??
+              [],
+          mode: current.mode,
+        );
+        _notesSavedThisSession = 0;
+        state = AsyncData(
+          current.copyWith(sessionInsights: insights),
+        );
+        // Refresh the session list so the Archive tab shows the new session.
+        ref.invalidate(sessionListProvider);
         break;
 
       case 'error':

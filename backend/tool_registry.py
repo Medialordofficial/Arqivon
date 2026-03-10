@@ -539,10 +539,13 @@ _SHARED_DECLARATIONS: list[types.FunctionDeclaration] = [
     types.FunctionDeclaration(
         name="save_note",
         description=(
-            "Save a note or to-do item for the user. Use when the user says things like "
+            "Save a SINGLE note or to-do item for the user. Use when the user says things like "
             "'note that down', 'remember to', 'add to my list', 'save this', 'to-do', "
             "'make a note', or mentions something they want to track. Set is_todo=true "
-            "for actionable tasks and false for plain notes."
+            "for actionable tasks and false for plain notes. "
+            "IMPORTANT: If the user provides MULTIPLE items, call this function ONCE PER ITEM "
+            "so each task can be tracked and checked off individually. Never bundle multiple "
+            "tasks into one note."
         ),
         parameters={
             "type": "OBJECT",

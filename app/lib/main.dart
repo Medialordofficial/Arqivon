@@ -125,10 +125,16 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   /// Start as null (unknown) — show splash until prefs are loaded.
   bool? _onboardingDone;
 
+  /// Ensure splash stays visible long enough to show slogan animation.
+  bool _splashMinTimeElapsed = false;
+
   @override
   void initState() {
     super.initState();
     _checkOnboarding();
+    Future.delayed(const Duration(milliseconds: 2200), () {
+      if (mounted) setState(() => _splashMinTimeElapsed = true);
+    });
   }
 
   Future<void> _checkOnboarding() async {
@@ -167,8 +173,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         final authState = ref.watch(authStateProvider);
         return authState.when(
           loading: () => const _SplashScreen(),
-          error: (_, __) => const LoginScreen(),
+          error: (_, __) {
+            // Keep splash until minimum time has elapsed.
+            if (!_splashMinTimeElapsed) return const _SplashScreen();
+            return const LoginScreen();
+          },
           data: (user) {
+            // Keep splash until minimum time has elapsed.
+            if (!_splashMinTimeElapsed) return const _SplashScreen();
             if (user == null) return const LoginScreen();
             // Save/refresh FCM token whenever user signs in.
             unawaited(FcmService.onUserSignIn());
@@ -451,7 +463,7 @@ class _OrbitalRingPainter extends CustomPainter {
     canvas.drawArc(rect, 0, math.pi * 1.5, false, arcPaint);
 
     // Orbiting dot at the leading edge
-    final dotAngle = math.pi * 1.5;
+    const dotAngle = math.pi * 1.5;
     final dotX = center.dx + radius * math.cos(dotAngle);
     final dotY = center.dy + radius * math.sin(dotAngle);
     final dotRadius = 3.5 + 1.0 * pulseValue;
@@ -462,7 +474,7 @@ class _OrbitalRingPainter extends CustomPainter {
     );
 
     // Second smaller dot at ~90° behind
-    final dot2Angle = math.pi * 0.5;
+    const dot2Angle = math.pi * 0.5;
     final dot2X = center.dx + radius * math.cos(dot2Angle);
     final dot2Y = center.dy + radius * math.sin(dot2Angle);
     canvas.drawCircle(
@@ -474,7 +486,7 @@ class _OrbitalRingPainter extends CustomPainter {
     );
 
     // Third tiny dot at ~200°
-    final dot3Angle = math.pi * 1.1;
+    const dot3Angle = math.pi * 1.1;
     final dot3X = center.dx + radius * math.cos(dot3Angle);
     final dot3Y = center.dy + radius * math.sin(dot3Angle);
     canvas.drawCircle(

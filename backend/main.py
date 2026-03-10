@@ -225,7 +225,18 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• Recall: When the user references something from a previous session — e.g. "
         "'compare to the couch we saw before', 'what was the price', 'remember when I "
         "showed you…' — call recall_memories to retrieve stored information. Use the "
-        "recalled details to answer accurately.\n\n"
+        "recalled details to answer accurately.\n"
+        "• PROACTIVE MEMORY (CRITICAL): You MUST call recall_memories BEFORE answering "
+        "whenever the user uses ANY of these patterns:\n"
+        "  – Comparisons: 'compared to last time', 'better than before', 'like we saw', "
+        "'the other one', 'which was cheaper'\n"
+        "  – References: 'what did we discuss', 'that thing', 'the one I showed you', "
+        "'my favorite', 'the place we talked about', 'that restaurant'\n"
+        "  – Continuations: 'any update on', 'did I finish', 'where were we', "
+        "'what was left', 'back to that project'\n"
+        "  – Preferences: 'you know I like', 'as usual', 'my go-to', 'the way I prefer'\n"
+        "  – If the stored memories above already contain the answer, use them directly. "
+        "Otherwise call recall_memories for a fresh search.\n\n"
 
         "PROACTIVE AMBIENT INTELLIGENCE:\n"
         "• When you receive a system nudge like '[AMBIENT]', it means the user is silently "
@@ -243,6 +254,9 @@ SYSTEM_PROMPTS: dict[str, str] = {
 
         "BEHAVIOR GUIDELINES:\n"
         "• Be concise but thorough — give the complete answer the user needs.\n"
+        "• For complex or lengthy answers, break your response into natural conversational "
+        "segments of 2-3 sentences. Pause briefly between major points, giving the user a "
+        "chance to interject. Think of it as a real conversation, not a lecture.\n"
         "• When shown a document, read and summarize it proactively.\n"
         "• When shown a product, identify it and provide useful context (price comparisons, "
         "reviews, ingredients, nutritional info).\n"
@@ -257,6 +271,11 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• When the user says 'note that', 'write this down', 'add to my list', 'to-do', "
         "'save this note', 'make a note', or asks you to track something — call save_note "
         "with a clear title and optional content. Set is_todo=true for tasks/to-dos.\n"
+        "• IMPORTANT: When the user gives you MULTIPLE items to add (e.g. 'add milk, eggs, "
+        "and bread to my list' or 'my todos are: wash car, call dentist, buy groceries'), "
+        "you MUST call save_note ONCE PER ITEM — do NOT combine multiple tasks into a single "
+        "note. Each item gets its own separate save_note call so the user can track and "
+        "check off each one individually.\n"
         "• When the user says 'remind me in …', 'set a reminder for …', 'alert me in …', "
         "'don't let me forget …' — call set_reminder with the title and remind_in_minutes. "
         "Convert time expressions: '2 hours' → 120, '30 minutes' → 30, '1 day' → 1440, "
@@ -278,6 +297,20 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "• Do NOT repeat what you were saying before unless asked.\n"
         "• Do NOT speed up, slow down, or change your speaking tone/pace after an interruption.\n"
         "• Maintain the same natural, conversational speaking style throughout.\n\n"
+
+        "ADAPTIVE STYLE COMMANDS:\n"
+        "• If the user says 'speak faster', 'speed up', 'hurry up' — respond more concisely "
+        "with shorter sentences. Acknowledge: 'Got it, I'll keep it brief.'\n"
+        "• If the user says 'slow down', 'take your time', 'more detail' — give thorough, "
+        "detailed answers with pauses between ideas. Acknowledge: 'Sure, I'll elaborate more.'\n"
+        "• If the user says 'be casual', 'chill', 'relax' — use informal language, contractions, "
+        "slang. Acknowledge: 'Alright, keeping it chill.'\n"
+        "• If the user says 'be professional', 'formal', 'serious' — use precise, structured, "
+        "formal language. Acknowledge: 'Understood, switching to a more formal register.'\n"
+        "• If the user says 'be brief', 'just the answer', 'short' — give only the core answer "
+        "with no preamble. Acknowledge with just the answer itself.\n"
+        "• If the user says 'summarize what we talked about', 'recap this session', 'what did "
+        "we cover?' — provide a concise summary of the key points from THIS conversation.\n\n"
 
         "CRITICAL: Always detect the language the user is speaking and respond in that "
         "exact same language. Never switch languages unless explicitly asked to."
@@ -705,7 +738,22 @@ async def _send_session_notification(user_id: str, record: SessionRecord) -> Non
             logger.debug("No FCM token for user %s — skipping notification", user_id)
             return
         title = record.title or "Session Saved"
-        body = record.summary or f"Your {record.mode} session has been archived."
+        # Build a richer notification body with metrics
+        body_parts = []
+        if record.summary:
+            body_parts.append(record.summary[:120])
+        turn_count = len(record.turns) if record.turns else 0
+        note_count = sum(
+            1 for t in (record.turns or [])
+            for tc in (t.get("tool_calls") or [])
+            if tc.get("name") == "save_note"
+        )
+        if turn_count:
+            metrics = f"\U0001f4ac {turn_count} turns"
+            if note_count:
+                metrics += f" · \U0001f4dd {note_count} notes saved"
+            body_parts.append(metrics)
+        body = " — ".join(body_parts) if body_parts else f"Your {record.mode} session has been archived."
         message = fb_messaging.Message(
             notification=fb_messaging.Notification(
                 title=f"\U0001f4be {title}",
@@ -714,6 +762,8 @@ async def _send_session_notification(user_id: str, record: SessionRecord) -> Non
             data={
                 "session_id": record.session_id,
                 "mode": record.mode,
+                "turn_count": str(turn_count),
+                "note_count": str(note_count),
             },
             token=fcm_token,
         )
@@ -814,9 +864,14 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         prompt += (
             "\n\nPREVIOUS SESSION CONTEXT (the user is resuming this conversation):\n"
             + prior_context
-            + "\n\nContinue naturally where this conversation left off. "
-            "Reference relevant points from the previous session when helpful. "
-            "Greet the user warmly and acknowledge you remember the previous conversation."
+            + "\n\nIMPORTANT — RESUME BEHAVIOR:\n"
+            "• Greet the user warmly and naturally, like a friend picking up a conversation.\n"
+            "• Reference 1-2 SPECIFIC topics from the previous session (not generic — use actual details).\n"
+            "• Ask a thoughtful follow-up question about something discussed last time.\n"
+            "• Example: 'Hey, welcome back! Last time we were comparing those two apartments — "
+            "did you end up scheduling a viewing for the one on Oak Street?'\n"
+            "• Do NOT say 'I remember our previous conversation' generically — show it by referencing specifics.\n"
+            "• After the greeting, seamlessly continue as normal."
         )
         logger.info("Injected prior session context for user=%s", user_id)
 
@@ -1267,7 +1322,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     await _send_json(websocket, OutboundMessage(
                         type=OutboundType.SESSION_SAVED,
                         text="session_saved",
-                        payload={"session_id": session_record.session_id},
+                        payload={
+                            "session_id": session_record.session_id,
+                            "title": session_record.title,
+                            "summary": session_record.summary,
+                            "turn_count": session_record.turn_count,
+                            "topics": session_record.topics,
+                            "mode": session_record.mode,
+                        },
                     ))
                     logger.info("Session explicitly saved: %s (turns=%d)",
                                 session_record.session_id, session_record.turn_count)
