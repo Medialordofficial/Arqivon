@@ -206,10 +206,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   /// Detects when the backend/Gemini stops responding entirely.
   Timer? _responseWatchdog;
-  int _lastResponseChunkCount = 0;
-  int _serverMessageCount = 0;
-  int _lastWatchdogServerMsgCount = 0;
-  DateTime? _lastAudioChunkAt;
   bool _restartInFlight = false;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
@@ -229,6 +225,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   /// Count of notes saved during the current session for insights.
   int _notesSavedThisSession = 0;
+
+  /// Tracks when the server last confirmed user speech (user_transcript).
+  /// Used by the response watchdog to detect "user spoke but no AI response."
+  DateTime? _lastUserTranscriptAt;
 
   /// Amplitude notifier for the orb visualizer — avoids high-frequency
 
@@ -461,12 +461,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         chatMessages: msgs,
         clearTranscript: true,
       ));
-      // Restart recorder ONLY when it is actually dead.
-      // Forcing a restart on every turn can steal audio focus from the
-      // next AI response and cause "text appears but voice is silent".
-      if (cur.isStreaming && !(_audio?.isCapturing ?? false)) {
-        _log.info(
-            'recorder not capturing after playback — calling ensureRecording');
+      // ALWAYS verify recorder health after playback finishes.
+      // On some devices, audio focus shifting to the player during
+      // playback silently kills the recorder stream.  ensureRecording()
+      // checks data freshness (not just isCapturing) and restarts if stale.
+      if (cur.isStreaming) {
         _audio?.ensureRecording();
       }
     };
@@ -520,14 +519,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       return;
     }
     _audioChunksSent = 0;
-    _lastAudioChunkAt = null;
     _audioSub = _audio!.audioStream.listen(
       (b64) {
         // Only send audio when NOT muted.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
         _audioChunksSent++;
-        _lastAudioChunkAt = DateTime.now();
         if (_audioChunksSent % 50 == 1) {
           _log.fine(
             'audio chunk #$_audioChunksSent → WS (state=${_ws?.state})',
@@ -593,34 +590,29 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _lastWatchdogChunkCount = _audioChunksSent;
     });
 
-    // Response watchdog: every 10s check if server is responding after
-    // the user has likely FINISHED speaking.
-    _lastWatchdogServerMsgCount = _serverMessageCount;
-    _lastResponseChunkCount = _audioChunksSent;
-    _responseWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
+    // Response watchdog: every 4s check if user spoke but got no reply.
+    _responseWatchdog = Timer.periodic(const Duration(seconds: 4), (_) {
       final cur = state.valueOrNull;
       if (cur == null || !cur.isStreaming || cur.isMuted) {
-        _lastWatchdogServerMsgCount = _serverMessageCount;
-        _lastResponseChunkCount = _audioChunksSent;
+        _lastUserTranscriptAt = null;
         return;
       }
-      // Require a real utterance (~1s audio at 50ms chunks).
-      final sentAudio = _audioChunksSent > _lastResponseChunkCount + 20;
-      // User finished speaking (2s of silence).
-      final sinceLastAudio = _lastAudioChunkAt == null
-          ? const Duration(days: 1)
-          : DateTime.now().difference(_lastAudioChunkAt!);
-      final userLikelyFinished = sinceLastAudio.inMilliseconds > 2000;
-      final noResponse = _serverMessageCount == _lastWatchdogServerMsgCount;
-      if (sentAudio && userLikelyFinished && noResponse) {
-        _log.warning(
-          'Response watchdog: user finished speaking but no server messages for 10s — '
-          'forcing session restart',
-        );
-        _forceSessionRestart();
+      // Targeted check: server confirmed user speech (via user_transcript)
+      // but no AI response arrived within 8 seconds.  This catches the
+      // common case where Gemini heard the user but then died/stalled.
+      if (_lastUserTranscriptAt != null && !cur.isResponding) {
+        final sinceSpoke =
+            DateTime.now().difference(_lastUserTranscriptAt!).inSeconds;
+        if (sinceSpoke >= 8) {
+          _log.warning(
+            'Response watchdog: user spoke ${sinceSpoke}s ago, no AI response '
+            '— forcing session restart',
+          );
+          _lastUserTranscriptAt = null;
+          _forceSessionRestart();
+          return;
+        }
       }
-      _lastWatchdogServerMsgCount = _serverMessageCount;
-      _lastResponseChunkCount = _audioChunksSent;
     });
   }
 
@@ -646,27 +638,33 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       // session.  Previously this sent end_session which caused phantom
       // sessions to appear in the user's Archive.
       _ws?.send(const WsInbound(type: 'discard_session'));
-      // Wait long enough for the backend to close the Gemini session.
-      // The backend closes the Live API context synchronously on
-      // end_session before sending session_saved.
-      await Future.delayed(const Duration(milliseconds: 800));
-      // Tear down audio.
+
+      // Stop playback but KEEP the recorder running so the user's
+      // audio continues to flow as soon as the new session starts.
+      // Only cancel the data subscriptions (they are recreated in
+      // startSession).
+      await _audio?.stopPlayback();
       await _audioSub?.cancel();
       _audioSub = null;
       _ampSub?.cancel();
       _ampSub = null;
-      await _audio?.stop();
-      await _audio?.stopPlayback();
+
       // Clear accumulated turn texts so stale transcripts from the dying
       // session don't leak into the new one.
       _turnUserTexts.clear();
       _turnAiTexts.clear();
       _pendingAiText = '';
       _interruptedAt = null;
+      _lastUserTranscriptAt = null;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
+
+      // Brief wait for backend to process the discard.
+      await Future.delayed(const Duration(milliseconds: 300));
+
       // Restart — this sends a new set_mode which will create a fresh
       // Gemini session because end_session set session=None on the backend.
+      // The recorder is still alive, so audio starts flowing immediately.
       await startSession();
     } finally {
       _restartInFlight = false;
@@ -818,8 +816,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   void _handleServerMessage(WsOutbound msg) {
     final current = state.valueOrNull ?? const LiveSessionState();
     _trackLatency(msg);
-    // Count all non-pong messages for the response watchdog.
-    if (msg.type != 'pong') _serverMessageCount++;
+    // Track liveness of any non-pong message.
+    if (msg.type != 'pong') {}
 
     switch (msg.type) {
       case 'audio':
@@ -851,6 +849,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {
+            // AI started responding — clear the user-spoke tracker so the
+            // response watchdog doesn't fire.
+            _lastUserTranscriptAt = null;
             _log.info('first audio chunk received — setting isResponding=true');
             HapticFeedback.selectionClick();
             state = AsyncData(
@@ -878,6 +879,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'user_transcript':
         if (msg.text != null && msg.text!.isNotEmpty) {
           _turnUserTexts.add(msg.text!);
+          // Record when the server confirmed user speech — used by the
+          // response watchdog to detect if Gemini heard but never replied.
+          _lastUserTranscriptAt = DateTime.now();
         }
         // Show accumulated user text for a readable live bubble.
         state = AsyncData(
@@ -1012,6 +1016,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'turn_complete':
         _log.info('turn_complete received from backend (debounced)');
+        _lastUserTranscriptAt = null;
         _scheduleTurnCompleteFinalize();
         break;
 
@@ -1021,6 +1026,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _log.info('interrupted received from backend');
         _turnCompleteTimer?.cancel();
         _interruptedAt = DateTime.now();
+        _lastUserTranscriptAt = null;
         // Commit partial USER text (what they said before the interrupt).
         // Do NOT commit the AI’s full accumulated text — the user only
         // heard part of it as audio; showing the full transcript is misleading.

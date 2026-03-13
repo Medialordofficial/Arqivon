@@ -171,6 +171,20 @@ class InputQueue:
         self._video_frame = None
         self._video_ready.clear()
 
+    def flush_all(self) -> None:
+        """Drop ALL pending audio AND video.
+
+        Used during mode/session switches where stale audio from the old
+        session would confuse the new Gemini context's VAD.
+        """
+        while True:
+            try:
+                self._audio_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        self._video_frame = None
+        self._video_ready.clear()
+
 
 # ── Video frame throttle / deduplication ───────────────────────────────────
 
@@ -792,12 +806,15 @@ REALTIME_CONVERSATION_POLICY = (
 )
 
 
-async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous", prior_context: str | None = None):
+async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: str = "Aoede", user_id: str = "anonymous", prior_context: str | None = None, continuation_context: str | None = None):
     """Build a LiveConnectConfig for the given mode and open a session.
 
     Fetches stored memories for the user and injects them into the system
     prompt so the AI has cross-session context from the start.
     If *prior_context* is provided (session resume), it is appended to the
+    system prompt so the AI can continue a previous conversation.
+    If *continuation_context* is provided (automatic reconnect within the same
+    session), it is appended so the AI seamlessly continues without greeting.
     system prompt so the AI can continue a previous conversation.
     """
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS[AgentMode.GENERAL])
@@ -866,6 +883,22 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         )
         logger.info("Injected prior session context for user=%s", user_id)
 
+    # ── Inject continuation context for same-session reconnects ──────────
+    if not prior_context and continuation_context:
+        prompt += (
+            "\n\nCONVERSATION SO FAR (same session, continuing after brief reconnection):\n"
+            + continuation_context
+            + "\n\nIMPORTANT — CONTINUATION BEHAVIOR:\n"
+            "• Do NOT greet the user or say hello again.\n"
+            "• Do NOT acknowledge any reconnection or technical issue.\n"
+            "• Continue the conversation EXACTLY where it left off.\n"
+            "• The user does not know about internal reconnections.\n"
+            "• If the user was mid-question, wait for them to finish.\n"
+            "• If you were mid-answer, do NOT repeat — the user already heard that part."
+        )
+        logger.info("Injected continuation context (%d chars) for user=%s",
+                    len(continuation_context), user_id)
+
     # Validate voice name against known Gemini voices
     valid_voices = {"Aoede", "Puck", "Charon", "Kore", "Fenrir", "Leda"}
     voice_name = voice if voice in valid_voices else "Aoede"
@@ -901,10 +934,13 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                 # 300ms prefix captures word beginnings that would otherwise
-                # be clipped.
-                prefix_padding_ms=300,
-                # 800ms silence before end-of-speech detection.
-                silence_duration_ms=800,
+                # be clipped.  500ms is more generous and prevents the first
+                # word from being cut on slower VAD detection.
+                prefix_padding_ms=500,
+                # 1000ms silence before end-of-speech detection.
+                # Allows natural mid-sentence pauses without premature cutoff,
+                # making conversation flow more human-like.
+                silence_duration_ms=1000,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
@@ -1025,7 +1061,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     except Exception as exc:
                         logger.debug("Error closing old Gemini context: %s", exc)
                 # Open new
-                live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context)
+                # Auto-inject current conversation as continuation context
+                # so the AI retains memory across reconnects (health check,
+                # audio failures, mode switches within the same session).
+                _cont_ctx = None
+                if not prior_context and conversation_transcript:
+                    recent = conversation_transcript[-20:]
+                    _cont_ctx = "\n".join(recent)
+                live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context, continuation_context=_cont_ctx)
                 # Reset the response timer so the health check doesn't
                 # immediately fire after a fresh reconnect.
                 _last_gemini_response_time = time.monotonic()
@@ -1241,7 +1284,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         tracer.start("mode_switch")
                         # Flush the input queue so stale audio from the old
                         # mode doesn't contaminate the new session.
-                        input_q.flush()
+                        input_q.flush_all()
                         await _reconnect_session(msg.mode, source_lang, target_lang, voice, prior_context=prior_context)
                         # _mode_switch_event is now set inside _reconnect_session
                         ms = tracer.end("mode_switch")
@@ -1808,18 +1851,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     async def _session_health_check() -> None:
         """Detect a stuck/dead Gemini session and force-reconnect.
 
-        Conservative: only triggers after 30s of total Gemini silence
-        AND the user has spoken within the last 20s.  Resets the timer
-        after reconnecting to prevent loops.
+        Triggers after 15s of total Gemini silence AND the user has spoken
+        within the last 20s.  Runs every 4s for fast detection.  Resets the
+        timer after reconnecting to prevent loops.
         """
         while not cancel_event.is_set():
-            await asyncio.sleep(10.0)
+            await asyncio.sleep(4.0)
             if session is None or _switching.is_set():
                 continue
             since_response = time.monotonic() - _last_gemini_response_time
             since_audio = time.monotonic() - _last_audio_time
             user_spoke_recently = client_audio_count > 20 and since_audio < 20.0
-            if since_response > 30.0 and user_spoke_recently:
+            if since_response > 15.0 and user_spoke_recently:
                 logger.warning(
                     "Session health: Gemini silent %.0fs, user spoke %.0fs ago — reconnecting",
                     since_response, since_audio,

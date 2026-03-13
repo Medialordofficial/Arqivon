@@ -48,6 +48,7 @@ class AudioService {
   bool _flushing = false;
   bool _reflushNeeded = false;
   bool _turnComplete = false;
+  Timer? _completionDebounce;
 
   /// Called when the AI turn's playback finishes (all tracks played).
   VoidCallback? onPlaybackDone;
@@ -97,10 +98,13 @@ class AudioService {
 
   void _onProcessingState(ProcessingState state) {
     if (state == ProcessingState.completed && _turnComplete) {
-      // Debounce: wait 250ms to let any in-flight _enqueueWav finish.
-      // Without this, a flush completing right now would add a new track
-      // to the playlist — but we'd have already reset and killed it.
-      Future.delayed(const Duration(milliseconds: 250), () {
+      // Cancel any previous debounce and start a fresh one.
+      // Using a cancelable Timer prevents multiple pending callbacks
+      // from racing when the player cycles completed→playing→completed
+      // on short WAV files during long responses.
+      _completionDebounce?.cancel();
+      _completionDebounce = Timer(const Duration(milliseconds: 300), () {
+        _completionDebounce = null;
         if (_turnComplete &&
             _player?.processingState == ProcessingState.completed &&
             _pcmBuffer.isEmpty &&
@@ -343,6 +347,11 @@ class AudioService {
     _ensurePlayer();
     if (_turnId != turnSnapshot) return;
 
+    // Cancel any pending completion debounce — new audio is arriving,
+    // so the turn is NOT done yet.
+    _completionDebounce?.cancel();
+    _completionDebounce = null;
+
     final isFirst = _playlist == null;
     // When the player has completed all previous tracks, we MUST create
     // a fresh ConcatenatingAudioSource and call setAudioSource.
@@ -460,6 +469,8 @@ class AudioService {
   Future<void> stopPlayback() async {
     _playbackTimeout?.cancel();
     _flushTimer?.cancel();
+    _completionDebounce?.cancel();
+    _completionDebounce = null;
     _pcmBuffer.clear();
     _turnComplete = false;
     _chunkIndex = 0;
@@ -553,6 +564,7 @@ class AudioService {
     _disposed = true;
     _playbackTimeout?.cancel();
     _flushTimer?.cancel();
+    _completionDebounce?.cancel();
     _recordSub?.cancel();
     _processingStateSub?.cancel();
     _turnId++;
