@@ -783,9 +783,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void _scheduleTurnCompleteFinalize() {
     _turnCompleteTimer?.cancel();
-    // Give a grace window for late audio chunks that can arrive right
-    // around turn_complete, especially after interruptions.
-    _turnCompleteTimer = Timer(const Duration(milliseconds: 400), () {
+    // Reduced to 80ms: just enough to catch any final audio chunk that
+    // arrives in the same event-loop cycle as turn_complete, without
+    // adding noticeable latency before the final flush plays.
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 80), () {
       final current = state.valueOrNull ?? const LiveSessionState();
       _log.info('finalizing turn_complete (debounced)');
       _audio?.flushAndPlay();
@@ -827,10 +828,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // These are chunks that were already in the WebSocket buffer when
           // the server detected the barge-in. Playing them would cause the
           // user to hear old-response audio after they interrupted.
+          // IMPORTANT: Keep this window VERY short (50ms). Gemini's new
+          // response audio arrives within 300-500ms of the interrupt.
+          // A longer window (e.g. 500ms) drops the first words of the
+          // NEW response, causing "text shows but audio doesn't match."
           if (_interruptedAt != null) {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
-            if (msSinceInterrupt < 500) {
+            if (msSinceInterrupt < 50) {
               break; // silently drop trailing chunk
             }
             _interruptedAt = null; // grace window elapsed
@@ -839,16 +844,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // included before finalizing playback.
           if (_turnCompleteTimer != null && _turnCompleteTimer!.isActive) {
             _scheduleTurnCompleteFinalize();
-          } else if (current.isResponding) {
-            // Timer already fired but playback still in progress — late chunk.
-            // Schedule another flushAndPlay so the audio service knows more
-            // data arrived and shouldn't exit the loop prematurely.
-            _turnCompleteTimer?.cancel();
-            _turnCompleteTimer = Timer(const Duration(milliseconds: 400), () {
-              _log.info('late-chunk flush (post turn_complete)');
-              _audio?.flushAndPlay();
-            });
           }
+          // Late chunks after turn_complete timer already fired:
+          // just queue them. The audio_service playback loop's
+          // demand-flush handles them automatically.
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
           if (!current.isResponding) {

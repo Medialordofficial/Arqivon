@@ -239,17 +239,19 @@ class AudioService {
     if (_turnComplete) {
       // Late chunk after turn_complete — flush urgently.
       _flushTimer?.cancel();
-      _flushTimer = Timer(const Duration(milliseconds: 50), _flush);
+      _flushTimer = Timer(const Duration(milliseconds: 20), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First chunk → buffer 400ms for a decent first WAV.
-      // Loop already running → accumulate ~1s for fewer transitions.
-      // Each setAudioSource transition can cause a ~30-50ms audible gap,
-      // so FEWER, LARGER WAV files produce smoother playback.
-      final ms = !_loopRunning ? 400 : 1000;
+      // First chunk → buffer 500ms for a solid first WAV.
+      // Loop already running → accumulate ~1500ms for DRAMATICALLY fewer
+      // WAV transitions. Each setAudioSource() transition causes a 20-80ms
+      // gap of silence. With 400ms accumulation, a 10s response creates ~25
+      // transitions = ~1.25s of total dead air. With 1500ms accumulation,
+      // only ~7 transitions = ~0.35s total — a 3.5x improvement.
+      final ms = !_loopRunning ? 500 : 1500;
       _flushTimer = Timer(Duration(milliseconds: ms), _flush);
     }
-    // Hard cap: ~8s of audio at 24kHz 16-bit mono.
-    if (_pcmBuffer.length >= 384000) {
+    // Hard cap: ~4s of audio at 24kHz 16-bit mono.
+    if (_pcmBuffer.length >= 192000) {
       _flushTimer?.cancel();
       _flush();
     }
@@ -268,21 +270,21 @@ class AudioService {
       _flushing = false;
       if (_reflushNeeded && _pcmBuffer.isNotEmpty) {
         _reflushNeeded = false;
-        scheduleMicrotask(() => _flush());
+        // Use a short timer instead of scheduleMicrotask to avoid
+        // a CPU-wasting spin loop when the buffer is below minimum.
+        Timer(const Duration(milliseconds: 50), () => _flush());
       }
     }
   }
 
   Future<void> _doFlush() async {
-    // Require at least ~250ms of audio (12000 bytes at 24kHz 16-bit mono)
-    // before flushing, unless the turn is complete or buffer is large.
-    // Tiny WAV files cause audible clicks/gaps between transitions.
+    // When turn is complete, flush ANY remaining PCM regardless of size.
+    // During streaming, require at least ~50ms of audio (2400 bytes at
+    // 24kHz 16-bit mono). The 1500ms accumulation timer ensures we
+    // normally flush much larger buffers — this threshold is just a
+    // safety check against creating click-artifact WAVs.
     if (_pcmBuffer.isEmpty) return;
-    if (!_turnComplete &&
-        _pcmBuffer.length < 12000 &&
-        _pcmBuffer.length < 288000) {
-      // Re-schedule flush after a short delay to accumulate more data.
-      _reflushNeeded = true;
+    if (!_turnComplete && _pcmBuffer.length < 2400) {
       return;
     }
     final turnSnapshot = _turnId;
@@ -307,8 +309,9 @@ class AudioService {
     }
     _tempFiles.add(path);
     _wavQueue.add(path);
-    _log.info('WAV queued: #${_chunkIndex - 1}, ${pcm.length} bytes, '
-        'queue=${_wavQueue.length}');
+    final audioDurationMs = (pcm.length / (24000 * 2) * 1000).round();
+    _log.info('WAV queued: #${_chunkIndex - 1}, ${pcm.length} bytes '
+        '(${audioDurationMs}ms audio), queue=${_wavQueue.length}');
 
     // Start the playback loop if not already running.
     if (!_loopRunning) {
@@ -338,12 +341,12 @@ class AudioService {
         while (_wavQueue.isEmpty) {
           if (_turnComplete && _pcmBuffer.isEmpty) {
             if (_flushing) {
-              await Future.delayed(const Duration(milliseconds: 20));
+              await Future.delayed(const Duration(milliseconds: 15));
               continue;
             }
-            // Grace period for very late arrivals.
-            await Future.delayed(const Duration(milliseconds: 400));
-            // Final flush attempt.
+            // Brief grace for final in-flight flush.
+            await Future.delayed(const Duration(milliseconds: 50));
+            // Final flush — flush ANY remaining PCM when turn is done.
             if (_pcmBuffer.isNotEmpty && !_flushing) {
               _flushTimer?.cancel();
               await _flush();
@@ -355,12 +358,14 @@ class AudioService {
             continue;
           }
           if (_turnId != turnSnapshot) return;
-          // Demand flush: if enough PCM buffered (~1s), flush now.
-          if (_pcmBuffer.length >= 48000 && !_flushing) {
+          // When queue is empty but PCM data exists, force-flush
+          // immediately. The 1500ms accumulation timer is for steady-
+          // state streaming; here we're between tracks and need audio.
+          if (_pcmBuffer.isNotEmpty && !_flushing) {
             _flushTimer?.cancel();
             await _flush();
           }
-          await Future.delayed(const Duration(milliseconds: 40));
+          await Future.delayed(const Duration(milliseconds: 20));
         }
         if (_turnId != turnSnapshot) return;
 
@@ -413,11 +418,11 @@ class AudioService {
 
     if (_pcmBuffer.isNotEmpty) await _flush();
 
-    // Wait for any in-progress flush to finish (up to 500ms).
+    // Wait for any in-progress flush to finish (up to 200ms).
     int waitMs = 0;
-    while (_flushing && waitMs < 500) {
-      await Future.delayed(const Duration(milliseconds: 20));
-      waitMs += 20;
+    while (_flushing && waitMs < 200) {
+      await Future.delayed(const Duration(milliseconds: 10));
+      waitMs += 10;
     }
     if (_pcmBuffer.isNotEmpty) await _flush();
 

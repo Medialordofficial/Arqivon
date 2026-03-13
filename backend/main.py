@@ -889,17 +889,23 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # HIGH start = reliably detects real speech for interruptions.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                # MEDIUM start sensitivity = balanced detection.
+                # HIGH caused false barge-ins from ambient noise, prematurely
+                # interrupting the AI's response and dropping audio mid-word.
+                # MEDIUM still reliably detects intentional speech but ignores
+                # background noise, breathing, and brief sounds.
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_MEDIUM,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
-                # 300ms prefix captures word beginnings that would otherwise
+                # 400ms prefix captures word beginnings that would otherwise
                 # be clipped, fixing the "missing first words" issue.
-                prefix_padding_ms=300,
-                # 800ms silence before end-of-speech detection. 300ms was too
-                # aggressive — caused premature turn_complete on natural pauses,
-                # breaking mid-sentence replies.
-                silence_duration_ms=800,
+                # Increased from 300ms for better word-boundary capture.
+                prefix_padding_ms=400,
+                # 1000ms silence before end-of-speech detection.
+                # Increased from 800ms — some speakers pause >800ms between
+                # sentences, causing premature turn_complete that splits a
+                # single thought into two fragmented responses.
+                silence_duration_ms=1000,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
