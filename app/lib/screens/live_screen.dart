@@ -1034,8 +1034,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               subtitle: 'Voice + camera for visual context',
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFFC98B4E),
-                  Color(0xFFE8943A),
+                  Color(0xFF7C74A8),
+                  Color(0xFF9389C4),
                 ],
               ),
               onTap: () {
@@ -1046,6 +1046,44 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
             ),
           ),
           const Spacer(flex: 3),
+          // ── Large mic FAB for quick start ──────────────────────
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.heavyImpact();
+              setState(() => _inputMode = _LiveInputMode.audioOnly);
+              _toggleSession();
+            },
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.primary,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.40),
+                    blurRadius: 24,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.mic_rounded,
+                size: 34,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Tap to start',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 28),
         ],
       ),
     );
@@ -1065,7 +1103,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
             Icon(
               mode.icon,
               size: 48,
-              color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              color: theme.colorScheme.primary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
@@ -1074,7 +1112,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
                 height: 1.3,
               ),
             ),
@@ -1084,7 +1122,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                 height: 1.4,
               ),
             ),
@@ -1306,10 +1344,10 @@ class _StatusText extends StatelessWidget {
           text,
           key: ValueKey(text),
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: weight,
             color: theme.colorScheme.onSurface.withValues(alpha: opacity),
-            letterSpacing: 0.2,
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -1351,11 +1389,11 @@ class _OrbWithControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ringRadius = orbSize / 2 + 16;
+    final ringRadius = orbSize / 2 + 20;
 
     return SizedBox(
-      width: orbSize + 80,
-      height: orbSize + 80,
+      width: orbSize + 96,
+      height: orbSize + 96,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -1467,8 +1505,8 @@ class _OrbWithControls extends StatelessWidget {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
-                width: 44,
-                height: 44,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: bgColor,
@@ -1488,14 +1526,14 @@ class _OrbWithControls extends StatelessWidget {
                           ),
                         ],
                 ),
-                child: Icon(icon, size: 22, color: iconColor),
+                child: Icon(icon, size: 26, color: iconColor),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                   color: isActive
                       ? activeColor
                       : theme.colorScheme.onSurface.withValues(alpha: 0.5),

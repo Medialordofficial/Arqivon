@@ -893,8 +893,13 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
-                prefix_padding_ms=100,
-                silence_duration_ms=300,
+                # 300ms prefix captures word beginnings that would otherwise
+                # be clipped, fixing the "missing first words" issue.
+                prefix_padding_ms=300,
+                # 800ms silence before end-of-speech detection. 300ms was too
+                # aggressive — caused premature turn_complete on natural pauses,
+                # breaking mid-sentence replies.
+                silence_duration_ms=800,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),

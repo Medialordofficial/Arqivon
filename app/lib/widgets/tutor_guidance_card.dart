@@ -23,9 +23,9 @@ class TutorGuidanceCard extends StatelessWidget {
             ? const Color(0xFF6B9F5B) // warm sage
             : const Color(0xFFCC5544); // warm red
       case 'provide_hint':
-        return const Color(0xFFE8943A); // warm amber
+        return const Color(0xFF9389C4); // warm amber
       case 'analyze_homework':
-        return const Color(0xFFC98B4E); // gold
+        return const Color(0xFF7C74A8); // gold
       case 'solve_problem':
         return const Color(0xFFB07D3A); // bronze
       case 'explain_concept':
@@ -194,16 +194,16 @@ class TutorGuidanceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8943A).withValues(alpha: 0.1),
+                color: const Color(0xFF9389C4).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: const Color(0xFFE8943A).withValues(alpha: 0.3)),
+                    color: const Color(0xFF9389C4).withValues(alpha: 0.3)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.lightbulb_outline,
-                      size: 16, color: Color(0xFFE8943A)),
+                      size: 16, color: Color(0xFF9389C4)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -413,7 +413,7 @@ class TutorGuidanceCard extends StatelessWidget {
                   icon: const Icon(Icons.lightbulb_outline, size: 16),
                   label: const Text('Need a hint'),
                   style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFFE8943A),
+                    foregroundColor: const Color(0xFF9389C4),
                   ),
                 ),
               if (onDismiss != null) ...[

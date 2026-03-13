@@ -49,13 +49,13 @@ enum AgentMode {
   Color get color {
     switch (this) {
       case AgentMode.general:
-        return const Color(0xFFC98B4E);
+        return const Color(0xFF7C74A8);
       case AgentMode.translator:
-        return const Color(0xFFE8943A);
+        return const Color(0xFF9389C4);
       case AgentMode.tutor:
         return const Color(0xFF6B9F5B);
       case AgentMode.support:
-        return const Color(0xFFD4774A);
+        return const Color(0xFF8A7DB8);
     }
   }
 

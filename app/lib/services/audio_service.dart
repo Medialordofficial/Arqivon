@@ -241,15 +241,15 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 50), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First chunk → flush quickly for low latency.
-      // Loop already running → accumulate ~0.5s for fewer transitions.
-      // With a single player, setAudioSource takes ~30ms, so transitions
-      // are fast. We don't need huge 3s batches.
-      final ms = !_loopRunning ? 180 : 500;
+      // First chunk → buffer 400ms for a decent first WAV.
+      // Loop already running → accumulate ~1s for fewer transitions.
+      // Each setAudioSource transition can cause a ~30-50ms audible gap,
+      // so FEWER, LARGER WAV files produce smoother playback.
+      final ms = !_loopRunning ? 400 : 1000;
       _flushTimer = Timer(Duration(milliseconds: ms), _flush);
     }
-    // Hard cap: ~6s of audio at 24kHz 16-bit mono.
-    if (_pcmBuffer.length >= 288000) {
+    // Hard cap: ~8s of audio at 24kHz 16-bit mono.
+    if (_pcmBuffer.length >= 384000) {
       _flushTimer?.cancel();
       _flush();
     }
@@ -274,7 +274,17 @@ class AudioService {
   }
 
   Future<void> _doFlush() async {
+    // Require at least ~250ms of audio (12000 bytes at 24kHz 16-bit mono)
+    // before flushing, unless the turn is complete or buffer is large.
+    // Tiny WAV files cause audible clicks/gaps between transitions.
     if (_pcmBuffer.isEmpty) return;
+    if (!_turnComplete &&
+        _pcmBuffer.length < 12000 &&
+        _pcmBuffer.length < 288000) {
+      // Re-schedule flush after a short delay to accumulate more data.
+      _reflushNeeded = true;
+      return;
+    }
     final turnSnapshot = _turnId;
 
     final pcm = Uint8List.fromList(_pcmBuffer);
@@ -332,7 +342,7 @@ class AudioService {
               continue;
             }
             // Grace period for very late arrivals.
-            await Future.delayed(const Duration(milliseconds: 250));
+            await Future.delayed(const Duration(milliseconds: 400));
             // Final flush attempt.
             if (_pcmBuffer.isNotEmpty && !_flushing) {
               _flushTimer?.cancel();
@@ -345,8 +355,8 @@ class AudioService {
             continue;
           }
           if (_turnId != turnSnapshot) return;
-          // Demand flush: if enough PCM buffered (~0.5s), flush now.
-          if (_pcmBuffer.length >= 24000 && !_flushing) {
+          // Demand flush: if enough PCM buffered (~1s), flush now.
+          if (_pcmBuffer.length >= 48000 && !_flushing) {
             _flushTimer?.cancel();
             await _flush();
           }

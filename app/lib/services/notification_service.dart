@@ -81,7 +81,7 @@ class NotificationService {
       playSound: true,
       enableVibration: true,
       icon: '@drawable/ic_notif_reminder',
-      color: const Color(0xFFC98B4E),
+      color: const Color(0xFF7C74A8),
       category: AndroidNotificationCategory.reminder,
       styleInformation: BigTextStyleInformation(body),
     );
@@ -138,7 +138,7 @@ class NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       icon: '@drawable/ic_notif_note',
-      color: Color(0xFFC98B4E),
+      color: Color(0xFF7C74A8),
       category: AndroidNotificationCategory.status,
       autoCancel: true,
     );
@@ -170,7 +170,7 @@ class NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       icon: '@drawable/ic_notif_todo',
-      color: Color(0xFFC98B4E),
+      color: Color(0xFF7C74A8),
       category: AndroidNotificationCategory.status,
       autoCancel: true,
     );
@@ -202,7 +202,7 @@ class NotificationService {
       importance: Importance.low,
       priority: Priority.low,
       icon: '@drawable/ic_notif_session',
-      color: Color(0xFFC98B4E),
+      color: Color(0xFF7C74A8),
       category: AndroidNotificationCategory.service,
       autoCancel: true,
     );

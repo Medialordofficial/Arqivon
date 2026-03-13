@@ -11,8 +11,8 @@ void main() {
       expect(ArqivonTheme.primaryLight, isNotNull);
     });
 
-    test('primary is warm amber-gold', () {
-      expect(ArqivonTheme.primary, const Color(0xFFC98B4E));
+    test('primary is soft purple', () {
+      expect(ArqivonTheme.primary, const Color(0xFF7C74A8));
     });
 
     test('accent colors are defined', () {

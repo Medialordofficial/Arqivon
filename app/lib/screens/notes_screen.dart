@@ -72,7 +72,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen>
                   child: TabBar(
                     controller: _tabCtrl,
                     indicator: BoxDecoration(
-                      color: const Color(0xFFC98B4E),
+                      color: const Color(0xFF7C74A8),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     indicatorSize: TabBarIndicatorSize.tab,
@@ -305,7 +305,7 @@ class _SectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: const Color(0xFFC98B4E).withValues(alpha: 0.15),
+            color: const Color(0xFF7C74A8).withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
@@ -313,7 +313,7 @@ class _SectionHeader extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFFC98B4E),
+              color: Color(0xFF7C74A8),
             ),
           ),
         ),
@@ -373,7 +373,7 @@ class _TodoTile extends ConsumerWidget {
             value: note.isDone,
             onChanged: (val) =>
                 ref.read(toggleNoteDoneProvider)(note.id, val ?? false),
-            activeColor: const Color(0xFFC98B4E),
+            activeColor: const Color(0xFF7C74A8),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
           ),
@@ -481,7 +481,7 @@ class _NoteTile extends ConsumerWidget {
               children: [
                 Icon(Icons.note_rounded,
                     size: 18,
-                    color: const Color(0xFFC98B4E).withValues(alpha: 0.7)),
+                    color: const Color(0xFF7C74A8).withValues(alpha: 0.7)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -584,7 +584,7 @@ class _ReminderTile extends ConsumerWidget {
           border: Border.all(
             color: isPast
                 ? cs.onSurface.withValues(alpha: 0.05)
-                : const Color(0xFFC98B4E).withValues(alpha: 0.2),
+                : const Color(0xFF7C74A8).withValues(alpha: 0.2),
           ),
         ),
         child: Row(
@@ -595,14 +595,14 @@ class _ReminderTile extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: isPast
                     ? cs.onSurface.withValues(alpha: 0.06)
-                    : const Color(0xFFC98B4E).withValues(alpha: 0.12),
+                    : const Color(0xFF7C74A8).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 isPast ? Icons.alarm_off_rounded : Icons.alarm_rounded,
                 color: isPast
                     ? cs.onSurface.withValues(alpha: 0.3)
-                    : const Color(0xFFC98B4E),
+                    : const Color(0xFF7C74A8),
                 size: 22,
               ),
             ),
@@ -649,7 +649,7 @@ class _ReminderTile extends ConsumerWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFC98B4E).withValues(alpha: 0.12),
+                  color: const Color(0xFF7C74A8).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -657,7 +657,7 @@ class _ReminderTile extends ConsumerWidget {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFFC98B4E),
+                    color: Color(0xFF7C74A8),
                   ),
                 ),
               ),

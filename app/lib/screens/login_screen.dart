@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/logger.dart';
 import '../providers/auth_provider.dart';
 
-/// Sign-in / create-account screen — warm golden design.
+/// Sign-in / create-account screen — clean purple design.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -139,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor:
-          isDark ? const Color(0xFF1A130D) : const Color(0xFFFFF8F0),
+          isDark ? const Color(0xFF121218) : const Color(0xFFF8F7FC),
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
@@ -148,13 +148,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF1A130D),
-                    Color(0xFF251C14),
+                    Color(0xFF121218),
+                    Color(0xFF1C1C28),
                     Color(0xFF2A1F15)
                   ],
                 )
               : null,
-          color: isDark ? null : const Color(0xFFFFF8F0),
+          color: isDark ? null : const Color(0xFFF8F7FC),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
@@ -178,13 +178,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               gradient: const LinearGradient(
-                                colors: [Color(0xFFC98B4E), Color(0xFFE8943A)],
+                                colors: [Color(0xFF7C74A8), Color(0xFF9389C4)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFC98B4E)
+                                  color: const Color(0xFF7C74A8)
                                       .withValues(alpha: 0.4),
                                   blurRadius: 24,
                                   offset: const Offset(0, 8),
@@ -358,10 +358,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: FilledButton(
                         onPressed: _loading ? null : _submitEmail,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFC98B4E),
+                          backgroundColor: const Color(0xFF7C74A8),
                           disabledBackgroundColor: isDark
-                              ? const Color(0xFF3A2A1A)
-                              : const Color(0xFFE8D5C0),
+                              ? const Color(0xFF2E2E42)
+                              : const Color(0xFFD8D4E8),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
                           elevation: 0,
@@ -514,9 +514,9 @@ class _DarkField extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
     final fillColor =
-        isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
+        isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
     final borderColor =
-        isDark ? const Color(0xFF4A3A2A) : const Color(0xFFF0E0D0);
+        isDark ? const Color(0xFF3A3850) : const Color(0xFFE4E1EF);
     final hintColor = cs.onSurface.withValues(alpha: 0.5);
 
     return TextFormField(
@@ -590,9 +590,9 @@ class _SocialBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
-    final bgColor = isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
+    final bgColor = isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
     final borderColor =
-        isDark ? const Color(0xFF4A3A2A) : const Color(0xFFF0E0D0);
+        isDark ? const Color(0xFF3A3850) : const Color(0xFFE4E1EF);
 
     return GestureDetector(
       onTap: onTap,
@@ -631,7 +631,7 @@ class _GoogleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final centerColor =
-        isDark ? const Color(0xFF312518) : const Color(0xFFFFF5E6);
+        isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
     return SizedBox(
         width: 22,
         height: 22,

@@ -14,7 +14,7 @@ class ConnectionIndicator extends StatelessWidget {
         return const Color(0xFF6B9F5B); // warm sage
       case WsConnectionState.connecting:
       case WsConnectionState.reconnecting:
-        return const Color(0xFFE8943A); // warm amber
+        return const Color(0xFF9389C4); // warm amber
       case WsConnectionState.disconnected:
         return const Color(0xFFCC5544); // warm red
     }

@@ -55,17 +55,17 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFC98B4E).withValues(alpha: 0.2),
+                  color: const Color(0xFF7C74A8).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.picture_as_pdf_rounded,
-                    color: Color(0xFFC98B4E), size: 20),
+                    color: Color(0xFF7C74A8), size: 20),
               ),
               const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFC98B4E).withValues(alpha: 0.15),
+                  color: const Color(0xFF7C74A8).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
@@ -74,7 +74,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
-                    color: Color(0xFFC98B4E),
+                    color: Color(0xFF7C74A8),
                   ),
                 ),
               ),
@@ -129,7 +129,7 @@ class _ExportDocumentCardState extends State<ExportDocumentCard> {
                   : const Icon(Icons.download_rounded, size: 18),
               label: Text(_exporting ? 'Exporting…' : 'Export as PDF'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC98B4E),
+                backgroundColor: const Color(0xFF7C74A8),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),

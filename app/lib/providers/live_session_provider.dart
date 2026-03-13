@@ -783,9 +783,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void _scheduleTurnCompleteFinalize() {
     _turnCompleteTimer?.cancel();
-    // Give a tiny grace window for late audio chunks that can arrive right
+    // Give a grace window for late audio chunks that can arrive right
     // around turn_complete, especially after interruptions.
-    _turnCompleteTimer = Timer(const Duration(milliseconds: 200), () {
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 400), () {
       final current = state.valueOrNull ?? const LiveSessionState();
       _log.info('finalizing turn_complete (debounced)');
       _audio?.flushAndPlay();
@@ -830,7 +830,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           if (_interruptedAt != null) {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
-            if (msSinceInterrupt < 300) {
+            if (msSinceInterrupt < 500) {
               break; // silently drop trailing chunk
             }
             _interruptedAt = null; // grace window elapsed
@@ -844,7 +844,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             // Schedule another flushAndPlay so the audio service knows more
             // data arrived and shouldn't exit the loop prematurely.
             _turnCompleteTimer?.cancel();
-            _turnCompleteTimer = Timer(const Duration(milliseconds: 200), () {
+            _turnCompleteTimer = Timer(const Duration(milliseconds: 400), () {
               _log.info('late-chunk flush (post turn_complete)');
               _audio?.flushAndPlay();
             });

@@ -51,8 +51,8 @@ class HomeScreen extends ConsumerWidget {
                           ? NetworkImage(user.photoURL!)
                           : null,
                       backgroundColor: isDark
-                          ? const Color(0xFF312518)
-                          : const Color(0xFFFFF5E6),
+                          ? const Color(0xFF252535)
+                          : const Color(0xFFEEECF5),
                       child: user.photoURL == null
                           ? Text(
                               (user.displayName?.isNotEmpty == true)
@@ -72,8 +72,8 @@ class HomeScreen extends ConsumerWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF312518)
-                            : const Color(0xFFFFF5E6),
+                            ? const Color(0xFF252535)
+                            : const Color(0xFFEEECF5),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.person_rounded,
@@ -150,7 +150,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.auto_awesome_rounded,
                       label: AgentMode.general.label,
-                      accentColor: const Color(0xFFC98B4E),
+                      accentColor: const Color(0xFF7C74A8),
                       isDefault: defaultMode == AgentMode.general,
                       onTap: () {
                         ref
@@ -162,7 +162,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.translate_rounded,
                       label: AgentMode.translator.label,
-                      accentColor: const Color(0xFFC98B4E),
+                      accentColor: const Color(0xFF7C74A8),
                       isDefault: defaultMode == AgentMode.translator,
                       onTap: () {
                         ref
@@ -180,7 +180,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.school_rounded,
                       label: AgentMode.tutor.label,
-                      accentColor: const Color(0xFFC98B4E),
+                      accentColor: const Color(0xFF7C74A8),
                       isDefault: defaultMode == AgentMode.tutor,
                       onTap: () {
                         ref
@@ -192,7 +192,7 @@ class HomeScreen extends ConsumerWidget {
                     _CircularModeCard(
                       icon: Icons.headset_mic_rounded,
                       label: AgentMode.support.label,
-                      accentColor: const Color(0xFFC98B4E),
+                      accentColor: const Color(0xFF7C74A8),
                       isDefault: defaultMode == AgentMode.support,
                       onTap: () {
                         ref
@@ -239,9 +239,9 @@ class _GoLiveButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [
-                Color(0xFFC98B4E), // warm amber-gold
-                Color(0xFFE8943A), // bright orange-amber
-                Color(0xFFD4774A), // terracotta
+                Color(0xFF7C74A8),
+                Color(0xFF9389C4),
+                Color(0xFF8A7DB8),
               ],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
@@ -249,7 +249,7 @@ class _GoLiveButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFC98B4E).withValues(alpha: 0.50),
+                color: const Color(0xFF7C74A8).withValues(alpha: 0.50),
                 blurRadius: 28,
                 offset: const Offset(0, 8),
               ),
@@ -346,8 +346,8 @@ class _CircularModeCard extends StatelessWidget {
                     colors: [
                       accentColor.withValues(alpha: isDefault ? 0.18 : 0.08),
                       isDark
-                          ? const Color(0xFF312518)
-                          : const Color(0xFFFFF8F0),
+                          ? const Color(0xFF252535)
+                          : const Color(0xFFF8F7FC),
                     ],
                   ),
                   border: Border.all(
@@ -726,10 +726,10 @@ class _HowItWorksSectionState extends State<_HowItWorksSection> {
   ];
 
   static const _colors = [
-    Color(0xFFC98B4E),
-    Color(0xFFC98B4E),
-    Color(0xFFC98B4E),
-    Color(0xFFC98B4E),
+    Color(0xFF7C74A8),
+    Color(0xFF7C74A8),
+    Color(0xFF7C74A8),
+    Color(0xFF7C74A8),
   ];
 
   @override

@@ -134,7 +134,7 @@ class _SessionInsightsCardState extends State<SessionInsightsCard>
                       icon: Icons.note_add_rounded,
                       value: '${widget.insights.notesSaved}',
                       label: 'Saved',
-                      color: const Color(0xFFD4774A),
+                      color: const Color(0xFF8A7DB8),
                     ),
                     const SizedBox(width: 14),
                   ],
