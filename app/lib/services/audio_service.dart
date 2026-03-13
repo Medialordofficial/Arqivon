@@ -239,19 +239,16 @@ class AudioService {
     if (_turnComplete) {
       // Late chunk after turn_complete — flush urgently.
       _flushTimer?.cancel();
-      _flushTimer = Timer(const Duration(milliseconds: 20), _flush);
+      _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First chunk → buffer 500ms for a solid first WAV.
-      // Loop already running → accumulate ~1500ms for DRAMATICALLY fewer
-      // WAV transitions. Each setAudioSource() transition causes a 20-80ms
-      // gap of silence. With 400ms accumulation, a 10s response creates ~25
-      // transitions = ~1.25s of total dead air. With 1500ms accumulation,
-      // only ~7 transitions = ~0.35s total — a 3.5x improvement.
-      final ms = !_loopRunning ? 500 : 1500;
+      // First chunk → buffer 300ms for quick time-to-first-audio.
+      // Loop already running → accumulate 600ms — balances fewer WAV
+      // transitions (each causes a 20-50ms gap) against responsiveness.
+      final ms = !_loopRunning ? 300 : 600;
       _flushTimer = Timer(Duration(milliseconds: ms), _flush);
     }
-    // Hard cap: ~4s of audio at 24kHz 16-bit mono.
-    if (_pcmBuffer.length >= 192000) {
+    // Hard cap: ~2s of audio at 24kHz 16-bit mono.
+    if (_pcmBuffer.length >= 96000) {
       _flushTimer?.cancel();
       _flush();
     }
@@ -279,12 +276,11 @@ class AudioService {
 
   Future<void> _doFlush() async {
     // When turn is complete, flush ANY remaining PCM regardless of size.
-    // During streaming, require at least ~50ms of audio (2400 bytes at
-    // 24kHz 16-bit mono). The 1500ms accumulation timer ensures we
-    // normally flush much larger buffers — this threshold is just a
-    // safety check against creating click-artifact WAVs.
+    // During streaming, require at least ~20ms of audio (960 bytes at
+    // 24kHz 16-bit mono). Small threshold avoids creating tiny WAVs
+    // that are mostly click artifacts, while not blocking real audio.
     if (_pcmBuffer.isEmpty) return;
-    if (!_turnComplete && _pcmBuffer.length < 2400) {
+    if (!_turnComplete && _pcmBuffer.length < 960) {
       return;
     }
     final turnSnapshot = _turnId;
