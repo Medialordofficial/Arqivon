@@ -889,12 +889,14 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # MEDIUM start sensitivity = balanced detection.
+                # LOW start sensitivity = conservative detection.
                 # HIGH caused false barge-ins from ambient noise, prematurely
                 # interrupting the AI's response and dropping audio mid-word.
-                # MEDIUM still reliably detects intentional speech but ignores
+                # LOW reliably detects intentional speech but ignores
                 # background noise, breathing, and brief sounds.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_MEDIUM,
+                # NOTE: The SDK only supports HIGH, LOW, and UNSPECIFIED —
+                # there is no MEDIUM value.
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                 # 400ms prefix captures word beginnings that would otherwise
