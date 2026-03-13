@@ -65,7 +65,9 @@ class WebSocketService {
 
       final uri = Uri.parse(AppConstants.wsUrl(userId, token: authToken));
       _channel = WebSocketChannel.connect(uri);
-      await _channel!.ready;
+      // Timeout the handshake so we don't hang for 30-60s on a
+      // cold-starting backend or unreachable server.
+      await _channel!.ready.timeout(AppConstants.connectTimeout);
 
       _setState(WsConnectionState.connected);
       _reconnectAttempt = 0;
@@ -171,7 +173,10 @@ class WebSocketService {
   Duration _backoff(int attempt) {
     final ms = AppConstants.baseReconnectDelay.inMilliseconds *
         pow(2, attempt).toInt();
-    final capped = min(ms, 30000);
+    // Cap at 8s instead of 30s — faster recovery from backend cold starts
+    // and network blips.  With 50 max attempts the total across all retries
+    // is ~6-7 minutes, which is generous.
+    final capped = min(ms, 8000);
     final jitter = Random().nextInt((capped * 0.1).toInt() + 1);
     return Duration(milliseconds: capped + jitter);
   }

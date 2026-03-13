@@ -198,6 +198,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// messages to the backend when the user taps modes quickly.
   Timer? _modeSwitchDebounce;
 
+  /// Set true during intentional disconnect (stopSession) to prevent
+  /// auto-recovery from firing.
+  bool _intentionalDisconnect = false;
+
   // ── Watchdog timers ────────────────────────────────────────────────
   /// Detects when the Android recorder silently dies (no onDone, no data).
   Timer? _recorderWatchdog;
@@ -262,6 +266,48 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   // Track which mode was last sent to the backend so we avoid triggering an
   // unnecessary Gemini session restart on every mic tap.
   AgentMode? _lastSentMode;
+
+  /// Shared WS state listener used by both connectOnly() and startSession().
+  void _onWsStateChange(WsConnectionState s) {
+    final cur = state.valueOrNull ?? const LiveSessionState();
+    state = AsyncData(cur.copyWith(connectionState: s));
+    if (s == WsConnectionState.reconnecting) {
+      _wsWasReconnecting = true;
+    }
+    if (s == WsConnectionState.connected && _wsWasReconnecting) {
+      _wsWasReconnecting = false;
+      if (cur.isStreaming) {
+        _log.info('WS auto-reconnected — re-sending set_mode');
+        final selectedVoice = ref.read(settingsProvider).selectedVoice;
+        _ws?.send(WsInbound(
+          type: 'set_mode',
+          mode: cur.mode.wsValue,
+          voice: selectedVoice,
+        ));
+        _lastSentMode = cur.mode;
+      }
+    }
+    // Auto-recover: if the WS exhausted all retries and transitioned to
+    // disconnected while the user hasn't intentionally stopped, create
+    // a fresh WS and start a new reconnect cycle.  This prevents the UI
+    // from being permanently stuck after e.g. a backend cold start
+    // that outlasted the first batch of retries.
+    if (s == WsConnectionState.disconnected && !_intentionalDisconnect) {
+      _log.warning(
+        'WS went disconnected (streaming=${cur.isStreaming}) — '
+        'scheduling full reconnect in 2s',
+      );
+      Future.delayed(const Duration(seconds: 2), () {
+        final latest = state.valueOrNull;
+        if (latest != null &&
+            latest.connectionState == WsConnectionState.disconnected &&
+            !_intentionalDisconnect) {
+          _log.info('Auto-recovering WS connection');
+          connectOnly();
+        }
+      });
+    }
+  }
 
   @override
   Future<LiveSessionState> build() async {
@@ -350,6 +396,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         current.connectionState == WsConnectionState.connecting) {
       return;
     }
+    _intentionalDisconnect = false;
     try {
       final userId = ref.read(userIdProvider);
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
@@ -363,26 +410,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       );
       _stateSub?.cancel();
       _msgSub?.cancel();
-      _stateSub = _ws!.stateStream.listen((s) {
-        final cur = state.valueOrNull ?? const LiveSessionState();
-        state = AsyncData(cur.copyWith(connectionState: s));
-        if (s == WsConnectionState.reconnecting) {
-          _wsWasReconnecting = true;
-        }
-        if (s == WsConnectionState.connected && _wsWasReconnecting) {
-          _wsWasReconnecting = false;
-          if (cur.isStreaming) {
-            _log.info('WS auto-reconnected — re-sending set_mode');
-            final selectedVoice = ref.read(settingsProvider).selectedVoice;
-            _ws?.send(WsInbound(
-              type: 'set_mode',
-              mode: cur.mode.wsValue,
-              voice: selectedVoice,
-            ));
-            _lastSentMode = cur.mode;
-          }
-        }
-      });
+      _stateSub = _ws!.stateStream.listen(_onWsStateChange);
       _msgSub = _ws!.messageStream.listen(_handleServerMessage);
       await _ws!.connect();
       // Create player eagerly so AI audio plays even before mic is started.
@@ -417,26 +445,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       );
       _stateSub?.cancel();
       _msgSub?.cancel();
-      _stateSub = _ws!.stateStream.listen((s) {
-        final cur = state.valueOrNull ?? const LiveSessionState();
-        state = AsyncData(cur.copyWith(connectionState: s));
-        if (s == WsConnectionState.reconnecting) {
-          _wsWasReconnecting = true;
-        }
-        if (s == WsConnectionState.connected && _wsWasReconnecting) {
-          _wsWasReconnecting = false;
-          if (cur.isStreaming) {
-            _log.info('WS auto-reconnected — re-sending set_mode');
-            final selectedVoice = ref.read(settingsProvider).selectedVoice;
-            _ws?.send(WsInbound(
-              type: 'set_mode',
-              mode: cur.mode.wsValue,
-              voice: selectedVoice,
-            ));
-            _lastSentMode = cur.mode;
-          }
-        }
-      });
+      _stateSub = _ws!.stateStream.listen(_onWsStateChange);
       _msgSub = _ws!.messageStream.listen(_handleServerMessage);
       await _ws!.connect();
     }
@@ -682,6 +691,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   }
 
   Future<void> stopSession({bool saveToArchive = true}) async {
+    _intentionalDisconnect = true;
     _stopWatchdogs();
     _turnCompleteTimer?.cancel();
 

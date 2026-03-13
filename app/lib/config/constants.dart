@@ -30,6 +30,7 @@ class AppConstants {
   static const Duration heartbeatInterval = Duration(seconds: 12);
 
   // Reconnect
-  static const int maxReconnectAttempts = 5;
+  static const int maxReconnectAttempts = 50;
   static const Duration baseReconnectDelay = Duration(milliseconds: 500);
+  static const Duration connectTimeout = Duration(seconds: 10);
 }
