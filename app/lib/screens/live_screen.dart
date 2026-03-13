@@ -47,6 +47,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
   static final _log = AppLogger('LiveScreen');
 
   CameraController? _cameraController;
+  List<CameraDescription> _cameras = [];
+  bool _useFrontCamera = false;
   Timer? _frameTimer;
   bool _cameraReady = false;
   bool _isCapturingFrame = false;
@@ -105,10 +107,19 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
   Future<void> _initCamera() async {
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) return;
+      final target = _useFrontCamera
+          ? _cameras.firstWhere(
+              (c) => c.lensDirection == CameraLensDirection.front,
+              orElse: () => _cameras.first,
+            )
+          : _cameras.firstWhere(
+              (c) => c.lensDirection == CameraLensDirection.back,
+              orElse: () => _cameras.first,
+            );
       _cameraController = CameraController(
-        cameras.first,
+        target,
         ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
@@ -117,6 +128,22 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       if (mounted) setState(() => _cameraReady = true);
     } catch (e) {
       _log.severe('Camera init error', e);
+    }
+  }
+
+  Future<void> _flipCamera() async {
+    if (_cameras.length < 2) return;
+    _useFrontCamera = !_useFrontCamera;
+    setState(() => _cameraReady = false);
+    _stopFrameCapture();
+    await _cameraController?.dispose();
+    _cameraController = null;
+    await _initCamera();
+    // Resume frame capture if streaming in video mode.
+    final isStreaming =
+        ref.read(liveSessionProvider).valueOrNull?.isStreaming ?? false;
+    if (_inputMode == _LiveInputMode.audioVideo && isStreaming) {
+      _startFrameCapture();
     }
   }
 
@@ -646,6 +673,37 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                           if (_inputMode == _LiveInputMode.audioVideo &&
                               _cameraReady &&
                               _cameraController != null) ...[
+                            // ── Camera flip button ────────────────────────
+                            if (_cameras.length >= 2)
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    _flipCamera();
+                                  },
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.45),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.25),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.flip_camera_ios_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             Positioned.fill(
                               child: ClipRRect(
                                   child: CameraPreview(_cameraController!)),
