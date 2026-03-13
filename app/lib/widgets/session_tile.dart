@@ -84,13 +84,13 @@ class SessionTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         _chip(session.mode.icon, session.mode.label, context,
                             color: session.mode.color),
-                        const SizedBox(width: 8),
                         _chip(Icons.mic, '${session.turnCount} turns', context),
-                        const SizedBox(width: 8),
                         _chip(Icons.timer_outlined,
                             _formatDuration(session.duration), context),
                       ],

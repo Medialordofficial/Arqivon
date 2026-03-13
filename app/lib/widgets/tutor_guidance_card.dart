@@ -185,6 +185,7 @@ class TutorGuidanceCard extends StatelessWidget {
                 color: onSurface.withValues(alpha: 0.8),
                 height: 1.4,
               ),
+              maxLines: 12,
               overflow: TextOverflow.ellipsis,
             ),
           ],

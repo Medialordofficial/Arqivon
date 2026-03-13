@@ -112,6 +112,7 @@ class LiveSessionState {
     bool clearTutorStep = false,
     List<TutorStep>? tutorSteps,
     SupportTopic? currentSupportTopic,
+    bool clearSupportTopic = false,
     List<SupportTopic>? supportTopics,
     ExportDocument? pendingExport,
     bool clearExport = false,
@@ -141,7 +142,9 @@ class LiveSessionState {
       currentTutorStep:
           clearTutorStep ? null : (currentTutorStep ?? this.currentTutorStep),
       tutorSteps: tutorSteps ?? this.tutorSteps,
-      currentSupportTopic: currentSupportTopic ?? this.currentSupportTopic,
+      currentSupportTopic: clearSupportTopic
+          ? null
+          : (currentSupportTopic ?? this.currentSupportTopic),
       supportTopics: supportTopics ?? this.supportTopics,
       pendingExport: clearExport ? null : (pendingExport ?? this.pendingExport),
       chatMessages: chatMessages ?? this.chatMessages,
@@ -221,6 +224,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   final List<String> _turnUserTexts = [];
   final List<String> _turnAiTexts = [];
 
+  /// AI text deferred until playback finishes so it doesn't spoil the audio.
+  String _pendingAiText = '';
+
   /// Count of notes saved during the current session for insights.
   int _notesSavedThisSession = 0;
 
@@ -268,19 +274,33 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void setMode(AgentMode newMode) {
     final current = state.valueOrNull ?? const LiveSessionState();
+    // Cancel any pending turn_complete finalization from the old mode.
+    _turnCompleteTimer?.cancel();
     // Stop any in-flight playback from the old mode so stale audio doesn't
     // bleed across modes during the video demo.
     if (current.isResponding) {
       _audio?.stopPlayback();
+      // Set the interrupt guard so trailing audio chunks from the old
+      // mode that are still in the WebSocket pipeline get dropped.
+      _interruptedAt = DateTime.now();
     }
+    // Clear accumulated text from the old mode so it doesn't leak
+    // into a new turn in the new mode.
+    _turnUserTexts.clear();
+    _turnAiTexts.clear();
+    _pendingAiText = '';
     state = AsyncData(
       current.copyWith(
         mode: newMode,
         isResponding: false,
+        clearTranscript: true,
+        clearUserTranscript: true,
         clearTranslation: true,
         clearAction: true,
         clearTutorStep: true,
+        clearSupportTopic: true,
         clearExport: true,
+        clearPhotoCapture: true,
       ),
     );
     // Only tell the backend if the user is actively streaming; changing modes
@@ -333,6 +353,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     try {
       final userId = ref.read(userIdProvider);
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      // Dispose old WS to prevent zombie connections with running timers.
+      _ws?.dispose();
       _ws = WebSocketService(
         userId: userId,
         authToken: token,
@@ -423,14 +445,22 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audio ??= AudioService();
     // Clear interrupt guard so first audio chunk of new session isn't dropped.
     _interruptedAt = null;
-    // When AI finishes speaking (playback complete), clear responding flag
-    // and ensure the recorder is still alive for the next turn.
+    // When AI finishes speaking (playback complete), clear responding flag,
+    // commit deferred AI text to chat, and ensure recorder is alive.
     _audio!.onPlaybackDone = () {
       _log.info('onPlaybackDone fired');
       final cur = state.valueOrNull ?? const LiveSessionState();
-      if (cur.isResponding) {
-        state = AsyncData(cur.copyWith(isResponding: false));
+      final msgs = <ChatMessage>[...cur.chatMessages];
+      // Commit the AI transcript now that the user has heard it.
+      if (_pendingAiText.isNotEmpty) {
+        msgs.add(ChatMessage(text: _pendingAiText));
+        _pendingAiText = '';
       }
+      state = AsyncData(cur.copyWith(
+        isResponding: false,
+        chatMessages: msgs,
+        clearTranscript: true,
+      ));
       // Restart recorder ONLY when it is actually dead.
       // Forcing a restart on every turn can steal audio focus from the
       // next AI response and cause "text appears but voice is silent".
@@ -475,8 +505,20 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     await _audioSub?.cancel();
     _audioSub = null;
 
-    // Start audio capture and pipe to WebSocket
-    await _audio!.start();
+    // Start audio capture and pipe to WebSocket.
+    // If audio fails to start, tear down the Gemini session so the
+    // backend doesn't keep an orphaned connection.
+    try {
+      await _audio!.start();
+    } catch (e, st) {
+      _log.severe('audio start failed — tearing down session', e, st);
+      _ws?.send(const WsInbound(type: 'end_session'));
+      state = AsyncData(current.copyWith(
+        isStreaming: false,
+        connectionState: WsConnectionState.disconnected,
+      ));
+      return;
+    }
     _audioChunksSent = 0;
     _lastAudioChunkAt = null;
     _audioSub = _audio!.audioStream.listen(
@@ -598,12 +640,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _restartInFlight = true;
     _log.warning('Force-restarting session');
     _stopWatchdogs();
+    _turnCompleteTimer?.cancel();
     try {
-      // Send end_session so the backend CLOSES the Gemini session.
-      // This is critical: without it, the backend's set_mode handler
-      // sees session!=None and skips the reconnect, leaving the dead
-      // Gemini session in place.
-      _ws?.send(const WsInbound(type: 'end_session'));
+      // Send discard_session so the backend does NOT persist the broken
+      // session.  Previously this sent end_session which caused phantom
+      // sessions to appear in the user's Archive.
+      _ws?.send(const WsInbound(type: 'discard_session'));
       // Wait long enough for the backend to close the Gemini session.
       // The backend closes the Live API context synchronously on
       // end_session before sending session_saved.
@@ -619,6 +661,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       // session don't leak into the new one.
       _turnUserTexts.clear();
       _turnAiTexts.clear();
+      _pendingAiText = '';
       _interruptedAt = null;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
@@ -640,8 +683,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     state = AsyncData(current.copyWith(isMuted: newMuted));
   }
 
-  Future<void> stopSession() async {
+  Future<void> stopSession({bool saveToArchive = true}) async {
     _stopWatchdogs();
+    _turnCompleteTimer?.cancel();
 
     // ── 1. Update state FIRST so UI shows idle immediately ──────────
     //    This prevents the "stuck on Listening" bug when async cleanup
@@ -675,10 +719,19 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     }
 
     // Tell the backend to save the session NOW (before WS teardown).
-    try {
-      _ws?.send(const WsInbound(type: 'end_session'));
-    } catch (e) {
-      _log.warning('stopSession end_session send error: $e');
+    if (saveToArchive) {
+      try {
+        _ws?.send(const WsInbound(type: 'end_session'));
+      } catch (e) {
+        _log.warning('stopSession end_session send error: $e');
+      }
+    } else {
+      // Discard — send discard_session so backend doesn't save.
+      try {
+        _ws?.send(const WsInbound(type: 'discard_session'));
+      } catch (e) {
+        _log.warning('stopSession discard_session send error: $e');
+      }
     }
 
     // Force _lastSentMode to null so the next startSession() always
@@ -732,25 +785,26 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _turnCompleteTimer?.cancel();
     // Give a tiny grace window for late audio chunks that can arrive right
     // around turn_complete, especially after interruptions.
-    _turnCompleteTimer = Timer(const Duration(milliseconds: 180), () {
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 200), () {
       final current = state.valueOrNull ?? const LiveSessionState();
       _log.info('finalizing turn_complete (debounced)');
       _audio?.flushAndPlay();
 
       final newMessages = <ChatMessage>[...current.chatMessages];
+      // Commit user text immediately — the user already said it.
       final userText = _turnUserTexts.join(' ').trim();
-      final aiText = _turnAiTexts.join(' ').trim();
       if (userText.isNotEmpty) {
         newMessages.add(ChatMessage(text: userText, isUser: true));
       }
-      if (aiText.isNotEmpty) {
-        newMessages.add(ChatMessage(text: aiText));
-      }
       _turnUserTexts.clear();
+
+      // Defer AI text until playback finishes so the text doesn't
+      // spoil the audio. Store it for onPlaybackDone to commit.
+      _pendingAiText = _turnAiTexts.join(' ').trim();
       _turnAiTexts.clear();
+
       state = AsyncData(
         current.copyWith(
-          clearTranscript: true,
           clearUserTranscript: true,
           chatMessages: newMessages,
         ),
@@ -785,6 +839,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // included before finalizing playback.
           if (_turnCompleteTimer != null && _turnCompleteTimer!.isActive) {
             _scheduleTurnCompleteFinalize();
+          } else if (current.isResponding) {
+            // Timer already fired but playback still in progress — late chunk.
+            // Schedule another flushAndPlay so the audio service knows more
+            // data arrived and shouldn't exit the loop prematurely.
+            _turnCompleteTimer?.cancel();
+            _turnCompleteTimer = Timer(const Duration(milliseconds: 200), () {
+              _log.info('late-chunk flush (post turn_complete)');
+              _audio?.flushAndPlay();
+            });
           }
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI (but mic stays active for barge-in).
@@ -801,12 +864,16 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'transcript':
         if (msg.text != null && msg.text!.isNotEmpty) {
           _turnAiTexts.add(msg.text!);
+          // Show live transcript so the user can follow along while
+          // the AI speaks.  The text may run a bit ahead of audio —
+          // this is normal (like subtitles).  The full text is
+          // committed to chat history in onPlaybackDone.
+          state = AsyncData(
+            current.copyWith(
+              transcript: _turnAiTexts.join(' '),
+            ),
+          );
         }
-        // Show accumulated AI text so the bubble displays full sentences,
-        // not just the latest fragment.
-        state = AsyncData(
-          current.copyWith(transcript: _turnAiTexts.join(' ')),
-        );
         break;
 
       case 'user_transcript':
@@ -933,7 +1000,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           (m) => m.name == newModeStr,
           orElse: () => AgentMode.general,
         );
-        state = AsyncData(current.copyWith(mode: newMode));
+        // Clear stale mode-specific UI overlays when switching modes
+        // to avoid showing e.g. a translation card in tutor mode.
+        state = AsyncData(current.copyWith(
+          mode: newMode,
+          clearTranslation: true,
+          clearTutorStep: true,
+          clearSupportTopic: true,
+          clearAction: true,
+        ));
         break;
 
       case 'turn_complete':
@@ -965,17 +1040,18 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         }
         _turnUserTexts.clear();
         _turnAiTexts.clear();
+        _pendingAiText = '';
 
         // Fire-and-forget playback stop — don’t block on it.
         unawaited(_audio?.stopPlayback() ?? Future.value());
 
         // IMMEDIATELY restart recorder so Gemini keeps receiving audio.
-        // A short delay lets the player release audio focus first.
+        // With single-player architecture, audio focus stays stable —
+        // no delay needed. The recorder should still be alive since we
+        // never dispose it, but verify just in case.
         if (current.isStreaming) {
-          Future.delayed(const Duration(milliseconds: 80), () {
-            _log.info('force-restarting recorder after barge-in');
-            _audio?.ensureRecording();
-          });
+          _log.info('ensuring recorder alive after barge-in');
+          _audio?.ensureRecording();
         }
 
         state = AsyncData(
@@ -987,6 +1063,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             clearAction: true,
             clearTutorStep: true,
             clearExport: true,
+            clearPhotoCapture: true,
             chatMessages: partialMsgs,
           ),
         );

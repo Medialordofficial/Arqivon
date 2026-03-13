@@ -1,16 +1,31 @@
-# arqivo
+# Arqivon — Flutter Client
 
-A new Flutter project.
+The Flutter mobile client for **Arqivon — The Living Lens**.
 
-## Getting Started
+See the [root README](../README.md) for full project documentation, architecture, and setup instructions.
 
-This project is a starting point for a Flutter application.
+## Quick Start
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+cd app
+flutter pub get
+flutter run
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Structure
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| Directory | Purpose |
+|-----------|---------|
+| `lib/screens/` | 9 app screens (Home, Live, Archive, Notes, Memories, Settings, Login, Onboarding, Session Detail) |
+| `lib/providers/` | Riverpod state management (live session, auth, settings) |
+| `lib/services/` | Audio, notifications, PDF export, FCM, action handlers |
+| `lib/models/` | Data models (sessions, messages, notes, reminders) |
+| `lib/widgets/` | Reusable UI components (glassmorphic cards, smart action cards, live wave, offline banner) |
+| `lib/config/` | Theme, routes, logging configuration |
+| `test/` | 7 test files (99 unit tests) |
+
+## Requirements
+
+- Flutter SDK ≥ 3.2.0
+- Android 6.0+ (API 23+) or iOS 14+
+- Camera and microphone permissions

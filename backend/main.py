@@ -742,16 +742,8 @@ async def _send_session_notification(user_id: str, record: SessionRecord) -> Non
         body_parts = []
         if record.summary:
             body_parts.append(record.summary[:120])
-        turn_count = len(record.turns) if record.turns else 0
-        note_count = sum(
-            1 for t in (record.turns or [])
-            for tc in (t.get("tool_calls") or [])
-            if tc.get("name") == "save_note"
-        )
-        if turn_count:
-            metrics = f"\U0001f4ac {turn_count} turns"
-            if note_count:
-                metrics += f" · \U0001f4dd {note_count} notes saved"
+        if record.turn_count:
+            metrics = f"\U0001f4ac {record.turn_count} turns"
             body_parts.append(metrics)
         body = " — ".join(body_parts) if body_parts else f"Your {record.mode} session has been archived."
         message = fb_messaging.Message(
@@ -762,8 +754,7 @@ async def _send_session_notification(user_id: str, record: SessionRecord) -> Non
             data={
                 "session_id": record.session_id,
                 "mode": record.mode,
-                "turn_count": str(turn_count),
-                "note_count": str(note_count),
+                "turn_count": str(record.turn_count),
             },
             token=fcm_token,
         )
@@ -913,7 +904,15 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         model=settings.gemini_model,
         config=config,
     )
-    session = await live_ctx.__aenter__()
+    try:
+        session = await live_ctx.__aenter__()
+    except Exception:
+        # Prevent resource leak if __aenter__ fails.
+        try:
+            await live_ctx.__aexit__(None, None, None)
+        except Exception:
+            pass
+        raise
     return live_ctx, session
 
 
@@ -962,6 +961,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # Guard: set while a mode/language switch is in progress so audio/video
     # forwarders pause instead of sending to a closed session.
     _switching = asyncio.Event()
+    # Lock to prevent concurrent _reconnect_session calls from
+    # _audio_forwarder, _session_health_check, and receive_from_client.
+    _reconnect_lock = asyncio.Lock()
     tracer = LatencyTracer(session_id)
     input_q = InputQueue()
     frame_throttle = FrameThrottle(min_interval=0.30)
@@ -972,6 +974,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     _server_audio_chunk_count: int = 0
     # Flag: set by end_session so the next set_mode always reconnects.
     _force_next_reconnect: bool = False
+    # Guard against duplicate saves on WS teardown after explicit save/discard.
+    _session_already_saved: bool = False
 
     # ── Gemini session is lazy ─────────────────────────────────────────────
     # Defer Gemini connection until the client sends the first set_mode
@@ -984,36 +988,42 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # ── Reconnect helper (for mode switches) ──────────────────────────────
     async def _reconnect_session(new_mode: str, sl: str, tl: str, voice: str = "Aoede", prior_context: str | None = None):
-        nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice, _last_gemini_response_time
-        # Signal receiver BEFORE closing so it recognises this is a mode
-        # switch rather than an unexpected error.
-        _mode_switch_event.set()
-        # Signal forwarders to pause so they don't send to the dead session.
-        _switching.set()
-        try:
-            current_mode = new_mode
-            source_lang = sl
-            target_lang = tl
-            current_voice = voice
-            session_record.mode = new_mode
-            session_record.source_lang = sl
-            session_record.target_lang = tl
-            # Close old (if exists — None on first call)
-            if live_ctx:
-                try:
-                    await live_ctx.__aexit__(None, None, None)
-                except Exception as exc:
-                    logger.debug("Error closing old Gemini context: %s", exc)
-            # Open new
-            live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context)
-            # Reset the response timer so the health check doesn't
-            # immediately fire after a fresh reconnect.
-            _last_gemini_response_time = time.monotonic()
-            logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
-        finally:
-            # Always release forwarders, even on failure, to prevent
-            # permanently blocking the audio/video pipeline.
-            _switching.clear()
+        nonlocal live_ctx, session, current_mode, source_lang, target_lang, current_voice, _last_gemini_response_time, _session_already_saved
+        async with _reconnect_lock:
+            # Signal receiver BEFORE closing so it recognises this is a mode
+            # switch rather than an unexpected error.
+            _mode_switch_event.set()
+            # Signal forwarders to pause so they don't send to the dead session.
+            _switching.set()
+            try:
+                current_mode = new_mode
+                source_lang = sl
+                target_lang = tl
+                current_voice = voice
+                session_record.mode = new_mode
+                session_record.source_lang = sl
+                session_record.target_lang = tl
+                # Reset the saved flag so a new session can be saved.
+                _session_already_saved = False
+                # Clear partial transcript fragments from the old mode.
+                _turn_user_parts.clear()
+                _turn_ai_parts.clear()
+                # Close old (if exists — None on first call)
+                if live_ctx:
+                    try:
+                        await live_ctx.__aexit__(None, None, None)
+                    except Exception as exc:
+                        logger.debug("Error closing old Gemini context: %s", exc)
+                # Open new
+                live_ctx, session = await _connect_gemini(new_mode, sl, tl, voice, user_id=user_id, prior_context=prior_context)
+                # Reset the response timer so the health check doesn't
+                # immediately fire after a fresh reconnect.
+                _last_gemini_response_time = time.monotonic()
+                logger.info("Reconnected Gemini in mode=%s voice=%s", new_mode, voice)
+            finally:
+                # Always release forwarders, even on failure, to prevent
+                # permanently blocking the audio/video pipeline.
+                _switching.clear()
 
     # ── Client → Gemini ───────────────────────────────────────────────────
 
@@ -1127,7 +1137,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Client → queue router ──────────────────────────────────────────
 
     async def receive_from_client() -> None:
-        nonlocal current_mode, source_lang, target_lang, session_record
+        nonlocal current_mode, source_lang, target_lang, session_record, _session_already_saved, _force_next_reconnect
         msg_count = 0
         RATE_LIMIT = 60
         RATE_WINDOW = 10.0
@@ -1276,6 +1286,23 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     if session is not None:
                         await session.send_client_content(turns=None, turn_complete=True)
 
+                # ── Explicit discard (client tapped Discard) ──────────
+                elif msg.type == InboundType.DISCARD_SESSION:
+                    _force_next_reconnect = True
+                    _session_already_saved = True  # prevent teardown save
+                    logger.info("Session discarded by user — NOT saving")
+                    # Reset record so teardown save is skipped.
+                    session_record = SessionRecord(
+                        session_id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        title="Live Session",
+                        mode=current_mode,
+                    )
+                    conversation_transcript.clear()
+                    _turn_user_parts.clear()
+                    _turn_ai_parts.clear()
+                    continue
+
                 # ── Explicit session save (client tapped Stop) ─────────
                 elif msg.type == InboundType.END_SESSION:
                     # Set flag so the next set_mode ALWAYS creates a fresh
@@ -1334,6 +1361,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     logger.info("Session explicitly saved: %s (turns=%d)",
                                 session_record.session_id, session_record.turn_count)
 
+                    _session_already_saved = True  # prevent duplicate save on teardown
                     # Reset for next session on the same WS connection
                     session_record = SessionRecord(
                         session_id=str(uuid.uuid4()),
@@ -1342,6 +1370,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         mode=current_mode,
                     )
                     conversation_transcript.clear()
+                    _turn_user_parts.clear()
+                    _turn_ai_parts.clear()
                     continue
 
         except WebSocketDisconnect:
@@ -1642,6 +1672,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     if new_voice in valid and new_voice != current_voice:
                                         logger.info("Voice switch requested: %s → %s",
                                                      current_voice, new_voice)
+                                        # Give Gemini ~3s to speak its acknowledgment
+                                        # ("Sure, switching to Puck!") before tearing
+                                        # down the old session.
+                                        await asyncio.sleep(3.0)
                                         try:
                                             await _reconnect_session(
                                                 current_mode, source_lang, target_lang, new_voice,
@@ -1809,28 +1843,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         if session_record.title == "Live Session":
             session_record.title = mode_titles.get(current_mode, "Live Session")
 
-        # ── Generate AI summary from conversation transcript ──────────
-        if conversation_transcript and len(conversation_transcript) >= 2:
-            try:
-                transcript_text = "\n".join(conversation_transcript[-50:])  # last 50 utterances
-                summary_prompt = (
-                    "Summarize this voice conversation in 1-2 concise sentences. "
-                    "Focus on key topics discussed and any decisions or outcomes. "
-                    "Do NOT use quotes or say 'the user said'. Just state what was "
-                    "discussed.\n\n"
-                    f"Mode: {current_mode}\n"
-                    f"Conversation transcript:\n{transcript_text}"
-                )
-                summary_response = await genai_client.aio.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=summary_prompt,
-                )
-                if summary_response.text:
-                    session_record.summary = summary_response.text.strip()
-                    logger.info("AI summary generated: %s", session_record.summary[:100])
-            except Exception as summary_err:
-                logger.warning("Failed to generate session summary: %s", summary_err)
-
         # Log final latency summary
         latency_summary = tracer.summary()
         if latency_summary:
@@ -1838,13 +1850,32 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         if frame_throttle.dropped > 0:
             logger.info("Dropped %d redundant video frames", frame_throttle.dropped)
 
-        # Only save on WS teardown if the user actually interacted.
-        # Previously this checked turn_count > 0, which skipped saving
-        # sessions where every turn was interrupted (turn_count stays 0
-        # because only turn_complete increments it).
-        if session_record.turn_count > 0 or client_audio_count > 10:
+        # Only save on WS teardown if the user actually interacted
+        # AND no explicit save/discard already happened this session.
+        if not _session_already_saved and (session_record.turn_count > 0 or client_audio_count > 10):
+            # ── Generate AI summary from conversation transcript ──────
+            if conversation_transcript and len(conversation_transcript) >= 2:
+                try:
+                    transcript_text = "\n".join(conversation_transcript[-50:])
+                    summary_prompt = (
+                        "Summarize this voice conversation in 1-2 concise sentences. "
+                        "Focus on key topics discussed and any decisions or outcomes. "
+                        "Do NOT use quotes or say 'the user said'. Just state what was "
+                        "discussed.\n\n"
+                        f"Mode: {current_mode}\n"
+                        f"Conversation transcript:\n{transcript_text}"
+                    )
+                    summary_response = await genai_client.aio.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=summary_prompt,
+                    )
+                    if summary_response.text:
+                        session_record.summary = summary_response.text.strip()
+                        logger.info("AI summary generated: %s", session_record.summary[:100])
+                except Exception as summary_err:
+                    logger.warning("Failed to generate session summary: %s", summary_err)
             # Store the conversation transcript with the session for
-            # text-based “playback” in the archive.
+            # text-based "playback" in the archive.
             session_record.transcript = list(conversation_transcript)
             await _save_session(user_id, session_record)
         if live_ctx is not None:

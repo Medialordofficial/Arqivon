@@ -47,10 +47,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             _emailController.text.trim(), _passwordController.text);
       }
     } on FirebaseAuthException catch (e) {
-      setState(() => _errorMessage = _friendlyError(e.code));
+      if (mounted) setState(() => _errorMessage = _friendlyError(e.code));
     } catch (e) {
       _log.warning('Email auth failed', e);
-      setState(() => _errorMessage = 'Something went wrong. Please try again.');
+      if (mounted) {
+        setState(
+            () => _errorMessage = 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,8 +68,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authServiceProvider).signInWithGoogle();
     } catch (e) {
       _log.warning('Google sign-in failed', e);
-      setState(
-          () => _errorMessage = 'Google sign-in failed. Please try again.');
+      if (mounted) {
+        setState(
+            () => _errorMessage = 'Google sign-in failed. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -81,7 +86,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authServiceProvider).signInWithApple();
     } catch (e) {
       _log.warning('Apple sign-in failed', e);
-      setState(() => _errorMessage = 'Apple sign-in failed. Please try again.');
+      if (mounted) {
+        setState(
+            () => _errorMessage = 'Apple sign-in failed. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -106,7 +114,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } catch (e) {
       _log.warning('Password reset failed', e);
-      setState(() => _errorMessage = 'Could not send reset email.');
+      if (mounted) {
+        setState(() => _errorMessage = 'Could not send reset email.');
+      }
     }
   }
 

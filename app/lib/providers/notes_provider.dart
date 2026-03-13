@@ -22,17 +22,63 @@ final notesStreamProvider = StreamProvider<List<NoteModel>>((ref) {
 /// Toggle a to-do note's done state.
 final toggleNoteDoneProvider =
     Provider<Future<void> Function(String noteId, bool isDone)>((ref) {
-  final userId = ref.read(userIdProvider);
   final fs = ref.read(_firestoreProvider);
-  return (noteId, isDone) => fs.toggleNoteDone(userId, noteId, isDone);
+  return (noteId, isDone) {
+    final userId = ref.read(userIdProvider);
+    return fs.toggleNoteDone(userId, noteId, isDone);
+  };
 });
 
 /// Delete a note.
 final deleteNoteProvider =
     Provider<Future<void> Function(String noteId)>((ref) {
-  final userId = ref.read(userIdProvider);
   final fs = ref.read(_firestoreProvider);
-  return (noteId) => fs.deleteNote(userId, noteId);
+  return (noteId) {
+    final userId = ref.read(userIdProvider);
+    return fs.deleteNote(userId, noteId);
+  };
+});
+
+/// Update a note's fields (title, content, etc.).
+final updateNoteProvider = Provider<
+    Future<void> Function(
+      String noteId, {
+      String? title,
+      String? content,
+      bool? isTodo,
+      bool? isDone,
+      String? priority,
+    })>((ref) {
+  final fs = ref.read(_firestoreProvider);
+  return (
+    noteId, {
+    String? title,
+    String? content,
+    bool? isTodo,
+    bool? isDone,
+    String? priority,
+  }) {
+    final userId = ref.read(userIdProvider);
+    return fs.updateNote(
+      userId,
+      noteId,
+      title: title,
+      content: content,
+      isTodo: isTodo,
+      isDone: isDone,
+      priority: priority,
+    );
+  };
+});
+
+/// Add a new note manually.
+final addNoteProvider =
+    Provider<Future<String> Function(Map<String, dynamic> data)>((ref) {
+  final fs = ref.read(_firestoreProvider);
+  return (data) {
+    final userId = ref.read(userIdProvider);
+    return fs.addNote(userId, data);
+  };
 });
 
 // ── Reminders ────────────────────────────────────────────────────────────────
@@ -47,9 +93,9 @@ final remindersStreamProvider = StreamProvider<List<ReminderModel>>((ref) {
 /// Delete a reminder and cancel its notification.
 final deleteReminderProvider =
     Provider<Future<void> Function(String reminderId)>((ref) {
-  final userId = ref.read(userIdProvider);
   final fs = ref.read(_firestoreProvider);
   return (reminderId) async {
+    final userId = ref.read(userIdProvider);
     await NotificationService.instance.cancelReminder(reminderId.hashCode);
     await fs.deleteReminder(userId, reminderId);
   };

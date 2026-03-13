@@ -54,13 +54,20 @@ class NoteModel {
         'createdAt': createdAt.toUtc().toIso8601String(),
       };
 
-  NoteModel copyWith({bool? isDone}) => NoteModel(
+  NoteModel copyWith({
+    String? title,
+    String? content,
+    bool? isTodo,
+    bool? isDone,
+    String? priority,
+  }) =>
+      NoteModel(
         id: id,
-        title: title,
-        content: content,
-        isTodo: isTodo,
+        title: title ?? this.title,
+        content: content ?? this.content,
+        isTodo: isTodo ?? this.isTodo,
         isDone: isDone ?? this.isDone,
-        priority: priority,
+        priority: priority ?? this.priority,
         createdAt: createdAt,
       );
 

@@ -48,6 +48,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     backgroundImage: user?.photoURL != null
                         ? NetworkImage(user!.photoURL!)
                         : null,
+                    onBackgroundImageError: user?.photoURL != null
+                        ? (_, __) {} // gracefully ignore broken avatar URLs
+                        : null,
                     child: user?.photoURL == null
                         ? Icon(
                             Icons.person_rounded,
@@ -353,6 +356,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               await ref
                                   .read(authServiceProvider)
                                   .signInWithGoogle();
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Sign-in failed: ${e is FirebaseAuthException ? e.message : e}',
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
                             } finally {
                               if (mounted) setState(() => _authLoading = false);
                             }

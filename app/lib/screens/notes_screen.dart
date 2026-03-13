@@ -344,6 +344,18 @@ class _TodoTile extends ConsumerWidget {
         ),
         child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
+      confirmDismiss: (_) async {
+        final ctrl = ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Todo deleted'),
+            action: SnackBarAction(label: 'UNDO', onPressed: () {}),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        final reason = await ctrl.closed;
+        return reason != SnackBarClosedReason.action;
+      },
       onDismissed: (_) => ref.read(deleteNoteProvider)(note.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -439,6 +451,18 @@ class _NoteTile extends ConsumerWidget {
         ),
         child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
+      confirmDismiss: (_) async {
+        final ctrl = ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Note deleted'),
+            action: SnackBarAction(label: 'UNDO', onPressed: () {}),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        final reason = await ctrl.closed;
+        return reason != SnackBarClosedReason.action;
+      },
       onDismissed: (_) => ref.read(deleteNoteProvider)(note.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -538,6 +562,18 @@ class _ReminderTile extends ConsumerWidget {
         ),
         child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
+      confirmDismiss: (_) async {
+        final ctrl = ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Reminder deleted'),
+            action: SnackBarAction(label: 'UNDO', onPressed: () {}),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        final reason = await ctrl.closed;
+        return reason != SnackBarClosedReason.action;
+      },
       onDismissed: (_) => ref.read(deleteReminderProvider)(reminder.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),

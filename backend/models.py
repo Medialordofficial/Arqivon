@@ -28,6 +28,7 @@ class InboundType(str, Enum):
     PING = "ping"
     END_TURN = "end_turn"
     END_SESSION = "end_session"     # explicitly save & end the current session
+    DISCARD_SESSION = "discard_session"  # discard without saving
     SET_MODE = "set_mode"           # client selects agent mode
     SET_LANGUAGE = "set_language"   # for translator mode
 

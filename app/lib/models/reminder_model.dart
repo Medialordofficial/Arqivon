@@ -41,7 +41,7 @@ class ReminderModel {
             (remindAtEpoch * 1000).toInt(),
             isUtc: true,
           )
-        : DateTime.now().add(Duration(minutes: remindInMin));
+        : DateTime.now().toUtc().add(Duration(minutes: remindInMin));
 
     return ReminderModel(
       id: payload['reminderId'] as String? ?? '',

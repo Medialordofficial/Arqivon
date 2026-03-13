@@ -127,6 +127,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   /// Ensure splash stays visible long enough to show slogan animation.
   bool _splashMinTimeElapsed = false;
+  bool _fcmRegistered = false;
 
   @override
   void initState() {
@@ -181,9 +182,16 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           data: (user) {
             // Keep splash until minimum time has elapsed.
             if (!_splashMinTimeElapsed) return const _SplashScreen();
-            if (user == null) return const LoginScreen();
-            // Save/refresh FCM token whenever user signs in.
-            unawaited(FcmService.onUserSignIn());
+            if (user == null) {
+              _fcmRegistered = false; // reset when signed out
+              return const LoginScreen();
+            }
+            // Save/refresh FCM token once per user session (guard
+            // prevents re-firing on every widget rebuild).
+            if (!_fcmRegistered) {
+              _fcmRegistered = true;
+              unawaited(FcmService.onUserSignIn());
+            }
             return const MainNavigator();
           },
         );

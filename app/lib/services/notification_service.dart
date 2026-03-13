@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -24,7 +25,7 @@ class NotificationService {
     tz.initializeTimeZones();
 
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@drawable/ic_notif_reminder');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -71,7 +72,7 @@ class NotificationService {
       return;
     }
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'arqivon_reminders',
       'Reminders',
       channelDescription: 'Reminders set via Arqivon AI',
@@ -79,7 +80,10 @@ class NotificationService {
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/ic_notif_reminder',
+      color: const Color(0xFFC98B4E),
+      category: AndroidNotificationCategory.reminder,
+      styleInformation: BigTextStyleInformation(body),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -88,7 +92,7 @@ class NotificationService {
       presentSound: true,
     );
 
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
@@ -117,6 +121,101 @@ class NotificationService {
   /// Cancel all scheduled reminders.
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
+  }
+
+  /// Show an immediate notification for a note being saved.
+  Future<void> showNoteNotification({
+    required int id,
+    required String title,
+    String body = '',
+  }) async {
+    if (!_initialized) await init();
+
+    const androidDetails = AndroidNotificationDetails(
+      'arqivon_notes',
+      'Notes',
+      channelDescription: 'Notes saved by Arqivon AI',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@drawable/ic_notif_note',
+      color: Color(0xFFC98B4E),
+      category: AndroidNotificationCategory.status,
+      autoCancel: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+      ),
+    );
+
+    await _plugin.show(id, title, body, details);
+    _log.info('Showed note notification #$id "$title"');
+  }
+
+  /// Show an immediate notification for a todo status change.
+  Future<void> showTodoNotification({
+    required int id,
+    required String title,
+    String body = '',
+  }) async {
+    if (!_initialized) await init();
+
+    const androidDetails = AndroidNotificationDetails(
+      'arqivon_todos',
+      'Todos',
+      channelDescription: 'Todo updates from Arqivon AI',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@drawable/ic_notif_todo',
+      color: Color(0xFFC98B4E),
+      category: AndroidNotificationCategory.status,
+      autoCancel: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+      ),
+    );
+
+    await _plugin.show(id, title, body, details);
+    _log.info('Showed todo notification #$id "$title"');
+  }
+
+  /// Show a session-related notification.
+  Future<void> showSessionNotification({
+    required int id,
+    required String title,
+    String body = '',
+  }) async {
+    if (!_initialized) await init();
+
+    const androidDetails = AndroidNotificationDetails(
+      'arqivon_sessions',
+      'Sessions',
+      channelDescription: 'Session updates from Arqivon',
+      importance: Importance.low,
+      priority: Priority.low,
+      icon: '@drawable/ic_notif_session',
+      color: Color(0xFFC98B4E),
+      category: AndroidNotificationCategory.service,
+      autoCancel: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+      ),
+    );
+
+    await _plugin.show(id, title, body, details);
+    _log.info('Showed session notification #$id "$title"');
   }
 
   void _onNotificationTap(NotificationResponse response) {

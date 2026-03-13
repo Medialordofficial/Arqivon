@@ -135,6 +135,38 @@ class FirestoreService {
         .delete();
   }
 
+  /// Update a note's fields (title, content, etc.).
+  Future<void> updateNote(
+    String userId,
+    String noteId, {
+    String? title,
+    String? content,
+    bool? isTodo,
+    bool? isDone,
+    String? priority,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (title != null) updates['title'] = title;
+    if (content != null) updates['content'] = content;
+    if (isTodo != null) updates['isTodo'] = isTodo;
+    if (isDone != null) updates['isDone'] = isDone;
+    if (priority != null) updates['priority'] = priority;
+    if (updates.isEmpty) return;
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notes')
+        .doc(noteId)
+        .update(updates);
+  }
+
+  /// Add a new note manually.
+  Future<String> addNote(String userId, Map<String, dynamic> data) async {
+    final ref =
+        await _db.collection('users').doc(userId).collection('notes').add(data);
+    return ref.id;
+  }
+
   // ── Reminders ──────────────────────────────────────────────────────
 
   /// Fetch all reminders for a user, soonest first.

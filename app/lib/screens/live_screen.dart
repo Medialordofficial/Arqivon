@@ -198,14 +198,135 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     }
   }
 
+  Future<void> _stopSessionWithDialog() async {
+    final notifier = ref.read(liveSessionProvider.notifier);
+    if (!mounted) return;
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+        return Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Icon(
+                  Icons.stop_circle_rounded,
+                  size: 48,
+                  color: Colors.red.shade400,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'End Session',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Would you like to save this session\nto your archive?',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('Discard'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red.shade400,
+                            side: BorderSide(color: Colors.red.shade300),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          icon: const Icon(Icons.archive_rounded),
+                          label: const Text('Save'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: theme.colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: Text(
+                    'Continue Session',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null || !mounted) return; // User cancelled / tapped outside
+
+    _stopFrameCapture();
+    await notifier.stopSession(saveToArchive: result);
+  }
+
   Future<void> _toggleSession() async {
     final notifier = ref.read(liveSessionProvider.notifier);
     final current = ref.read(liveSessionProvider).valueOrNull;
     final isStreaming = current?.isStreaming ?? false;
 
     if (isStreaming) {
-      _stopFrameCapture();
-      await notifier.stopSession();
+      await _stopSessionWithDialog();
     } else {
       final micStatus = await Permission.microphone.request();
       if (!micStatus.isGranted) {
@@ -410,11 +531,15 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
       }
     });
 
-    // Auto-scroll on new messages
+    // Auto-scroll on new messages OR growing live transcript
     ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
       final oldLen = prev?.valueOrNull?.chatMessages.length ?? 0;
       final newLen = next.valueOrNull?.chatMessages.length ?? 0;
-      if (newLen > oldLen) _scrollToBottom();
+      final oldTranscript = prev?.valueOrNull?.transcript ?? '';
+      final newTranscript = next.valueOrNull?.transcript ?? '';
+      if (newLen > oldLen || newTranscript.length > oldTranscript.length) {
+        _scrollToBottom();
+      }
     });
 
     // Photo capture requested by Gemini
@@ -513,250 +638,357 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               // MAIN CONTENT: chat + overlays + orb
               // ══════════════════════════════════════════════════════
               Expanded(
-                child: Stack(
-                  children: [
-                    // ── Camera preview background (A/V mode) ─────────
-                    if (_inputMode == _LiveInputMode.audioVideo &&
-                        _cameraReady &&
-                        _cameraController != null) ...[
-                      Positioned.fill(
-                        child:
-                            ClipRRect(child: CameraPreview(_cameraController!)),
-                      ),
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.40),
-                                Colors.transparent,
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.75),
-                              ],
-                              stops: const [0, 0.15, 0.6, 1.0],
+                child: !isStreaming && chatMessages.isEmpty
+                    ? _buildSessionPicker(theme, mode, bottomPad)
+                    : Stack(
+                        children: [
+                          // ── Camera preview background (A/V mode) ─────────
+                          if (_inputMode == _LiveInputMode.audioVideo &&
+                              _cameraReady &&
+                              _cameraController != null) ...[
+                            Positioned.fill(
+                              child: ClipRRect(
+                                  child: CameraPreview(_cameraController!)),
                             ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    // ── Chat + bottom controls column ──────────────────
-                    Column(
-                      children: [
-                        // ── Chat area ──────────────────────────────────
-                        Expanded(
-                          child: chatMessages.isEmpty && !isStreaming
-                              ? _buildEmptyState(theme, mode)
-                              : _buildChatList(
-                                  theme,
-                                  chatMessages,
-                                  transcript,
-                                  userTranscript,
-                                  isResponding,
-                                  isStreaming,
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.40),
+                                      Colors.transparent,
+                                      Colors.transparent,
+                                      Colors.black.withValues(alpha: 0.75),
+                                    ],
+                                    stops: const [0, 0.15, 0.6, 1.0],
+                                  ),
                                 ),
-                        ),
-
-                        // ── Mode-specific overlays ────────────────────
-                        // ── Post-session insights card ────────────────
-                        if (sessionInsights != null && !isStreaming)
-                          SessionInsightsCard(
-                            insights: sessionInsights,
-                            onDismiss: () => ref
-                                .read(liveSessionProvider.notifier)
-                                .dismissSessionInsights(),
-                            onViewDetails: () {
-                              ref
-                                  .read(liveSessionProvider.notifier)
-                                  .dismissSessionInsights();
-                              // Navigate to archive tab to view session
-                              ref.read(activeTabProvider.notifier).state = 2;
-                            },
-                          ),
-
-                        if (mode == AgentMode.translator &&
-                            currentTranslation != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: TranslationOverlayWidget(
-                                overlay: currentTranslation),
-                          ),
-
-                        if (mode == AgentMode.support &&
-                            currentSupportTopic != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: SupportTopicTracker(
-                              currentTopic: currentSupportTopic,
-                              allTopics: supportTopics,
+                              ),
                             ),
-                          ),
+                          ],
 
-                        // ── Action / tutor / export cards ─────────────
-                        if (currentAction != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: SmartActionCard(
-                              action: currentAction,
-                              onDismiss: () => ref
-                                  .read(liveSessionProvider.notifier)
-                                  .dismissAction(),
-                              onPrimaryAction: () async {
-                                HapticFeedback.mediumImpact();
-                                ref
-                                    .read(liveSessionProvider.notifier)
-                                    .dismissAction();
-                                final result =
-                                    await ActionHandlerService.execute(
-                                  currentAction,
-                                  context,
-                                );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(result),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                          ),
+                          // ── Chat + bottom controls column ──────────────────
+                          Column(
+                            children: [
+                              // ── Chat area ──────────────────────────────────
+                              Expanded(
+                                child: chatMessages.isEmpty && !isStreaming
+                                    ? _buildEmptyState(theme, mode)
+                                    : _buildChatList(
+                                        theme,
+                                        chatMessages,
+                                        transcript,
+                                        userTranscript,
+                                        isResponding,
+                                        isStreaming,
+                                      ),
+                              ),
 
-                        if (mode == AgentMode.tutor && currentTutorStep != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: TutorGuidanceCard(
-                              step: currentTutorStep,
-                              onDismiss: () => ref
-                                  .read(liveSessionProvider.notifier)
-                                  .dismissTutorStep(),
-                              onRequestHint: () {
-                                ref.read(liveSessionProvider.notifier).sendText(
-                                    'Can you give me a hint for the current step?');
-                              },
-                            ),
-                          ),
-
-                        if (pendingExport != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: ExportDocumentCard(
-                              doc: pendingExport,
-                              onDismiss: () => ref
-                                  .read(liveSessionProvider.notifier)
-                                  .dismissExport(),
-                            ),
-                          ),
-
-                        // ══════════════════════════════════════════════
-                        // BOTTOM: Orb with action ring + status + input
-                        // ══════════════════════════════════════════════
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                theme.scaffoldBackgroundColor
-                                    .withValues(alpha: 0.0),
-                                theme.scaffoldBackgroundColor,
-                              ],
-                              stops: const [0.0, 0.3],
-                            ),
-                          ),
-                          child: Padding(
-                            padding: EdgeInsets.only(bottom: bottomPad + 4),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // ── Orb with action ring ────────────
-                                _OrbWithControls(
-                                  orbSize: orbSize,
-                                  isStreaming: isStreaming,
-                                  isResponding: isResponding,
-                                  isMuted: isMuted,
-                                  mode: mode,
-                                  inputMode: _inputMode,
-                                  amplitudeNotifier: ref
+                              // ── Mode-specific overlays ────────────────────
+                              // ── Post-session insights card ────────────────
+                              if (sessionInsights != null && !isStreaming)
+                                SessionInsightsCard(
+                                  insights: sessionInsights,
+                                  onDismiss: () => ref
                                       .read(liveSessionProvider.notifier)
-                                      .amplitudeNotifier,
-                                  onMicTap: () {
-                                    HapticFeedback.heavyImpact();
-                                    _toggleSession();
-                                  },
-                                  onMuteTap: () {
-                                    HapticFeedback.mediumImpact();
+                                      .dismissSessionInsights(),
+                                  onViewDetails: () {
                                     ref
                                         .read(liveSessionProvider.notifier)
-                                        .toggleMute();
-                                  },
-                                  onVideoTap: () {
-                                    HapticFeedback.lightImpact();
-                                    setState(() {
-                                      _inputMode =
-                                          _inputMode == _LiveInputMode.audioOnly
-                                              ? _LiveInputMode.audioVideo
-                                              : _LiveInputMode.audioOnly;
-                                    });
-                                    if (_inputMode ==
-                                            _LiveInputMode.audioVideo &&
-                                        !_cameraReady) {
-                                      _initCamera();
-                                    }
-                                    if (_inputMode ==
-                                            _LiveInputMode.audioOnly &&
-                                        isStreaming) {
-                                      _stopFrameCapture();
-                                    } else if (_inputMode ==
-                                            _LiveInputMode.audioVideo &&
-                                        isStreaming) {
-                                      _startFrameCapture();
-                                    }
-                                  },
-                                  onKeyboardTap: () {
-                                    HapticFeedback.lightImpact();
-                                    setState(
-                                        () => _showTextInput = !_showTextInput);
+                                        .dismissSessionInsights();
+                                    // Navigate to archive tab to view session
+                                    ref.read(activeTabProvider.notifier).state =
+                                        3;
                                   },
                                 ),
 
-                                // ── Status text ─────────────────────
-                                _StatusText(
-                                  isStreaming: isStreaming,
-                                  isResponding: isResponding,
-                                  isMuted: isMuted,
-                                  connectionState: connectionState,
-                                  mode: mode,
+                              if (mode == AgentMode.translator &&
+                                  currentTranslation != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: TranslationOverlayWidget(
+                                      overlay: currentTranslation),
                                 ),
 
-                                // ── Text input ──────────────────────
-                                AnimatedCrossFade(
-                                  firstChild: Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(20, 6, 20, 4),
-                                    child: _buildTextInput(theme, mode),
+                              if (mode == AgentMode.support &&
+                                  currentSupportTopic != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: SupportTopicTracker(
+                                    currentTopic: currentSupportTopic,
+                                    allTopics: supportTopics,
                                   ),
-                                  secondChild: const SizedBox.shrink(),
-                                  crossFadeState: _showTextInput
-                                      ? CrossFadeState.showFirst
-                                      : CrossFadeState.showSecond,
-                                  duration: const Duration(milliseconds: 200),
                                 ),
-                              ],
-                            ),
+
+                              // ── Action / tutor / export cards ─────────────
+                              if (currentAction != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: SmartActionCard(
+                                    action: currentAction,
+                                    onDismiss: () => ref
+                                        .read(liveSessionProvider.notifier)
+                                        .dismissAction(),
+                                    onPrimaryAction: () async {
+                                      HapticFeedback.mediumImpact();
+                                      ref
+                                          .read(liveSessionProvider.notifier)
+                                          .dismissAction();
+                                      final result =
+                                          await ActionHandlerService.execute(
+                                        currentAction,
+                                        context,
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(result),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+
+                              if (mode == AgentMode.tutor &&
+                                  currentTutorStep != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: TutorGuidanceCard(
+                                    step: currentTutorStep,
+                                    onDismiss: () => ref
+                                        .read(liveSessionProvider.notifier)
+                                        .dismissTutorStep(),
+                                    onRequestHint: () {
+                                      ref
+                                          .read(liveSessionProvider.notifier)
+                                          .sendText(
+                                              'Can you give me a hint for the current step?');
+                                    },
+                                  ),
+                                ),
+
+                              if (pendingExport != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: ExportDocumentCard(
+                                    doc: pendingExport,
+                                    onDismiss: () => ref
+                                        .read(liveSessionProvider.notifier)
+                                        .dismissExport(),
+                                  ),
+                                ),
+
+                              // ══════════════════════════════════════════════
+                              // BOTTOM: Orb with action ring + status + input
+                              // ══════════════════════════════════════════════
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      theme.scaffoldBackgroundColor
+                                          .withValues(alpha: 0.0),
+                                      theme.scaffoldBackgroundColor,
+                                    ],
+                                    stops: const [0.0, 0.3],
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding:
+                                      EdgeInsets.only(bottom: bottomPad + 4),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // ── Orb with action ring ────────────
+                                      _OrbWithControls(
+                                        orbSize: orbSize,
+                                        isStreaming: isStreaming,
+                                        isResponding: isResponding,
+                                        isMuted: isMuted,
+                                        mode: mode,
+                                        inputMode: _inputMode,
+                                        amplitudeNotifier: ref
+                                            .read(liveSessionProvider.notifier)
+                                            .amplitudeNotifier,
+                                        onMicTap: () {
+                                          HapticFeedback.heavyImpact();
+                                          _toggleSession();
+                                        },
+                                        onMuteTap: () {
+                                          HapticFeedback.mediumImpact();
+                                          ref
+                                              .read(
+                                                  liveSessionProvider.notifier)
+                                              .toggleMute();
+                                        },
+                                        onVideoTap: () {
+                                          HapticFeedback.lightImpact();
+                                          setState(() {
+                                            _inputMode = _inputMode ==
+                                                    _LiveInputMode.audioOnly
+                                                ? _LiveInputMode.audioVideo
+                                                : _LiveInputMode.audioOnly;
+                                          });
+                                          if (_inputMode ==
+                                                  _LiveInputMode.audioVideo &&
+                                              !_cameraReady) {
+                                            _initCamera();
+                                          }
+                                          if (_inputMode ==
+                                                  _LiveInputMode.audioOnly &&
+                                              isStreaming) {
+                                            _stopFrameCapture();
+                                          } else if (_inputMode ==
+                                                  _LiveInputMode.audioVideo &&
+                                              isStreaming) {
+                                            _startFrameCapture();
+                                          }
+                                        },
+                                        onKeyboardTap: () {
+                                          HapticFeedback.lightImpact();
+                                          setState(() =>
+                                              _showTextInput = !_showTextInput);
+                                        },
+                                      ),
+
+                                      // ── Status text ─────────────────────
+                                      _StatusText(
+                                        isStreaming: isStreaming,
+                                        isResponding: isResponding,
+                                        isMuted: isMuted,
+                                        connectionState: connectionState,
+                                        mode: mode,
+                                      ),
+
+                                      // ── Text input ──────────────────────
+                                      AnimatedCrossFade(
+                                        firstChild: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              20, 6, 20, 4),
+                                          child: _buildTextInput(theme, mode),
+                                        ),
+                                        secondChild: const SizedBox.shrink(),
+                                        crossFadeState: _showTextInput
+                                            ? CrossFadeState.showFirst
+                                            : CrossFadeState.showSecond,
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                        ],
+                      ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Session picker (shown before any session starts) ────────────────
+  // ════════════════════════════════════════════════════════════════════════
+
+  Widget _buildSessionPicker(
+      ThemeData theme, AgentMode mode, double bottomPad) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPad + 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Spacer(flex: 2),
+          // ── Icon ────────────────────────────────────────────────
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.12),
+                  theme.colorScheme.primary.withValues(alpha: 0.03),
+                ],
+              ),
+            ),
+            child: Icon(
+              Icons.sensors_rounded,
+              size: 42,
+              color: theme.colorScheme.primary.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Start a Live Session',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurface,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose how you want to connect',
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+          const SizedBox(height: 44),
+          // ── Audio button ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: _SessionPickerButton(
+              icon: Icons.mic_rounded,
+              label: 'Start Audio Live Session',
+              subtitle: 'Voice-only conversation',
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF4A8EC9),
+                  Color(0xFF6BA3D6),
+                ],
+              ),
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                setState(() => _inputMode = _LiveInputMode.audioOnly);
+                _toggleSession();
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          // ── Video button ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: _SessionPickerButton(
+              icon: Icons.videocam_rounded,
+              label: 'Start Video Live Session',
+              subtitle: 'Voice + camera for visual context',
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFC98B4E),
+                  Color(0xFFE8943A),
+                ],
+              ),
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                setState(() => _inputMode = _LiveInputMode.audioVideo);
+                _toggleSession();
+              },
+            ),
+          ),
+          const Spacer(flex: 3),
+        ],
       ),
     );
   }
@@ -1423,6 +1655,100 @@ class _SystemBubble extends StatelessWidget {
               color: theme.colorScheme.error.withValues(alpha: 0.8),
               fontWeight: FontWeight.w500,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Session picker button ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SessionPickerButton extends StatelessWidget {
+  const _SessionPickerButton({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Gradient gradient;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 72,
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: (gradient as LinearGradient)
+                    .colors
+                    .first
+                    .withValues(alpha: 0.35),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 20),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.white.withValues(alpha: 0.5),
+                size: 16,
+              ),
+              const SizedBox(width: 20),
+            ],
           ),
         ),
       ),

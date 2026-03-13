@@ -12,19 +12,16 @@ import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// **Playback architecture (v4 — double-buffered, per-track players):**
+/// **Playback architecture (v6 — single persistent player, sequential queue):**
 ///
 /// 1. PCM chunks arrive via [queueChunk] → accumulate in [_pcmBuffer].
 /// 2. A timer flushes them to WAV files → [_wavQueue].
-/// 3. An async [_runPlaybackLoop] creates a **fresh [AudioPlayer] per track**,
-///    uses **`await player.play()`** (which blocks until the track finishes),
-///    then disposes the player.
-/// 4. While the current track plays, the **next track is preloaded** into a
-///    second player (`setAudioSource` runs concurrently). When the current
-///    track ends, the preloaded player is ready → **zero gap**.
-/// 5. Barge-in: [stopPlayback] increments [_turnId], which breaks the loop's
-///    `while` condition. It also stops the active player, which makes
-///    `await player.play()` return immediately.
+/// 3. A **single [AudioPlayer]** is reused for the entire session.
+///    For each WAV: `setAudioSource` → `await play()`.
+///    `play()` returns when the track finishes, then we load the next.
+/// 4. No ConcatenatingAudioSource, no player creation/disposal churn.
+/// 5. Barge-in: [stopPlayback] calls `player.stop()` (unblocks `await play()`)
+///    and increments [_turnId] so the loop exits.
 class AudioService {
   static final _log = AppLogger('AudioService');
 
@@ -39,8 +36,7 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback ──────────────────────────────────────────────────────
-  /// Reference to the currently *playing* player so [stopPlayback] can stop it.
+  // ── Playback — single player, sequential queue ────────────────────
   AudioPlayer? _player;
   Timer? _playbackTimeout;
   Timer? _flushTimer;
@@ -82,24 +78,39 @@ class AudioService {
         avAudioSessionMode: AVAudioSessionMode.voiceChat,
         androidAudioAttributes: const AndroidAudioAttributes(
           contentType: AndroidAudioContentType.speech,
-          usage: AndroidAudioUsage.media,
+          usage: AndroidAudioUsage.voiceCommunication,
         ),
         androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
         androidWillPauseWhenDucked: false,
       ),
     );
     _sessionConfigured = true;
-    _log.info('audio session configured');
+    _log.info('audio session configured (voiceCommunication)');
+  }
+
+  /// Lazily create a single AudioPlayer that lives for the entire session.
+  void _ensurePlayer() {
+    if (_player != null) return;
+    _player = AudioPlayer();
+    _log.info('persistent player created');
   }
 
   // ── Recording ─────────────────────────────────────────────────────
 
   int _recordChunkCount = 0;
   DateTime _lastRecordData = DateTime.now();
+  bool _startInProgress = false;
 
   Future<void> start() async {
-    if (_isCapturing || _disposed) return;
-    await _ensureAudioSession();
+    if (_isCapturing || _disposed || _startInProgress) return;
+    _startInProgress = true;
+    try {
+      await _ensureAudioSession();
+    } catch (e) {
+      _log.severe('audio session setup failed — recorder blocked', e);
+      _startInProgress = false;
+      return;
+    }
 
     try {
       await _recorder.stop();
@@ -119,6 +130,7 @@ class AudioService {
         ),
       );
 
+      _startInProgress = false;
       _isCapturing = true;
       _recordChunkCount = 0;
       _recordRing.clear();
@@ -166,6 +178,7 @@ class AudioService {
       _log.info('recorder started');
     } catch (e) {
       _log.severe('recorder startStream FAILED — will retry in 500ms', e);
+      _startInProgress = false;
       _isCapturing = false;
       if (!_disposed) {
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -215,7 +228,7 @@ class AudioService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  PLAYBACK — double-buffered fresh-player architecture
+  //  PLAYBACK — single persistent player, sequential WAV queue (v6)
   // ══════════════════════════════════════════════════════════════════
 
   /// Queue a base64-encoded PCM chunk from the AI into the buffer.
@@ -223,15 +236,20 @@ class AudioService {
     final bytes = base64Decode(base64Audio);
     _pcmBuffer.addAll(bytes);
 
-    if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First chunk → flush quickly (200ms) for low latency.
-      // Loop already running → accumulate for 2s for bigger WAV files
-      // (fewer tracks = fewer player transitions = smoother).
-      final ms = !_loopRunning ? 200 : 2000;
+    if (_turnComplete) {
+      // Late chunk after turn_complete — flush urgently.
+      _flushTimer?.cancel();
+      _flushTimer = Timer(const Duration(milliseconds: 50), _flush);
+    } else if (_flushTimer == null || !_flushTimer!.isActive) {
+      // First chunk → flush quickly for low latency.
+      // Loop already running → accumulate ~0.5s for fewer transitions.
+      // With a single player, setAudioSource takes ~30ms, so transitions
+      // are fast. We don't need huge 3s batches.
+      final ms = !_loopRunning ? 180 : 500;
       _flushTimer = Timer(Duration(milliseconds: ms), _flush);
     }
-    // Hard cap: don't let buffer grow past ~10s of audio.
-    if (_pcmBuffer.length >= 480000) {
+    // Hard cap: ~6s of audio at 24kHz 16-bit mono.
+    if (_pcmBuffer.length >= 288000) {
       _flushTimer?.cancel();
       _flush();
     }
@@ -290,152 +308,89 @@ class AudioService {
   }
 
   // ──────────────────────────────────────────────────────────────────
-  //  PLAYBACK LOOP — fresh player per track, with preloading
+  //  PLAYBACK LOOP — single player, sequential queue
+  //  `await player.play()` blocks until the track finishes or stop()
+  //  is called (barge-in). Simple and 100% reliable.
   // ──────────────────────────────────────────────────────────────────
 
   Future<void> _runPlaybackLoop(int turnSnapshot) async {
     _log.info('▶ playback loop START (turn=$turnSnapshot)');
     await _ensureAudioSession();
+    _ensurePlayer();
     if (_turnId != turnSnapshot) {
       _loopRunning = false;
       return;
     }
 
-    // The "preloaded" player: while current track plays, we prepare the
-    // next track here so it can start with zero latency.
-    AudioPlayer? preloadedPlayer;
-
     try {
       while (_turnId == turnSnapshot) {
-        // ────────────────────────────────────────────────────────────
-        // STEP 1: Get a player with a loaded track.
-        // ────────────────────────────────────────────────────────────
-        AudioPlayer player;
-
-        if (preloadedPlayer != null) {
-          // Preloaded player is ready → use it (zero latency).
-          player = preloadedPlayer;
-          preloadedPlayer = null;
-          _log.info('♪ using preloaded player');
-        } else {
-          // No preload available — wait for a WAV in the queue.
-          while (_wavQueue.isEmpty) {
-            if (_turnComplete && _pcmBuffer.isEmpty) {
-              _log.info('✓ turn complete, no more tracks');
-              return; // → finally block runs
+        // ── Wait for a WAV in the queue ─────────────────────────
+        while (_wavQueue.isEmpty) {
+          if (_turnComplete && _pcmBuffer.isEmpty) {
+            if (_flushing) {
+              await Future.delayed(const Duration(milliseconds: 20));
+              continue;
             }
-            if (_turnId != turnSnapshot) return;
-            // Demand-driven flush: if PCM is buffered, flush NOW.
+            // Grace period for very late arrivals.
+            await Future.delayed(const Duration(milliseconds: 250));
+            // Final flush attempt.
             if (_pcmBuffer.isNotEmpty && !_flushing) {
               _flushTimer?.cancel();
               await _flush();
             }
-            await Future.delayed(const Duration(milliseconds: 40));
+            if (_wavQueue.isEmpty && _pcmBuffer.isEmpty && !_flushing) {
+              _log.info('✓ turn complete, no more tracks');
+              return; // → finally block fires onPlaybackDone
+            }
+            continue;
           }
           if (_turnId != turnSnapshot) return;
-
-          // Dequeue and load into a fresh player.
-          final path = _wavQueue.removeAt(0);
-          player = AudioPlayer();
-          try {
-            await player.setAudioSource(AudioSource.uri(Uri.file(path)));
-          } catch (e) {
-            _log.severe('setAudioSource FAILED: $e');
-            unawaited(player.dispose().catchError((_) {}));
-            continue; // skip this track
+          // Demand flush: if enough PCM buffered (~0.5s), flush now.
+          if (_pcmBuffer.length >= 24000 && !_flushing) {
+            _flushTimer?.cancel();
+            await _flush();
           }
-          if (_turnId != turnSnapshot) {
-            unawaited(player.dispose().catchError((_) {}));
-            return;
-          }
+          await Future.delayed(const Duration(milliseconds: 40));
         }
+        if (_turnId != turnSnapshot) return;
 
-        // Store reference so stopPlayback() can stop it.
-        _player = player;
+        // ── Dequeue and play ────────────────────────────────────
+        final path = _wavQueue.removeAt(0);
+        try {
+          await _player!.setAudioSource(
+            AudioSource.uri(Uri.file(path)),
+            preload: true,
+          );
+        } catch (e) {
+          _log.warning('setAudioSource failed: $e — skipping track');
+          continue;
+        }
+        if (_turnId != turnSnapshot) return;
 
-        // ────────────────────────────────────────────────────────────
-        // STEP 2: Preload the NEXT track concurrently while we play.
-        // ────────────────────────────────────────────────────────────
-        final preloadFuture = _preloadNextTrack(turnSnapshot);
-
-        // ────────────────────────────────────────────────────────────
-        // STEP 3: Play and await completion.
-        //
-        // player.play() returns a Future that resolves when:
-        //   a) The track finishes naturally (completed)
-        //   b) player.stop() is called (barge-in)
-        //   c) An error occurs (throws)
-        // This is 100% reliable — no Completers, no stream listeners.
-        // ────────────────────────────────────────────────────────────
         try {
           _log.info('♪ PLAY track (queue=${_wavQueue.length} remain)');
-          // Timeout = track duration + 5s safety (or 30s default).
-          final dur = player.duration;
-          final timeout = dur != null
-              ? dur + const Duration(seconds: 5)
-              : const Duration(seconds: 30);
-          await player.play().timeout(timeout, onTimeout: () {
-            _log.warning('play() timed out after $timeout — skipping');
-          });
+          // player.play() blocks until track finishes or stop() is called.
+          await _player!.play();
           _log.info('♪ track DONE');
         } catch (e) {
           _log.severe('play() error: $e');
         }
+        if (_turnId != turnSnapshot) return;
 
-        // ────────────────────────────────────────────────────────────
-        // STEP 4: Dispose current player, await preload result.
-        // ────────────────────────────────────────────────────────────
-        _player = null;
-        unawaited(player.dispose().catchError((_) {}));
-
-        // Wait for preload to finish (usually already done by now).
-        preloadedPlayer = await preloadFuture;
+        // Immediately seek to start of the player so it's in idle/ready
+        // state for the next setAudioSource call.
+        try {
+          await _player!.seek(Duration.zero);
+        } catch (_) {}
       }
     } finally {
-      // Clean up.
-      preloadedPlayer?.dispose();
-      _loopRunning = false;
-      _player = null;
       if (_turnId == turnSnapshot) {
+        _loopRunning = false;
         _log.info('▶ playback loop END — resetForNextTurn');
         _resetForNextTurn();
       } else {
         _log.info('▶ playback loop END — turn was cancelled');
       }
-    }
-  }
-
-  /// Preload the next WAV into a fresh player while the current track plays.
-  /// Returns the preloaded player, or `null` if no track is available.
-  Future<AudioPlayer?> _preloadNextTrack(int turnSnapshot) async {
-    // Wait for a WAV to become available.
-    final deadline = DateTime.now().add(const Duration(seconds: 25));
-    while (_wavQueue.isEmpty && DateTime.now().isBefore(deadline)) {
-      if (_turnComplete && _pcmBuffer.isEmpty) return null;
-      if (_turnId != turnSnapshot) return null;
-      // Demand-driven flush — produce WAVs as fast as PCM arrives.
-      if (_pcmBuffer.isNotEmpty && !_flushing) {
-        _flushTimer?.cancel();
-        await _flush();
-      }
-      await Future.delayed(const Duration(milliseconds: 40));
-    }
-    if (_wavQueue.isEmpty || _turnId != turnSnapshot) return null;
-
-    final path = _wavQueue.removeAt(0);
-    final player = AudioPlayer();
-    try {
-      await player.setAudioSource(AudioSource.uri(Uri.file(path)));
-      if (_turnId != turnSnapshot) {
-        unawaited(player.dispose().catchError((_) {}));
-        return null;
-      }
-      _log.info('⟳ preloaded next track');
-      return player;
-    } catch (e) {
-      _log.warning('preload setAudioSource failed: $e');
-      unawaited(player.dispose().catchError((_) {}));
-      return null;
     }
   }
 
@@ -448,18 +403,25 @@ class AudioService {
 
     if (_pcmBuffer.isNotEmpty) await _flush();
 
+    // Wait for any in-progress flush to finish (up to 500ms).
+    int waitMs = 0;
+    while (_flushing && waitMs < 500) {
+      await Future.delayed(const Duration(milliseconds: 20));
+      waitMs += 20;
+    }
+    if (_pcmBuffer.isNotEmpty) await _flush();
+
     if (!_loopRunning && _wavQueue.isEmpty) {
       _log.info('no audio this turn');
       onPlaybackDone?.call();
       return;
     }
 
-    // Safety timeout in case the loop hangs.
+    // Safety timeout in case playback hangs.
     _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 120), () {
+    _playbackTimeout = Timer(const Duration(seconds: 30), () {
       _log.warning('playback TIMEOUT — force-resetting');
       _turnId++;
-      // Stopping the player will unblock await player.play() in the loop.
       _player?.stop();
       _resetForNextTurn();
     });
@@ -469,8 +431,9 @@ class AudioService {
     _playbackTimeout?.cancel();
     _turnComplete = false;
     _chunkIndex = 0;
+    _loopRunning = false;
     _wavQueue.clear();
-    _player = null;
+    // Player is NOT disposed — reused for next turn.
 
     final files = List<String>.from(_tempFiles);
     _tempFiles.clear();
@@ -482,7 +445,7 @@ class AudioService {
       }
     }));
 
-    _log.info('turn reset — onPlaybackDone');
+    _log.info('turn reset — firing onPlaybackDone');
     onPlaybackDone?.call();
   }
 
@@ -495,23 +458,18 @@ class AudioService {
     _chunkIndex = 0;
     _flushing = false;
     _reflushNeeded = false;
-    _turnId++; // breaks the loop's while(_turnId == turnSnapshot)
+    _loopRunning = false;
+    _turnId++; // makes the loop exit
     _wavQueue.clear();
+
+    // stop() unblocks `await player.play()` in the loop.
+    // Player is NOT disposed — reused for next turn.
+    try {
+      await _player?.stop();
+    } catch (_) {}
 
     final files = List<String>.from(_tempFiles);
     _tempFiles.clear();
-
-    // Stop the active player — this makes `await player.play()` return
-    // immediately in the loop, which then exits due to _turnId mismatch.
-    final player = _player;
-    _player = null;
-    if (player != null) {
-      try {
-        await player.stop();
-      } catch (_) {}
-      unawaited(player.dispose().catchError((_) {}));
-    }
-
     unawaited(Future(() async {
       for (final p in files) {
         try {
@@ -588,8 +546,11 @@ class AudioService {
     _playbackTimeout?.cancel();
     _flushTimer?.cancel();
     _recordSub?.cancel();
-    _turnId++; // breaks playback loop
-    _player?.stop(); // unblocks await player.play()
+    _turnId++;
+    try {
+      _player?.stop();
+    } catch (_) {}
+    _player?.dispose();
     _audioController.close();
     _amplitudeController.close();
     _recorder.dispose();

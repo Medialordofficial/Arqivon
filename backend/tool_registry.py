@@ -268,11 +268,16 @@ async def export_document(
                 content,
                 content_type="text/plain; charset=utf-8",
             )
-            # Make the blob publicly readable for a signed URL, or use a
-            # long-lived token.  For simplicity, generate a signed URL
-            # valid for 7 days.
-            await asyncio.to_thread(blob.make_public)
-            download_url = blob.public_url
+            # Generate a Firebase-style download URL with an unguessable
+            # token instead of making the blob fully public.
+            import uuid as _uuid
+            _dl_token = _uuid.uuid4().hex
+            blob.metadata = {"firebaseStorageDownloadTokens": _dl_token}
+            await asyncio.to_thread(blob.patch)
+            download_url = (
+                f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}"
+                f"/o/{blob_path.replace('/', '%2F')}?alt=media&token={_dl_token}"
+            )
             doc_data["storage_url"] = download_url
             logger.info("Exported to Cloud Storage: %s", blob_path)
     except Exception as storage_err:
