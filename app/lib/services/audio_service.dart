@@ -97,11 +97,19 @@ class AudioService {
 
   void _onProcessingState(ProcessingState state) {
     if (state == ProcessingState.completed && _turnComplete) {
-      if (_pcmBuffer.isEmpty && !_flushing) {
-        _log.info('player completed all tracks + turn complete → done');
-        _playbackTimeout?.cancel();
-        _resetForNextTurn();
-      }
+      // Debounce: wait 250ms to let any in-flight _enqueueWav finish.
+      // Without this, a flush completing right now would add a new track
+      // to the playlist — but we'd have already reset and killed it.
+      Future.delayed(const Duration(milliseconds: 250), () {
+        if (_turnComplete &&
+            _player?.processingState == ProcessingState.completed &&
+            _pcmBuffer.isEmpty &&
+            !_flushing) {
+          _log.info('player completed all tracks + turn complete → done');
+          _playbackTimeout?.cancel();
+          _resetForNextTurn();
+        }
+      });
     }
   }
 
@@ -251,10 +259,14 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // Buffer 400ms then flush. ConcatenatingAudioSource handles
-      // gapless transitions, so smaller chunks are fine and improve
-      // responsiveness without introducing audio gaps.
-      _flushTimer = Timer(const Duration(milliseconds: 400), _flush);
+      // First flush of a turn: wait 600ms to accumulate a substantial
+      // first WAV (~600ms of audio). This prevents the player from
+      // completing a tiny first track before the next is ready.
+      // Subsequent flushes: 400ms for smooth streaming.
+      final delay = _playlist == null
+          ? const Duration(milliseconds: 600)
+          : const Duration(milliseconds: 400);
+      _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
     if (_pcmBuffer.length >= 96000) {
@@ -332,7 +344,15 @@ class AudioService {
     if (_turnId != turnSnapshot) return;
 
     final isFirst = _playlist == null;
-    if (isFirst) {
+    // When the player has completed all previous tracks, we MUST create
+    // a fresh ConcatenatingAudioSource and call setAudioSource.
+    // Trying to seek+play within a completed playlist is unreliable in
+    // just_audio — it silently fails on many devices, causing audio to
+    // stop mid-response for long answers.
+    final needsResume =
+        !isFirst && _player!.processingState == ProcessingState.completed;
+
+    if (isFirst || needsResume) {
       _playlist = ConcatenatingAudioSource(children: []);
       try {
         await _player!.setAudioSource(_playlist!);
@@ -343,7 +363,6 @@ class AudioService {
     }
     if (_turnId != turnSnapshot) return;
 
-    final newIdx = _playlist!.length;
     try {
       await _playlist!.add(AudioSource.file(path));
     } catch (e) {
@@ -352,20 +371,13 @@ class AudioService {
     }
     if (_turnId != turnSnapshot) return;
 
-    if (isFirst) {
-      _log.info('▶ START gapless playback (first track)');
+    if (isFirst || needsResume) {
+      final label = isFirst ? 'START' : 'RESUME';
+      _log.info('▶ $label gapless playback');
       _player!.play();
-    } else if (_player!.processingState == ProcessingState.completed) {
-      // Player finished all previous tracks — resume from new one.
-      _log.info('▶ RESUME playback at idx=$newIdx');
-      try {
-        await _player!.seek(Duration.zero, index: newIdx);
-        _player!.play();
-      } catch (e) {
-        _log.warning('seek+play resume failed: $e');
-      }
     } else {
-      _log.info('♪ track $newIdx queued (gapless, '
+      final idx = _playlist!.length - 1;
+      _log.info('♪ track $idx queued (gapless, '
           'playlist=${_playlist!.length})');
     }
   }
@@ -379,13 +391,21 @@ class AudioService {
 
     if (_pcmBuffer.isNotEmpty) await _flush();
 
-    // Wait for any in-progress flush to finish (up to 200ms).
+    // Wait for any in-progress flush to finish (up to 500ms).
+    // Disk writes on slower devices can take 100-300ms.
     int waitMs = 0;
-    while (_flushing && waitMs < 200) {
-      await Future.delayed(const Duration(milliseconds: 10));
-      waitMs += 10;
+    while ((_flushing || _reflushNeeded) && waitMs < 500) {
+      await Future.delayed(const Duration(milliseconds: 15));
+      waitMs += 15;
     }
     if (_pcmBuffer.isNotEmpty) await _flush();
+
+    // Second wait: the reflush from the first flush may have started.
+    waitMs = 0;
+    while (_flushing && waitMs < 300) {
+      await Future.delayed(const Duration(milliseconds: 15));
+      waitMs += 15;
+    }
 
     // If nothing was played this turn at all.
     if (_playlist == null || _playlist!.length == 0) {
@@ -404,8 +424,10 @@ class AudioService {
     }
 
     // Safety timeout in case playback hangs.
+    // 120s is generous — a long Gemini response can be 30-60s of audio,
+    // and the player may need to resume multiple batches.
     _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 30), () {
+    _playbackTimeout = Timer(const Duration(seconds: 120), () {
       _log.warning('playback TIMEOUT — force-resetting');
       _turnId++;
       _player?.stop();
