@@ -889,25 +889,22 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # LOW start sensitivity = conservative detection.
-                # HIGH caused false barge-ins from ambient noise, prematurely
-                # interrupting the AI's response and dropping audio mid-word.
-                # LOW reliably detects intentional speech but ignores
-                # background noise, breathing, and brief sounds.
+                # HIGH start sensitivity = eagerly detects speech onset.
+                # LOW was too conservative — Gemini received 150+ audio
+                # chunks but never detected speech and never responded.
+                # HIGH correctly triggers on intentional speech; any false
+                # barge-ins from ambient noise are handled client-side with
+                # interrupt debouncing in live_session_provider.dart.
                 # NOTE: The SDK only supports HIGH, LOW, and UNSPECIFIED —
                 # there is no MEDIUM value.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
-                # 400ms prefix captures word beginnings that would otherwise
-                # be clipped, fixing the "missing first words" issue.
-                # Increased from 300ms for better word-boundary capture.
-                prefix_padding_ms=400,
-                # 1000ms silence before end-of-speech detection.
-                # Increased from 800ms — some speakers pause >800ms between
-                # sentences, causing premature turn_complete that splits a
-                # single thought into two fragmented responses.
-                silence_duration_ms=1000,
+                # 300ms prefix captures word beginnings that would otherwise
+                # be clipped.
+                prefix_padding_ms=300,
+                # 800ms silence before end-of-speech detection.
+                silence_duration_ms=800,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),
