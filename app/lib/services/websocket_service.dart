@@ -30,10 +30,12 @@ class WebSocketService {
   final Future<String?> Function()? tokenRefresher;
 
   WebSocketChannel? _channel;
+  StreamSubscription? _channelSub;
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
   bool _intentionalClose = false;
+  bool _connectInProgress = false;
 
   final _stateController = StreamController<WsConnectionState>.broadcast();
   final _messageController = StreamController<WsOutbound>.broadcast();
@@ -47,35 +49,52 @@ class WebSocketService {
   // ── Connect ──────────────────────────────────────────────────────────
 
   Future<void> connect() async {
-    if (_state == WsConnectionState.connected ||
-        _state == WsConnectionState.connecting) {
+    if (_state == WsConnectionState.connected || _connectInProgress) {
       return;
     }
 
     _intentionalClose = false;
-    _setState(WsConnectionState.connecting);
+    _connectInProgress = true;
+
+    // Only show 'connecting' on the FIRST attempt.
+    // During retries, keep 'reconnecting' so the UI doesn't flicker
+    // between "Connecting…" and "Reconnecting…" on every attempt.
+    if (_reconnectAttempt == 0) {
+      _setState(WsConnectionState.connecting);
+    }
 
     try {
-      // Refresh the auth token before every connection attempt so reconnects
-      // after >1 hour don't fail with a stale/expired token.
       if (tokenRefresher != null) {
-        final freshToken = await tokenRefresher!();
-        if (freshToken != null) authToken = freshToken;
+        try {
+          final freshToken = await tokenRefresher!();
+          if (freshToken != null) authToken = freshToken;
+        } catch (e) {
+          _log.warning('Token refresh failed — using cached token: $e');
+        }
       }
 
       final uri = Uri.parse(AppConstants.wsUrl(userId, token: authToken));
+      _channelSub?.cancel();
+      _channelSub = null;
+      try {
+        _channel?.sink.close();
+      } catch (_) {}
       _channel = WebSocketChannel.connect(uri);
-      // Timeout the handshake so we don't hang for 30-60s on a
-      // cold-starting backend or unreachable server.
       await _channel!.ready.timeout(AppConstants.connectTimeout);
 
+      _connectInProgress = false;
       _setState(WsConnectionState.connected);
       _reconnectAttempt = 0;
 
       _startHeartbeat();
       _listenToMessages();
     } catch (e) {
-      _log.severe('Connection failed', e);
+      _log.severe('Connection failed (attempt $_reconnectAttempt)', e);
+      try {
+        _channel?.sink.close();
+      } catch (_) {}
+      _channel = null;
+      _connectInProgress = false;
       _scheduleReconnect();
     }
   }
@@ -104,8 +123,11 @@ class WebSocketService {
     _intentionalClose = true;
     _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
+    _channelSub?.cancel();
+    _channelSub = null;
     await _channel?.sink.close();
     _channel = null;
+    _connectInProgress = false;
     _setState(WsConnectionState.disconnected);
   }
 
@@ -113,6 +135,7 @@ class WebSocketService {
     _intentionalClose = true;
     _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
+    _channelSub?.cancel();
     _channel?.sink.close();
     _stateController.close();
     _messageController.close();
@@ -121,7 +144,10 @@ class WebSocketService {
   // ── Internal ─────────────────────────────────────────────────────────
 
   void _listenToMessages() {
-    _channel?.stream.listen(
+    // Cancel any previous subscription to prevent duplicate onDone
+    // callbacks from firing parallel reconnect cycles.
+    _channelSub?.cancel();
+    _channelSub = _channel?.stream.listen(
       (raw) {
         try {
           if (raw is! String) {
@@ -136,6 +162,7 @@ class WebSocketService {
         }
       },
       onDone: () {
+        _log.info('WebSocket stream closed');
         if (!_intentionalClose) _scheduleReconnect();
       },
       onError: (e) {
@@ -153,9 +180,15 @@ class WebSocketService {
     );
   }
 
+  /// Whether a reconnect cycle is actively running.
+  bool get isReconnecting =>
+      _state == WsConnectionState.reconnecting ||
+      _state == WsConnectionState.connecting;
+
   void _scheduleReconnect() {
     if (_intentionalClose) return;
     if (_reconnectAttempt >= AppConstants.maxReconnectAttempts) {
+      _log.warning('Max reconnect attempts reached — giving up');
       _setState(WsConnectionState.disconnected);
       return;
     }
@@ -171,13 +204,14 @@ class WebSocketService {
   }
 
   Duration _backoff(int attempt) {
+    // First 3 attempts: retry almost instantly (100ms) so the user
+    // barely notices a brief network hiccup or WS reset.
+    if (attempt <= 3) return Duration(milliseconds: 100 + Random().nextInt(50));
+    // Attempts 4+: gentle exponential backoff capped at 5s.
     final ms = AppConstants.baseReconnectDelay.inMilliseconds *
-        pow(2, attempt).toInt();
-    // Cap at 8s instead of 30s — faster recovery from backend cold starts
-    // and network blips.  With 50 max attempts the total across all retries
-    // is ~6-7 minutes, which is generous.
-    final capped = min(ms, 8000);
-    final jitter = Random().nextInt((capped * 0.1).toInt() + 1);
+        pow(2, attempt - 3).toInt();
+    final capped = min(ms, 5000);
+    final jitter = Random().nextInt((capped * 0.15).toInt() + 1);
     return Duration(milliseconds: capped + jitter);
   }
 

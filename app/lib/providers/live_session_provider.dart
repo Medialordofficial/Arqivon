@@ -295,9 +295,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     if (s == WsConnectionState.disconnected && !_intentionalDisconnect) {
       _log.warning(
         'WS went disconnected (streaming=${cur.isStreaming}) — '
-        'scheduling full reconnect in 2s',
+        'scheduling full reconnect in 5s',
       );
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 5), () {
         final latest = state.valueOrNull;
         if (latest != null &&
             latest.connectionState == WsConnectionState.disconnected &&
@@ -392,8 +392,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// turns green immediately when the tab opens.
   Future<void> connectOnly() async {
     final current = state.valueOrNull ?? const LiveSessionState();
+    // Don't interrupt an existing connection or an active reconnect cycle.
     if (current.connectionState == WsConnectionState.connected ||
-        current.connectionState == WsConnectionState.connecting) {
+        current.connectionState == WsConnectionState.connecting ||
+        (_ws != null && _ws!.isReconnecting)) {
       return;
     }
     _intentionalDisconnect = false;

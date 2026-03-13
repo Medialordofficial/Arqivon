@@ -31,6 +31,7 @@ class AppConstants {
 
   // Reconnect
   static const int maxReconnectAttempts = 50;
-  static const Duration baseReconnectDelay = Duration(milliseconds: 500);
-  static const Duration connectTimeout = Duration(seconds: 10);
+  static const Duration baseReconnectDelay = Duration(milliseconds: 300);
+  // Cloud Run cold starts can take 15-25s, so the timeout must be generous.
+  static const Duration connectTimeout = Duration(seconds: 25);
 }
