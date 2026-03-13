@@ -353,38 +353,45 @@ class AudioService {
     _completionDebounce = null;
 
     final isFirst = _playlist == null;
-    // When the player has completed all previous tracks, we MUST create
-    // a fresh ConcatenatingAudioSource and call setAudioSource.
-    // Trying to seek+play within a completed playlist is unreliable in
-    // just_audio — it silently fails on many devices, causing audio to
-    // stop mid-response for long answers.
-    final needsResume =
-        !isFirst && _player!.processingState == ProcessingState.completed;
+    // Detect when the player has stopped producing audio — it has
+    // completed all tracks, gone idle, or is simply not playing.
+    // In ANY of these cases we MUST create a fresh playlist and call
+    // setAudioSource + play() to resume.
+    final needsResume = !isFirst &&
+        (_player!.processingState == ProcessingState.completed ||
+            _player!.processingState == ProcessingState.idle ||
+            !_player!.playing);
 
     if (isFirst || needsResume) {
-      _playlist = ConcatenatingAudioSource(children: []);
+      // Create the playlist WITH the first track already inside it.
+      // Setting an EMPTY ConcatenatingAudioSource causes just_audio to
+      // fire ProcessingState.completed immediately on some Android
+      // devices, which puts the player in a state where the subsequent
+      // play() silently does nothing — causing long responses to go
+      // completely silent after the first batch of WAVs finishes.
+      _playlist = ConcatenatingAudioSource(
+        children: [AudioSource.file(path)],
+      );
       try {
-        await _player!.setAudioSource(_playlist!);
+        await _player!
+            .setAudioSource(_playlist!, initialPosition: Duration.zero);
       } catch (e) {
         _log.severe('setAudioSource(playlist) failed: $e');
         return;
       }
-    }
-    if (_turnId != turnSnapshot) return;
+      if (_turnId != turnSnapshot) return;
 
-    try {
-      await _playlist!.add(AudioSource.file(path));
-    } catch (e) {
-      _log.warning('playlist.add failed: $e');
-      return;
-    }
-    if (_turnId != turnSnapshot) return;
-
-    if (isFirst || needsResume) {
       final label = isFirst ? 'START' : 'RESUME';
-      _log.info('▶ $label gapless playback');
+      _log.info('▶ $label gapless playback (tracks=${_playlist!.length})');
       _player!.play();
     } else {
+      try {
+        await _playlist!.add(AudioSource.file(path));
+      } catch (e) {
+        _log.warning('playlist.add failed: $e');
+        return;
+      }
+      if (_turnId != turnSnapshot) return;
       final idx = _playlist!.length - 1;
       _log.info('♪ track $idx queued (gapless, '
           'playlist=${_playlist!.length})');
