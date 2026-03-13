@@ -268,9 +268,10 @@ SYSTEM_PROMPTS: dict[str, str] = {
 
         "BEHAVIOR GUIDELINES:\n"
         "• Be concise but thorough — give the complete answer the user needs.\n"
-        "• For complex or lengthy answers, break your response into natural conversational "
-        "segments of 2-3 sentences. Pause briefly between major points, giving the user a "
-        "chance to interject. Think of it as a real conversation, not a lecture.\n"
+        "• ALWAYS complete your full response. Speak at a natural pace and cover ALL the "
+        "information. Do NOT stop mid-answer or cut yourself short. The user should hear "
+        "everything you would show in text. Give your full, natural-length answer as one "
+        "continuous response — do NOT artificially segment, truncate, or pause between points.\n"
         "• When shown a document, read and summarize it proactively.\n"
         "• When shown a product, identify it and provide useful context (price comparisons, "
         "reviews, ingredients, nutritional info).\n"
@@ -795,9 +796,8 @@ REALTIME_CONVERSATION_POLICY = (
     "• Never continue old response without evaluating new input.\n"
     "• Never repeat previously spoken content unless necessary.\n"
     "\nSTYLE (MANDATORY):\n"
-    "• Speak in short, natural segments.\n"
-    "• Avoid long monologues.\n"
-    "• Stream incrementally like attentive human conversation.\n"
+    "• Speak naturally and completely — always finish your full thought and answer.\n"
+    "• Do NOT stop speaking before you have delivered all the information.\n"
     "• Sound natural, fluid, and unscripted.\n"
     "\nLATENCY (TARGET):\n"
     "• Start responding as quickly as possible (target near-immediate first tokens).\n"
@@ -922,15 +922,15 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # HIGH start sensitivity = eagerly detects speech onset.
-                # LOW was too conservative — Gemini received 150+ audio
-                # chunks but never detected speech and never responded.
-                # HIGH correctly triggers on intentional speech; any false
-                # barge-ins from ambient noise are handled client-side with
-                # interrupt debouncing in live_session_provider.dart.
-                # NOTE: The SDK only supports HIGH, LOW, and UNSPECIFIED —
-                # there is no MEDIUM value.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                # UNSPECIFIED start sensitivity = server picks a balanced default.
+                # HIGH was causing false barge-ins — background noise or audio
+                # playback feedback would trigger 'interrupted' events, killing
+                # AI audio mid-sentence.  The user would see the full text
+                # transcript (already received) but hear only partial audio.
+                # UNSPECIFIED lets the server choose an appropriate threshold
+                # that detects intentional speech without false-firing on noise.
+                # NOTE: LOW was too conservative (Gemini never detected speech).
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_UNSPECIFIED,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                 # 300ms prefix captures word beginnings that would otherwise

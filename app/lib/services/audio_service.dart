@@ -103,7 +103,7 @@ class AudioService {
       // from racing when the player cycles completed→playing→completed
       // on short WAV files during long responses.
       _completionDebounce?.cancel();
-      _completionDebounce = Timer(const Duration(milliseconds: 300), () {
+      _completionDebounce = Timer(const Duration(milliseconds: 500), () {
         _completionDebounce = null;
         if (_turnComplete &&
             _player?.processingState == ProcessingState.completed &&
@@ -423,12 +423,27 @@ class AudioService {
       return;
     }
 
-    // If player already finished all tracks, fire done now.
+    // If player already finished all tracks, schedule a debounced check
+    // instead of resetting immediately. This avoids a race where the player
+    // completed the last batch of tracks but a tiny final WAV hasn't been
+    // fully rendered through speakers yet, or where _onProcessingState
+    // won't fire again (state didn't change) so we need to manually trigger
+    // the same debounced completion logic.
     if (_player?.processingState == ProcessingState.completed) {
       if (_pcmBuffer.isEmpty && !_flushing) {
-        _log.info('player already completed — turn done');
-        _resetForNextTurn();
-        return;
+        _completionDebounce?.cancel();
+        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
+          _completionDebounce = null;
+          if (_turnComplete &&
+              _player?.processingState == ProcessingState.completed &&
+              _pcmBuffer.isEmpty &&
+              !_flushing) {
+            _log.info(
+                'player already completed + turn done → reset (debounced)');
+            _playbackTimeout?.cancel();
+            _resetForNextTurn();
+          }
+        });
       }
     }
 
