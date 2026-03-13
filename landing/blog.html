@@ -18,19 +18,7 @@
     <header class="navbar navbar--scrolled" id="navbar">
         <div class="container navbar__inner">
             <a href="index.html" class="navbar__brand">
-                <div class="navbar__logo">
-                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                        <circle cx="14" cy="14" r="12" stroke="url(#logo-grad)" stroke-width="2.5"/>
-                        <circle cx="14" cy="14" r="5" fill="url(#logo-grad)"/>
-                        <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round"/>
-                        <defs>
-                            <linearGradient id="logo-grad" x1="0" y1="0" x2="28" y2="28">
-                                <stop stop-color="#7C5CFC"/>
-                                <stop offset="1" stop-color="#00D4AA"/>
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
+                <img src="assets/images/logo-128.png" alt="Arqivon" width="32" height="32" class="navbar__logo-img">
                 <span class="navbar__name">Arqivon</span>
             </a>
             <nav class="navbar__links" id="navLinks">
@@ -69,13 +57,13 @@
                     <span class="blog-card__tag">Hackathon</span>
                     <span class="blog-card__read">5 min read</span>
                 </div>
-                <h2 class="blog-card__title">Why We Bet Everything on the Gemini Live API — And What We Learned Building a Real-Time Multimodal Agent</h2>
-                <p class="blog-card__subtitle">We created this piece of content for the purposes of entering the Gemini Live Agent Challenge hackathon. Here's how Google's Live API changed the way we think about AI interaction. #GeminiLiveAgentChallenge</p>
+                <h2 class="blog-card__title">Why I Bet Everything on the Gemini Live API — And What I Learned Building a Real-Time Multimodal Agent</h2>
+                <p class="blog-card__subtitle">I created this piece of content for the purposes of entering the Gemini Live Agent Challenge hackathon. Here's how Google's Live API changed the way I think about AI interaction. #GeminiLiveAgentChallenge</p>
 
                 <div class="blog-content">
 
                     <p class="blog-content__lead">
-                        Three months ago, we were a small team with a big frustration: every AI assistant we used was trapped behind a text box. Then Google announced the Gemini Live Agent Challenge, and we saw a chance to build the AI assistant we'd always wanted — one that sees, hears, and speaks in real time. This post covers why we chose the Gemini Live API, how we used Google Cloud to ship a production-ready agent, and the five hardest-won lessons from the journey.
+                        Three months ago, I had a big frustration: every AI assistant I used was trapped behind a text box. Then Google announced the Gemini Live Agent Challenge, and I saw a chance to build the AI assistant I'd always wanted — one that sees, hears, and speaks in real time. This post covers why I chose the Gemini Live API, how I used Google Cloud to ship a production-ready agent, and the five hardest-won lessons from the journey.
                     </p>
 
                     <h3>The Gemini Live API Changed Everything</h3>
@@ -83,19 +71,19 @@
                         Before the Live API, building a real-time voice agent meant stitching together speech-to-text, an LLM, and text-to-speech — three separate APIs with compounding latency. The Gemini Live API collapses all of that into a single bidirectional stream. You send raw 16kHz PCM audio in, and you get native audio responses back. No transcription step. No synthesis step. Just a conversation.
                     </p>
                     <p>
-                        But the feature that truly unlocked Arqivon was <strong>multimodal input</strong>. The Live API accepts audio <em>and</em> video simultaneously through <code>send_realtime_input()</code>. We stream JPEG frames from the phone camera at 2fps alongside continuous voice — and Gemini processes both in a single context window. When a user points their camera at a foreign menu and asks "what does this say?", Gemini doesn't need a separate vision API call. It just <em>sees</em> and <em>answers</em>.
+                        But the feature that truly unlocked Arqivon was <strong>multimodal input</strong>. The Live API accepts audio <em>and</em> video simultaneously through <code>send_realtime_input()</code>. I stream JPEG frames from the phone camera at 2fps alongside continuous voice — and Gemini processes both in a single context window. When a user points their camera at a foreign menu and asks "what does this say?", Gemini doesn't need a separate vision API call. It just <em>sees</em> and <em>answers</em>.
                     </p>
                     <p>
                         Add native <strong>barge-in</strong> (interrupt the AI mid-sentence and it immediately pivots), <strong>function calling</strong> (17 agentic tools across 4 modes), and <strong>native VAD</strong> (voice activity detection built into the API) — and you have everything you need for a truly live agent.
                     </p>
 
-                    <h3>Our Google Cloud Stack</h3>
+                    <h3>My Google Cloud Stack</h3>
                     <p>
                         Arqivon runs entirely on Google Cloud:
                     </p>
                     <ul class="blog-list">
                         <li><strong>Gemini 2.5 Flash (Native Audio)</strong> via the <code>google-genai</code> SDK — the brain of every interaction</li>
-                        <li><strong>Cloud Run</strong> — our FastAPI backend, configured with 1-hour WebSocket timeout, always-on CPU, and min 1 instance for zero cold starts</li>
+                        <li><strong>Cloud Run</strong> — my FastAPI backend, configured with 1-hour WebSocket timeout, always-on CPU, and min 1 instance for zero cold starts</li>
                         <li><strong>Cloud Firestore</strong> — persistent storage for sessions, memories, translations, and exported documents</li>
                         <li><strong>Firebase Auth</strong> — Google Sign-In with Admin SDK verification on the backend</li>
                         <li><strong>Secret Manager</strong> — secure injection of the Gemini API key into Cloud Run</li>
@@ -105,16 +93,16 @@
                         Deployment is a single command: <code>./deploy.sh</code> builds the Docker image, pushes to Container Registry, and deploys to Cloud Run with all secrets wired.
                     </p>
 
-                    <h3>Five Things We Learned the Hard Way</h3>
+                    <h3>Five Things I Learned the Hard Way</h3>
 
                     <h4>1. Interruptions are the hardest part of real-time AI</h4>
                     <p>
-                        Barge-in sounds simple — the user talks, the AI stops. In practice, when the user interrupts, audio chunks from the AI's previous response are still in the WebSocket pipeline. If you play those stale chunks, the user hears a garbled overlap. We implemented a 300ms "interrupt drop window" that silently discards any AI audio arriving after an interruption event. It took five audit passes and 32 bug fixes to get this right.
+                        Barge-in sounds simple — the user talks, the AI stops. In practice, when the user interrupts, audio chunks from the AI's previous response are still in the WebSocket pipeline. If you play those stale chunks, the user hears a garbled overlap. I implemented a 300ms "interrupt drop window" that silently discards any AI audio arriving after an interruption event. It took five audit passes and 32 bug fixes to get this right.
                     </p>
 
                     <h4>2. The <code>google-genai</code> SDK moves fast — pin your version</h4>
                     <p>
-                        Version 1.64.0 deprecated <code>session.send()</code> and split it into three separate methods. Our entire backend broke overnight. Lesson: pin your SDK version, test upgrades in a branch, and regression-test all agent modes before merging.
+                        Version 1.64.0 deprecated <code>session.send()</code> and split it into three separate methods. My entire backend broke overnight. Lesson: pin your SDK version, test upgrades in a branch, and regression-test all agent modes before merging.
                     </p>
 
                     <h4>3. Cloud Run WebSocket timeout defaults will kill your session</h4>
@@ -124,12 +112,12 @@
 
                     <h4>4. Mode-specific agents beat one "do everything" prompt</h4>
                     <p>
-                        We initially built one agent with all 17 tools. It worked, but it was mediocre at everything. Splitting into four specialized modes — each with its own system prompt and tool subset — made each persona dramatically better. The Translator only sees translation tools. The Tutor only sees tutoring tools. Constraints create quality.
+                        I initially built one agent with all 17 tools. It worked, but it was mediocre at everything. Splitting into four specialized modes — each with its own system prompt and tool subset — made each persona dramatically better. The Translator only sees translation tools. The Tutor only sees tutoring tools. Constraints create quality.
                     </p>
 
                     <h4>5. Test interruptions, not just happy paths</h4>
                     <p>
-                        Our stress testing protocol includes: interrupt 3 times in 10 seconds, switch modes while AI is speaking, kill the app mid-response and reconnect. These edge cases surfaced bugs that normal testing never would. We wrote 99 automated tests, but the most valuable QA was always the manual stress runs.
+                        My stress testing protocol includes: interrupt 3 times in 10 seconds, switch modes while AI is speaking, kill the app mid-response and reconnect. These edge cases surfaced bugs that normal testing never would. I wrote 99 automated tests, but the most valuable QA was always the manual stress runs.
                     </p>
 
                     <h3>The Result: An Agent That Sees Your World</h3>
@@ -151,8 +139,8 @@
                     <div class="blog-author">
                         <div class="blog-author__avatar">EM</div>
                         <div class="blog-author__info">
-                            <strong>Emmanuel Mfon</strong>
-                            <span>Founder &middot; Builder of Arqivon &middot; #GeminiLiveAgentChallenge</span>
+                            <strong>Emmanuel Veranyuy Mfon</strong>
+                            <span>Solo Builder of Arqivon &middot; #GeminiLiveAgentChallenge</span>
                         </div>
                     </div>
                 </div>
@@ -167,24 +155,24 @@
                     <span class="blog-card__tag">Engineering</span>
                     <span class="blog-card__read">12 min read</span>
                 </div>
-                <h2 class="blog-card__title">Building Arqivon: How We Turned a Phone Camera Into a Real-Time AI Agent With the Gemini Live API</h2>
+                <h2 class="blog-card__title">Building Arqivon: How I Turned a Phone Camera Into a Real-Time AI Agent With the Gemini Live API</h2>
                 <p class="blog-card__subtitle">A deep dive into designing, building, and shipping a multimodal live agent that sees, hears, and acts — for the Gemini Live Agent Challenge.</p>
 
                 <div class="blog-content">
 
                     <p class="blog-content__lead">
-                        What if your AI assistant could see the world through your eyes — in real time? Not a photo you upload five minutes later, but a continuous, living feed of what's happening right now. That question became Arqivon, and this is the story of how we built it.
+                        What if your AI assistant could see the world through your eyes — in real time? Not a photo you upload five minutes later, but a continuous, living feed of what's happening right now. That question became Arqivon, and this is the story of how I built it.
                     </p>
 
-                    <h3>The Spark: Why We Built a Living Lens</h3>
+                    <h3>The Spark: Why I Built a Living Lens</h3>
                     <p>
-                        We're a small team, and we've all felt the friction of traditional AI assistants. You're standing in a foreign city, staring at a sign in a language you don't understand. You pull out your phone, open a translation app, take a photo, crop it, wait, and eventually get a translation. By then, you've already walked past the sign.
+                        I've always felt the friction of traditional AI assistants. You're standing in a foreign city, staring at a sign in a language you don't understand. You pull out your phone, open a translation app, take a photo, crop it, wait, and eventually get a translation. By then, you've already walked past the sign.
                     </p>
                     <p>
                         Or you're helping your kid with homework. They're stuck on a quadratic equation. You try to type the equation into ChatGPT (good luck formatting that on a phone keyboard), wait 15 seconds, read a wall of text, then try to explain it back to a confused 13-year-old. The moment is gone.
                     </p>
                     <p>
-                        When Google announced the <strong>Gemini Live Agent Challenge</strong>, we saw our opening. The Gemini Live API's native audio support — bidirectional, real-time, with barge-in and function calling — was exactly the missing piece. We could build what we'd always wanted: an AI agent that you don't <em>type at</em>, but one that you <em>look with</em> and <em>talk to</em>.
+                        When Google announced the <strong>Gemini Live Agent Challenge</strong>, I saw my opening. The Gemini Live API's native audio support — bidirectional, real-time, with barge-in and function calling — was exactly the missing piece. I could build what I'd always wanted: an AI agent that you don't <em>type at</em>, but one that you <em>look with</em> and <em>talk to</em>.
                     </p>
 
                     <h3>Architecture: The Three-Legged Stool</h3>
@@ -204,12 +192,12 @@
                         <div class="blog-arch__item">
                             <div class="blog-arch__icon">🤖</div>
                             <h4>Gemini 2.5 Flash Live API</h4>
-                            <p>The brain. Receives audio + vision, responds with native audio, and invokes function calls against our 17-tool registry. Native VAD enables barge-in — users can interrupt mid-sentence.</p>
+                            <p>The brain. Receives audio + vision, responds with native audio, and invokes function calls against my 17-tool registry. Native VAD enables barge-in — users can interrupt mid-sentence.</p>
                         </div>
                     </div>
 
                     <p>
-                        The key insight was that the backend should be a <strong>thin relay</strong>, not a processing layer. We don't do any AI inference on our server. Cloud Run receives the raw audio + video from the client, forwards it to Gemini via the <code>google-genai</code> SDK's <code>aio.live.connect()</code>, and routes the responses back. This keeps latency under 200ms and lets us scale to hundreds of concurrent users without GPU infrastructure.
+                        The key insight was that the backend should be a <strong>thin relay</strong>, not a processing layer. I don't do any AI inference on my server. Cloud Run receives the raw audio + video from the client, forwards it to Gemini via the <code>google-genai</code> SDK's <code>aio.live.connect()</code>, and routes the responses back. This keeps latency under 200ms and scales to hundreds of concurrent users without GPU infrastructure.
                     </p>
 
                     <h3>The Tool Registry: Where the Magic Happens</h3>
@@ -257,7 +245,7 @@
 
                     <h3>Lesson 1: The SDK Migration That Almost Broke Everything</h3>
                     <p>
-                        Three weeks into development, we hit our first major crisis. We'd built the entire backend around <code>session.send()</code> for sending audio and video to Gemini. Then <code>google-genai</code> version 1.64.0 dropped and <strong>deprecated the entire method</strong>.
+                        Three weeks into development, I hit my first major crisis. I'd built the entire backend around <code>session.send()</code> for sending audio and video to Gemini. Then <code>google-genai</code> version 1.64.0 dropped and <strong>deprecated the entire method</strong>.
                     </p>
                     <p>
                         The replacement was three separate methods:
@@ -268,10 +256,10 @@
                         <li><code>send_tool_response()</code> for returning function call results</li>
                     </ul>
                     <p>
-                        This broke our multi-turn conversations completely. The old unified <code>send()</code> handled everything, but now we had to carefully route different message types to different methods. Tool responses sent via <code>send_realtime_input()</code> would silently fail. Text sent via <code>send_tool_response()</code> would crash.
+                        This broke my multi-turn conversations completely. The old unified <code>send()</code> handled everything, but now I had to carefully route different message types to different methods. Tool responses sent via <code>send_realtime_input()</code> would silently fail. Text sent via <code>send_tool_response()</code> would crash.
                     </p>
                     <p>
-                        <strong>Takeaway:</strong> When using a fast-moving SDK like <code>google-genai</code>, pin your version in <code>requirements.txt</code> and test every upgrade in isolation. We now run <code>pip install --upgrade google-genai</code> in a dedicated branch and regression-test all four modes before merging.
+                        <strong>Takeaway:</strong> When using a fast-moving SDK like <code>google-genai</code>, pin your version in <code>requirements.txt</code> and test every upgrade in isolation. I now run <code>pip install --upgrade google-genai</code> in a dedicated branch and regression-test all four modes before merging.
                     </p>
 
                     <h3>Lesson 2: Android Audio Focus Is a Silent Killer</h3>
@@ -279,9 +267,9 @@
                         The <code>record</code> Flutter plugin silently dies when another app steals audio focus. No error, no callback, no exception. The recorder just stops producing data, and the WebSocket sends empty frames to the backend, which Gemini interprets as silence.
                     </p>
                     <p>
-                        We discovered this the hard way during a demo — the phone played a notification sound, the recorder died, and the agent went completely silent. The fix was an <code>ensureRecording()</code> function that checks recorder state every audio cycle and force-restarts if needed:
+                        I discovered this the hard way during a demo — the phone played a notification sound, the recorder died, and the agent went completely silent. The fix was an <code>ensureRecording()</code> function that checks recorder state every audio cycle and force-restarts if needed:
                     </p>
-                    <pre class="blog-code"><code>// Simplified version of our fix
+                    <pre class="blog-code"><code>// Simplified version of the fix
 Future&lt;void&gt; ensureRecording() async {
   if (!_recorder.isRecording) {
     await _recorder.stop();
@@ -311,15 +299,15 @@ Future&lt;void&gt; ensureRecording() async {
 
                     <h3>Lesson 4: Camera FPS Is a Balancing Act</h3>
                     <p>
-                        We started at 10fps — seemed reasonable for "real-time vision." Gemini immediately rate-limited us. Dropped to 5fps — still too aggressive for multimodal streaming. 3fps was borderline.
+                        I started at 10fps — seemed reasonable for "real-time vision." Gemini immediately rate-limited me. Dropped to 5fps — still too aggressive for multimodal streaming. 3fps was borderline.
                     </p>
                     <p>
-                        We settled on <strong>2fps</strong>. Two frames per second sounds absurdly slow, but it turns out that for a vision agent that's identifying objects, reading text, and analyzing scenes, 2fps provides more than enough visual information. The user is typically holding their camera steady anyway. And at 2fps, we never hit Gemini rate limits, even during rapid-fire Q&A sessions.
+                        I settled on <strong>2fps</strong>. Two frames per second sounds absurdly slow, but it turns out that for a vision agent that's identifying objects, reading text, and analyzing scenes, 2fps provides more than enough visual information. The user is typically holding their camera steady anyway. And at 2fps, I never hit Gemini rate limits, even during rapid-fire Q&A sessions.
                     </p>
 
                     <h3>Lesson 5: Fresh Audio Player Per Turn Prevents Playback Bugs</h3>
                     <p>
-                        Early on, we reused a single <code>AudioPlayer</code> instance across multiple AI responses. This caused bizarre issues on Android — audio from the previous turn would sometimes bleed into the current one, or the player would enter a corrupted state after being interrupted mid-sentence.
+                        Early on, I reused a single <code>AudioPlayer</code> instance across multiple AI responses. This caused bizarre issues on Android — audio from the previous turn would sometimes bleed into the current one, or the player would enter a corrupted state after being interrupted mid-sentence.
                     </p>
                     <p>
                         The fix was simple but counterintuitive: create a fresh <code>AudioPlayer</code> for every AI response turn, dispose the old one, and let the garbage collector handle cleanup. This added maybe 5ms of overhead but eliminated an entire class of audio bugs.
@@ -327,7 +315,7 @@ Future&lt;void&gt; ensureRecording() async {
 
                     <h3>The PDF Export Pipeline: From Voice to Document</h3>
                     <p>
-                        One of our favorite features is the <code>export_document</code> tool. When you're in Tutor mode and the AI just walked you through solving a calculus problem, you can say "export that as a PDF" and Gemini invokes the export tool with the structured content.
+                        One of my favorite features is the <code>export_document</code> tool. When you're in Tutor mode and the AI just walked you through solving a calculus problem, you can say "export that as a PDF" and Gemini invokes the export tool with the structured content.
                     </p>
                     <p>
                         The pipeline works like this:
@@ -342,16 +330,16 @@ Future&lt;void&gt; ensureRecording() async {
                         The entire flow — from voice command to PDF in your hand — takes under 3 seconds.
                     </p>
 
-                    <h3>What We'd Do Differently</h3>
+                    <h3>What I'd Do Differently</h3>
                     <ul class="blog-list">
-                        <li><strong>Start with mode separation earlier.</strong> We originally built a single "do everything" agent and retro-fitted modes. Starting with isolated agents from day one would have saved weeks.</li>
-                        <li><strong>Invest in WebSocket testing infrastructure.</strong> Testing real-time audio/video WebSocket flows is hard. We relied too much on manual testing on physical devices. A mock WebSocket test harness would have caught the SDK migration bug earlier.</li>
-                        <li><strong>Ship the landing page earlier.</strong> Having a public-facing website earlier would have helped us collect feedback and refine the pitch before the submission deadline.</li>
+                        <li><strong>Start with mode separation earlier.</strong> I originally built a single "do everything" agent and retro-fitted modes. Starting with isolated agents from day one would have saved weeks.</li>
+                        <li><strong>Invest in WebSocket testing infrastructure.</strong> Testing real-time audio/video WebSocket flows is hard. I relied too much on manual testing on physical devices. A mock WebSocket test harness would have caught the SDK migration bug earlier.</li>
+                        <li><strong>Ship the landing page earlier.</strong> Having a public-facing website earlier would have helped me collect feedback and refine the pitch before the submission deadline.</li>
                     </ul>
 
                     <h3>What's Next</h3>
                     <p>
-                        Arqivon is live and deployed. You can <a href="index.html#demo">try it right now</a> — web, Android, or iOS. But this is just the beginning. We're exploring:
+                        Arqivon is live and deployed. You can <a href="index.html#demo">try it right now</a> — web, Android, or iOS. But this is just the beginning. I'm exploring:
                     </p>
                     <ul class="blog-list">
                         <li>Persistent memory across sessions — the agent remembering your learning progress, translation history, and support tickets</li>
@@ -374,8 +362,8 @@ Future&lt;void&gt; ensureRecording() async {
                     <div class="blog-author">
                         <div class="blog-author__avatar">EM</div>
                         <div class="blog-author__info">
-                            <strong>Emmanuel Mfon</strong>
-                            <span>Founder &middot; Builder of Arqivon</span>
+                            <strong>Emmanuel Veranyuy Mfon</strong>
+                            <span>Solo Builder of Arqivon</span>
                         </div>
                     </div>
                 </div>
@@ -390,14 +378,7 @@ Future&lt;void&gt; ensureRecording() async {
             <div class="footer__inner">
                 <div class="footer__brand">
                     <a href="index.html" class="navbar__brand">
-                        <div class="navbar__logo">
-                            <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
-                                <circle cx="14" cy="14" r="12" stroke="url(#lg-f)" stroke-width="2.5"/>
-                                <circle cx="14" cy="14" r="5" fill="url(#lg-f)"/>
-                                <path d="M14 2V6M14 22V26M2 14H6M22 14H26" stroke="url(#lg-f)" stroke-width="2" stroke-linecap="round"/>
-                                <defs><linearGradient id="lg-f" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7C5CFC"/><stop offset="1" stop-color="#00D4AA"/></linearGradient></defs>
-                            </svg>
-                        </div>
+                        <img src="assets/images/logo-128.png" alt="Arqivon" width="28" height="28" class="navbar__logo-img">
                         <span class="navbar__name">Arqivon</span>
                     </a>
                     <p class="footer__tagline">The AI that sees your world.</p>
