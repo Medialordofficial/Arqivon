@@ -210,6 +210,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   /// Detects when the backend/Gemini stops responding entirely.
   Timer? _responseWatchdog;
+
+  /// Detects when no new audio chunks arrive during AI response.
+  Timer? _responseStaleTimer;
   bool _restartInFlight = false;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
@@ -535,6 +538,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Only send audio when NOT muted.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
+        // ── Echo suppression ──────────────────────────────────
+        // Do NOT forward mic audio while the AI is actively responding.
+        // Even with echoCancel:true, speaker audio leaks into the mic on
+        // many devices, causing Gemini's VAD to fire 'interrupted' events
+        // that kill the AI's response mid-sentence. The user can still
+        // interrupt by tapping the orb (tap-to-interrupt).
+        if (cur != null && cur.isResponding) return;
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
           _log.fine(
@@ -690,6 +700,63 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     final newMuted = !current.isMuted;
     _log.info('toggleMute: isMuted=$newMuted');
     state = AsyncData(current.copyWith(isMuted: newMuted));
+  }
+
+  /// Explicitly interrupt the AI's current response (tap-to-interrupt).
+  ///
+  /// Stops playback, clears pending audio, commits partial transcript,
+  /// and resumes mic forwarding so the user can speak. Sends END_TURN
+  /// to signal Gemini that the user wants to talk.
+  void interruptResponse() {
+    final current = state.valueOrNull ?? const LiveSessionState();
+    if (!current.isResponding) return;
+    _log.info('user tap-to-interrupt');
+    _turnCompleteTimer?.cancel();
+    _interruptedAt = DateTime.now();
+    _lastUserTranscriptAt = null;
+    _responseStaleTimer?.cancel();
+
+    // Commit partial texts
+    final partialMsgs = <ChatMessage>[...current.chatMessages];
+    final partialUser = _turnUserTexts.join(' ').trim();
+    if (partialUser.isNotEmpty) {
+      partialMsgs.add(ChatMessage(text: partialUser, isUser: true));
+    }
+    final partialAi = _turnAiTexts.join(' ').trim();
+    if (partialAi.isNotEmpty) {
+      final heard = partialAi.length > 80
+          ? '${partialAi.substring(0, 80)}…'
+          : '$partialAi…';
+      partialMsgs.add(ChatMessage(text: heard));
+    }
+    _turnUserTexts.clear();
+    _turnAiTexts.clear();
+    _pendingAiText = '';
+
+    // Stop playback immediately.
+    unawaited(_audio?.stopPlayback() ?? Future.value());
+
+    // Ensure recorder is alive for the next user utterance.
+    if (current.isStreaming) {
+      _audio?.ensureRecording();
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        isResponding: false,
+        clearTranscript: true,
+        clearUserTranscript: true,
+        clearTranslation: true,
+        clearAction: true,
+        clearTutorStep: true,
+        clearExport: true,
+        clearPhotoCapture: true,
+        chatMessages: partialMsgs,
+      ),
+    );
+
+    // Tell Gemini to end the current turn so it starts listening.
+    _ws?.send(const WsInbound(type: 'end_turn'));
   }
 
   Future<void> stopSession({bool saveToArchive = true}) async {
@@ -859,7 +926,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // just queue them. The audio_service playback loop's
           // demand-flush handles them automatically.
           _audio?.queueChunk(msg.data!);
-          // Mark as responding for UI (but mic stays active for barge-in).
+          // Mark as responding for UI.
+          // Mic audio forwarding is paused while isResponding (echo
+          // suppression). The user can tap the orb to interrupt.
           if (!current.isResponding) {
             // AI started responding — clear the user-spoke tracker so the
             // response watchdog doesn't fire.
@@ -870,6 +939,20 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
               current.copyWith(isResponding: true, clearUserTranscript: true),
             );
           }
+          // Reset the response stale timer. If no new audio chunk arrives
+          // within 15 seconds, auto-finalize the turn to prevent the client
+          // from being stuck in isResponding=true forever.
+          _responseStaleTimer?.cancel();
+          _responseStaleTimer = Timer(const Duration(seconds: 15), () {
+            _responseStaleTimer = null;
+            final cur = state.valueOrNull;
+            if (cur != null && cur.isResponding) {
+              _log.warning(
+                'response stale timer fired — no audio for 15s, auto-finalizing',
+              );
+              _audio?.flushAndPlay();
+            }
+          });
         }
         break;
 
@@ -1029,6 +1112,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'turn_complete':
         _log.info('turn_complete received from backend (debounced)');
         _lastUserTranscriptAt = null;
+        _responseStaleTimer?.cancel();
         _scheduleTurnCompleteFinalize();
         break;
 
@@ -1037,6 +1121,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Gemini keeps hearing the user’s speech and can pivot its response.
         _log.info('interrupted received from backend');
         _turnCompleteTimer?.cancel();
+        _responseStaleTimer?.cancel();
         _interruptedAt = DateTime.now();
         _lastUserTranscriptAt = null;
         // Commit partial USER text (what they said before the interrupt).
@@ -1145,6 +1230,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _ampSub?.cancel();
     _modeSwitchDebounce?.cancel();
     _turnCompleteTimer?.cancel();
+    _responseStaleTimer?.cancel();
     amplitudeNotifier.dispose();
     _ws?.dispose();
     _audio?.dispose();

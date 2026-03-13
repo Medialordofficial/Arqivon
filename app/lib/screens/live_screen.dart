@@ -876,7 +876,17 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                             .amplitudeNotifier,
                                         onMicTap: () {
                                           HapticFeedback.heavyImpact();
-                                          _toggleSession();
+                                          // If AI is responding, tap interrupts
+                                          // the response instead of toggling
+                                          // the session.
+                                          if (isResponding) {
+                                            ref
+                                                .read(liveSessionProvider
+                                                    .notifier)
+                                                .interruptResponse();
+                                          } else {
+                                            _toggleSession();
+                                          }
                                         },
                                         onMuteTap: () {
                                           HapticFeedback.mediumImpact();

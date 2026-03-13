@@ -1023,6 +1023,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     _last_audio_time: float = time.monotonic()
     _last_gemini_response_time: float = time.monotonic()
     _server_audio_chunk_count: int = 0
+    # True while iterating a Gemini model turn (audio chunks flowing).
+    # Used to prevent health-check reconnects during active responses.
+    _in_model_turn: bool = False
     # Flag: set by end_session so the next set_mode always reconnects.
     _force_next_reconnect: bool = False
     # Guard against duplicate saves on WS teardown after explicit save/discard.
@@ -1442,7 +1445,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Gemini → Client ───────────────────────────────────────────────────
 
     async def receive_from_gemini() -> None:
-        nonlocal session, live_ctx, _last_gemini_response_time, _server_audio_chunk_count
+        nonlocal session, live_ctx, _last_gemini_response_time, _server_audio_chunk_count, _in_model_turn
         max_inner_retries = 5
         inner_retry_count = 0
         try:
@@ -1462,11 +1465,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     tracer.start("gemini_first_token")
                     first_token_traced = False
                     tracer.start("gemini_turn")
+                    _in_model_turn = False
                     async for response in turn:
                         # Bail out immediately on mode switch / reconnect so
                         # we re-attach to the new Gemini session without delay.
                         if _mode_switch_event.is_set():
-                            logger.info("Mode switch mid-turn — breaking receive loop")
+                            logger.info("Mode switch mid-turn — sending turn_complete before breaking")
+                            if _in_model_turn:
+                                try:
+                                    await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
+                                except Exception:
+                                    pass
+                                _in_model_turn = False
                             break
                         _last_gemini_response_time = time.monotonic()
                         # Model audio / text
@@ -1481,6 +1491,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         tracer.start("audio_out")
                                         audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
                                         _server_audio_chunk_count += 1
+                                        _in_model_turn = True
                                         if _server_audio_chunk_count % 20 == 1:
                                             logger.info("Audio chunk #%d → client: %d bytes",
                                                         _server_audio_chunk_count, len(part.inline_data.data))
@@ -1512,6 +1523,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         type=OutboundType.TRANSCRIPT, text=txt,
                                     ))
                             if sc.turn_complete:
+                                _in_model_turn = False
                                 turn_ms = tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
@@ -1529,6 +1541,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                             turn_ms, client_audio_count, session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
                             if sc.interrupted:
+                                _in_model_turn = False
+                                logger.warning(">>> INTERRUPTED by Gemini VAD (audio_out=%d) — possible echo false-trigger",
+                                               _server_audio_chunk_count)
                                 tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
@@ -1746,6 +1761,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                             logger.error("Voice switch reconnect failed: %s", ve)
 
                 except Exception as inner_exc:
+                    # If we were mid-turn when the error hit, notify the
+                    # client so it doesn't stay stuck in isResponding=true.
+                    if _in_model_turn:
+                        _in_model_turn = False
+                        try:
+                            await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
+                            logger.info("Sent TURN_COMPLETE to client after mid-turn exception")
+                        except Exception:
+                            pass
                     if cancel_event.is_set():
                         break
                     # If a mode switch just happened, the old session was
@@ -1856,18 +1880,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     async def _session_health_check() -> None:
         """Detect a stuck/dead Gemini session and force-reconnect.
 
-        Triggers after 15s of total Gemini silence AND the user has spoken
-        within the last 20s.  Runs every 4s for fast detection.  Resets the
+        Triggers after 30s of total Gemini silence AND the user has spoken
+        within the last 20s.  Runs every 5s for detection.  Resets the
         timer after reconnecting to prevent loops.
+        NEVER triggers while a model turn is actively streaming audio.
         """
         while not cancel_event.is_set():
-            await asyncio.sleep(4.0)
+            await asyncio.sleep(5.0)
             if session is None or _switching.is_set():
+                continue
+            # Never interrupt an active model turn — Gemini IS responding.
+            if _in_model_turn:
                 continue
             since_response = time.monotonic() - _last_gemini_response_time
             since_audio = time.monotonic() - _last_audio_time
             user_spoke_recently = client_audio_count > 20 and since_audio < 20.0
-            if since_response > 15.0 and user_spoke_recently:
+            if since_response > 30.0 and user_spoke_recently:
                 logger.warning(
                     "Session health: Gemini silent %.0fs, user spoke %.0fs ago — reconnecting",
                     since_response, since_audio,

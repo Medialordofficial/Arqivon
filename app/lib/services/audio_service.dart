@@ -49,6 +49,7 @@ class AudioService {
   bool _reflushNeeded = false;
   bool _turnComplete = false;
   Timer? _completionDebounce;
+  Timer? _staleWatchdog;
 
   /// Called when the AI turn's playback finishes (all tracks played).
   VoidCallback? onPlaybackDone;
@@ -97,24 +98,48 @@ class AudioService {
   }
 
   void _onProcessingState(ProcessingState state) {
-    if (state == ProcessingState.completed && _turnComplete) {
-      // Cancel any previous debounce and start a fresh one.
-      // Using a cancelable Timer prevents multiple pending callbacks
-      // from racing when the player cycles completed→playing→completed
-      // on short WAV files during long responses.
-      _completionDebounce?.cancel();
-      _completionDebounce = Timer(const Duration(milliseconds: 500), () {
-        _completionDebounce = null;
-        if (_turnComplete &&
-            _player?.processingState == ProcessingState.completed &&
-            _pcmBuffer.isEmpty &&
-            !_flushing) {
-          _log.info('player completed all tracks + turn complete → done');
-          _playbackTimeout?.cancel();
-          _resetForNextTurn();
-        }
-      });
+    if (state == ProcessingState.completed) {
+      if (_turnComplete) {
+        // Cancel any previous debounce and start a fresh one.
+        _completionDebounce?.cancel();
+        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
+          _completionDebounce = null;
+          if (_turnComplete &&
+              _player?.processingState == ProcessingState.completed &&
+              _pcmBuffer.isEmpty &&
+              !_flushing) {
+            _log.info('player completed all tracks + turn complete → done');
+            _playbackTimeout?.cancel();
+            _resetForNextTurn();
+          }
+        });
+      } else {
+        // Player finished all queued tracks but turn_complete hasn't arrived
+        // yet. Start a stale watchdog: if no new chunks arrive within 5s,
+        // auto-finalize to prevent the client from being stuck forever.
+        _startStaleWatchdog();
+      }
     }
+  }
+
+  /// Start a watchdog that auto-finalizes the turn if no new audio
+  /// chunks arrive after the player has finished all queued tracks.
+  /// This handles the case where the server never sends turn_complete
+  /// (e.g. due to a mid-turn exception or reconnect).
+  void _startStaleWatchdog() {
+    _staleWatchdog?.cancel();
+    _staleWatchdog = Timer(const Duration(seconds: 5), () {
+      _staleWatchdog = null;
+      if (!_turnComplete &&
+          _player?.processingState == ProcessingState.completed &&
+          _pcmBuffer.isEmpty &&
+          !_flushing) {
+        _log.warning('stale-chunk watchdog fired — auto-finalizing turn');
+        _turnComplete = true;
+        _playbackTimeout?.cancel();
+        _resetForNextTurn();
+      }
+    });
   }
 
   // ── Recording ─────────────────────────────────────────────────────
@@ -258,6 +283,10 @@ class AudioService {
     final bytes = base64Decode(base64Audio);
     _pcmBuffer.addAll(bytes);
 
+    // New audio arrived — cancel stale-chunk watchdog if active.
+    _staleWatchdog?.cancel();
+    _staleWatchdog = null;
+
     if (_turnComplete) {
       // Late chunk after turn_complete — flush urgently.
       _flushTimer?.cancel();
@@ -347,28 +376,15 @@ class AudioService {
     _ensurePlayer();
     if (_turnId != turnSnapshot) return;
 
-    // Cancel any pending completion debounce — new audio is arriving,
+    // Cancel any pending completion / stale debounce — new audio is arriving,
     // so the turn is NOT done yet.
     _completionDebounce?.cancel();
     _completionDebounce = null;
+    _staleWatchdog?.cancel();
+    _staleWatchdog = null;
 
-    final isFirst = _playlist == null;
-    // Detect when the player has stopped producing audio — it has
-    // completed all tracks, gone idle, or is simply not playing.
-    // In ANY of these cases we MUST create a fresh playlist and call
-    // setAudioSource + play() to resume.
-    final needsResume = !isFirst &&
-        (_player!.processingState == ProcessingState.completed ||
-            _player!.processingState == ProcessingState.idle ||
-            !_player!.playing);
-
-    if (isFirst || needsResume) {
-      // Create the playlist WITH the first track already inside it.
-      // Setting an EMPTY ConcatenatingAudioSource causes just_audio to
-      // fire ProcessingState.completed immediately on some Android
-      // devices, which puts the player in a state where the subsequent
-      // play() silently does nothing — causing long responses to go
-      // completely silent after the first batch of WAVs finishes.
+    if (_playlist == null) {
+      // ── First WAV of the turn — create playlist and start playback ──
       _playlist = ConcatenatingAudioSource(
         children: [AudioSource.file(path)],
       );
@@ -380,11 +396,10 @@ class AudioService {
         return;
       }
       if (_turnId != turnSnapshot) return;
-
-      final label = isFirst ? 'START' : 'RESUME';
-      _log.info('▶ $label gapless playback (tracks=${_playlist!.length})');
+      _log.info('▶ START gapless playback (tracks=${_playlist!.length})');
       _player!.play();
     } else {
+      // ── Subsequent WAV — add to EXISTING playlist (never create new) ──
       try {
         await _playlist!.add(AudioSource.file(path));
       } catch (e) {
@@ -392,9 +407,33 @@ class AudioService {
         return;
       }
       if (_turnId != turnSnapshot) return;
+
       final idx = _playlist!.length - 1;
-      _log.info('♪ track $idx queued (gapless, '
-          'playlist=${_playlist!.length})');
+
+      // If the player has finished all previous tracks (completed/idle)
+      // or simply isn't playing, we must explicitly seek to the newly
+      // added track and resume.  This avoids the fragile pattern of
+      // creating a brand-new ConcatenatingAudioSource which can silently
+      // fail on some Android devices.
+      final needsResume =
+          _player!.processingState == ProcessingState.completed ||
+              _player!.processingState == ProcessingState.idle ||
+              !_player!.playing;
+
+      if (needsResume) {
+        try {
+          await _player!.seek(Duration.zero, index: idx);
+        } catch (e) {
+          _log.warning('seek to track $idx failed: $e');
+        }
+        if (_turnId != turnSnapshot) return;
+        _log.info(
+            '▶ RESUME gapless playback at track $idx (playlist=${_playlist!.length})');
+        _player!.play();
+      } else {
+        _log.info('♪ track $idx queued (gapless, '
+            'playlist=${_playlist!.length})');
+      }
     }
   }
 
@@ -468,6 +507,8 @@ class AudioService {
 
   void _resetForNextTurn() {
     _playbackTimeout?.cancel();
+    _staleWatchdog?.cancel();
+    _staleWatchdog = null;
     _turnComplete = false;
     _chunkIndex = 0;
     _playlist = null;
@@ -493,6 +534,8 @@ class AudioService {
     _flushTimer?.cancel();
     _completionDebounce?.cancel();
     _completionDebounce = null;
+    _staleWatchdog?.cancel();
+    _staleWatchdog = null;
     _pcmBuffer.clear();
     _turnComplete = false;
     _chunkIndex = 0;
@@ -587,6 +630,7 @@ class AudioService {
     _playbackTimeout?.cancel();
     _flushTimer?.cancel();
     _completionDebounce?.cancel();
+    _staleWatchdog?.cancel();
     _recordSub?.cancel();
     _processingStateSub?.cancel();
     _turnId++;
