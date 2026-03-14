@@ -218,7 +218,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// Used to detect when Gemini never acknowledges user speech at all.
   DateTime? _activeStreamingAt;
   DateTime? _echoIgnoreUntil;
-  bool _spokenInterruptInFlight = false;
   bool _restartInFlight = false;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
@@ -932,45 +931,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     });
   }
 
-  void _interruptForRecognizedSpeech() {
-    final current = state.valueOrNull ?? const LiveSessionState();
-    if (!current.isResponding || _spokenInterruptInFlight) return;
-
-    _spokenInterruptInFlight = true;
-    _log.info('confirmed user speech during AI playback — interrupting now');
-    _turnCompleteTimer?.cancel();
-    _responseStaleTimer?.cancel();
-    _interruptedAt = DateTime.now();
-
-    final partialMsgs = <ChatMessage>[...current.chatMessages];
-    final partialAi = _joinTranscript(_turnAiTexts);
-    if (partialAi.isNotEmpty) {
-      final heard = partialAi.length > 80
-          ? '${partialAi.substring(0, 80)}…'
-          : '$partialAi…';
-      partialMsgs.add(ChatMessage(text: heard));
-    }
-    _turnAiTexts.clear();
-    _pendingAiText = '';
-
-    unawaited(_audio?.stopPlayback() ?? Future.value());
-
-    state = AsyncData(
-      current.copyWith(
-        isResponding: false,
-        clearTranscript: true,
-        clearTranslation: true,
-        clearAction: true,
-        clearTutorStep: true,
-        clearExport: true,
-        clearPhotoCapture: true,
-        chatMessages: partialMsgs,
-      ),
-    );
-
-    _ws?.send(const WsInbound(type: 'end_turn'));
-  }
-
   // ── Message handling ──────────────────────────────────────────────────
 
   void _handleServerMessage(WsOutbound msg) {
@@ -982,7 +942,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     switch (msg.type) {
       case 'audio':
         if (msg.data != null) {
-          _spokenInterruptInFlight = false;
           // Drop trailing audio that arrives right after an interruption.
           // These are stale chunks from the old response that were already
           // in the WebSocket pipeline when the backend sent INTERRUPTED.
@@ -1064,10 +1023,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // gate so audio from the AI's new response is accepted
           // immediately instead of waiting for the 500ms timeout.
           _interruptedAt = null;
-
-          if (current.isResponding) {
-            _interruptForRecognizedSpeech();
-          }
         }
         // Show accumulated user text for a readable live bubble.
         final latest = state.valueOrNull ?? current;
@@ -1203,7 +1158,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       case 'turn_complete':
         _log.info('turn_complete received from backend (debounced)');
-        _spokenInterruptInFlight = false;
         _lastUserTranscriptAt = null;
         _responseStaleTimer?.cancel();
         _scheduleTurnCompleteFinalize();
@@ -1213,14 +1167,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // User barged in — stop playback and restart mic IMMEDIATELY so
         // Gemini keeps hearing the user’s speech and can pivot its response.
         _log.info('interrupted received from backend');
-        final wasHandledLocally = _spokenInterruptInFlight;
-        _spokenInterruptInFlight = false;
         _turnCompleteTimer?.cancel();
         _responseStaleTimer?.cancel();
         _interruptedAt = DateTime.now();
         _lastUserTranscriptAt = null;
 
-        if (wasHandledLocally || !current.isResponding) {
+        if (!current.isResponding) {
           break;
         }
 
