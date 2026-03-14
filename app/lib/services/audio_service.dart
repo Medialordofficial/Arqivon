@@ -50,6 +50,7 @@ class AudioService {
   bool _turnComplete = false;
   Timer? _completionDebounce;
   Timer? _staleWatchdog;
+  Timer? _bufferStuckTimer;
 
   /// Called when the AI turn's playback finishes (all tracks played).
   VoidCallback? onPlaybackDone;
@@ -97,8 +98,12 @@ class AudioService {
     _log.info('persistent player created');
   }
 
-  void _onProcessingState(ProcessingState state) {
-    if (state == ProcessingState.completed) {
+  void _onProcessingState(ProcessingState ps) {
+    // Cancel buffering-stuck timer on ANY state change.
+    _bufferStuckTimer?.cancel();
+    _bufferStuckTimer = null;
+
+    if (ps == ProcessingState.completed) {
       if (_turnComplete) {
         // Cancel any previous debounce and start a fresh one.
         _completionDebounce?.cancel();
@@ -119,6 +124,22 @@ class AudioService {
         // auto-finalize to prevent the client from being stuck forever.
         _startStaleWatchdog();
       }
+    } else if (ps == ProcessingState.buffering) {
+      // If the player is stuck buffering (e.g. corrupt WAV, disk error)
+      // for more than 5s, force-finalize to prevent hanging forever.
+      _bufferStuckTimer = Timer(const Duration(seconds: 5), () {
+        _bufferStuckTimer = null;
+        if (_player?.processingState == ProcessingState.buffering) {
+          _log.warning(
+              'player stuck in BUFFERING for 5s — force-finalizing turn');
+          _turnComplete = true;
+          _playbackTimeout?.cancel();
+          try {
+            _player?.stop();
+          } catch (_) {}
+          _resetForNextTurn();
+        }
+      });
     }
   }
 
@@ -292,14 +313,12 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First flush of a turn: wait 200ms to accumulate a small first
-      // WAV. Shorter delay = faster time-to-first-audio. The playlist
-      // resume logic handles the case where the player finishes a short
-      // track before the next is ready.
-      // Subsequent flushes: 150ms for low-latency streaming.
+      // First flush: 300ms to build a solid first WAV (~300ms audio).
+      // Subsequent: 200ms for steady streaming.
+      // Bigger WAVs = fewer playlist transitions = fewer audio gaps.
       final delay = _playlist == null
-          ? const Duration(milliseconds: 200)
-          : const Duration(milliseconds: 150);
+          ? const Duration(milliseconds: 300)
+          : const Duration(milliseconds: 200);
       _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
@@ -330,12 +349,17 @@ class AudioService {
   }
 
   Future<void> _doFlush() async {
-    // When turn is complete, flush ANY remaining PCM regardless of size.
-    // During streaming, require at least ~20ms of audio (960 bytes at
-    // 24kHz 16-bit mono). Small threshold avoids creating tiny WAVs
-    // that are mostly click artifacts, while not blocking real audio.
     if (_pcmBuffer.isEmpty) return;
-    if (!_turnComplete && _pcmBuffer.length < 960) {
+    // Even on turn_complete, skip tiny tails (<10ms) — they're click
+    // artifacts, not meaningful audio.
+    if (_turnComplete && _pcmBuffer.length < 480) {
+      _pcmBuffer.clear();
+      return;
+    }
+    // During streaming, require at least ~150ms of audio (7200 bytes at
+    // 24kHz 16-bit mono). Bigger WAVs = fewer playlist transitions =
+    // far fewer opportunities for audio gaps/skipping.
+    if (!_turnComplete && _pcmBuffer.length < 7200) {
       return;
     }
     final turnSnapshot = _turnId;
@@ -495,10 +519,10 @@ class AudioService {
     }
 
     // Safety timeout in case playback hangs.
-    // 120s is generous — a long Gemini response can be 30-60s of audio,
-    // and the player may need to resume multiple batches.
+    // 30s is generous for 1-3 sentence responses. If something is
+    // stuck, we recover quickly instead of waiting 2 minutes.
     _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 120), () {
+    _playbackTimeout = Timer(const Duration(seconds: 30), () {
       _log.warning('playback TIMEOUT — force-resetting');
       _turnId++;
       _player?.stop();
@@ -510,6 +534,8 @@ class AudioService {
     _playbackTimeout?.cancel();
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
+    _bufferStuckTimer?.cancel();
+    _bufferStuckTimer = null;
     _turnComplete = false;
     _chunkIndex = 0;
     _playlist = null;
@@ -537,6 +563,8 @@ class AudioService {
     _completionDebounce = null;
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
+    _bufferStuckTimer?.cancel();
+    _bufferStuckTimer = null;
     _pcmBuffer.clear();
     _turnComplete = false;
     _chunkIndex = 0;
@@ -632,6 +660,7 @@ class AudioService {
     _flushTimer?.cancel();
     _completionDebounce?.cancel();
     _staleWatchdog?.cancel();
+    _bufferStuckTimer?.cancel();
     _recordSub?.cancel();
     _processingStateSub?.cancel();
     _turnId++;

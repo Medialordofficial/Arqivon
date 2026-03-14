@@ -926,8 +926,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // demand-flush handles them automatically.
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI.
-          // Mic audio forwarding is paused while isResponding (echo
-          // suppression). The user can tap the orb to interrupt.
+          // Mic audio always flows (true bidirectional). The user
+          // can also tap the orb to interrupt.
           if (!current.isResponding) {
             // AI started responding — clear the user-spoke tracker so the
             // response watchdog doesn't fire.
@@ -947,7 +947,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             final cur = state.valueOrNull;
             if (cur != null && cur.isResponding) {
               _log.warning(
-                'response stale timer fired — no audio for 15s, auto-finalizing',
+                'response stale timer fired — no audio for 8s, auto-finalizing',
               );
               _audio?.flushAndPlay();
             }
