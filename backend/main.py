@@ -1355,7 +1355,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         )
                 elif msg.type == InboundType.END_TURN:
                     if session is not None:
-                        await session.send_client_content(turns=None, turn_complete=True)
+                        # If model is currently speaking, suppress remaining
+                        # audio immediately so the client hears silence.
+                        if _in_model_turn and not _client_interrupted:
+                            _client_interrupted = True
+                            logger.info("end_turn during model turn — suppressing audio, sending INTERRUPTED")
+                            await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
+                            await session.send_client_content(turns=None, turn_complete=True)
+                        elif not _in_model_turn:
+                            # Model is NOT speaking — safe to signal turn_complete
+                            # so Gemini knows the user wants to talk.
+                            await session.send_client_content(turns=None, turn_complete=True)
+                        # else: _client_interrupted already True — skip to avoid
+                        # double turn_complete which corrupts Gemini session.
 
                 # ── Explicit discard (client tapped Discard) ──────────
                 elif msg.type == InboundType.DISCARD_SESSION:

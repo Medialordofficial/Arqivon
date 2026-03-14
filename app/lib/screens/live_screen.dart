@@ -508,7 +508,7 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     // ── Listeners ──────────────────────────────────────────────────
     ref.listen<AsyncValue<LiveSessionState>>(liveSessionProvider, (prev, next) {
       if (next is AsyncError && prev is! AsyncError) {
-        final errMsg = next.error?.toString() ?? 'Unknown error';
+        final errMsg = next.error.toString() ?? 'Unknown error';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errMsg),
