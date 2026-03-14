@@ -1489,9 +1489,56 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 _in_model_turn = False
                             break
                         _last_gemini_response_time = time.monotonic()
-                        # Model audio / text
+                        # Server content (audio, transcription, turn signals)
                         if response.server_content is not None:
                             sc = response.server_content
+
+                            # -- Transcriptions: ALWAYS forward, even on interrupt --
+                            # Process FIRST so partial transcripts are captured
+                            # before any break.
+                            if sc.input_transcription:
+                                txt = getattr(sc.input_transcription, 'text', None)
+                                if txt:
+                                    _turn_user_parts.append(txt)
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.USER_TRANSCRIPT, text=txt,
+                                    ))
+                            if sc.output_transcription:
+                                txt = getattr(sc.output_transcription, 'text', None)
+                                if txt:
+                                    _turn_ai_parts.append(txt)
+                                    await _send_json(websocket, OutboundMessage(
+                                        type=OutboundType.TRANSCRIPT, text=txt,
+                                    ))
+
+                            # -- Interrupted: checked BEFORE audio ----------------
+                            # If Gemini detected a barge-in, do NOT forward any
+                            # remaining audio from the dying turn.  Break out of
+                            # the turn iterator immediately so no stale chunks
+                            # reach the client.
+                            if sc.interrupted:
+                                _in_model_turn = False
+                                logger.warning(">>> INTERRUPTED (audio_out=%d)",
+                                               _server_audio_chunk_count)
+                                tracer.end("gemini_turn")
+                                if not first_token_traced:
+                                    tracer.end("gemini_first_token")
+                                session_record.turn_count += 1
+                                user_sentence = _join_transcript(_turn_user_parts)
+                                ai_sentence = _join_transcript(_turn_ai_parts)
+                                if user_sentence:
+                                    conversation_transcript.append(user_sentence)
+                                if ai_sentence:
+                                    conversation_transcript.append(f"AI: {ai_sentence}…")
+                                _turn_user_parts.clear()
+                                _turn_ai_parts.clear()
+                                input_q.flush()
+                                logger.info(">>> interrupted -- breaking turn (turns=%d)",
+                                            session_record.turn_count)
+                                await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
+                                break  # EXIT turn iterator -- no more stale audio
+
+                            # -- Model audio (only runs if NOT interrupted) --------
                             if sc.model_turn and sc.model_turn.parts:
                                 for part in sc.model_turn.parts:
                                     if part.inline_data and part.inline_data.data:
@@ -1503,42 +1550,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                         _server_audio_chunk_count += 1
                                         _in_model_turn = True
                                         if _server_audio_chunk_count % 20 == 1:
-                                            logger.info("Audio chunk #%d → client: %d bytes",
+                                            logger.info("Audio chunk #%d -> client: %d bytes",
                                                         _server_audio_chunk_count, len(part.inline_data.data))
                                         await _send_json(websocket, OutboundMessage(
                                             type=OutboundType.AUDIO, data=audio_b64,
                                         ))
                                         tracer.end("audio_out")
                                     elif part.text:
-                                        # For native-audio models the text parts are internal
-                                        # "thinking" fragments — do NOT surface them as
-                                        # transcript to the client.
                                         logger.debug("model_turn text (suppressed): %s", part.text[:80])
-                            # Send user speech transcription as a distinct type
-                            # so the client can show "You said: …" separately.
-                            if sc.input_transcription:
-                                txt = getattr(sc.input_transcription, 'text', None)
-                                if txt:
-                                    _turn_user_parts.append(txt)
-                                    await _send_json(websocket, OutboundMessage(
-                                        type=OutboundType.USER_TRANSCRIPT, text=txt,
-                                    ))
-                            # Forward AI output transcription so the client can
-                            # display what the AI said as text.
-                            if sc.output_transcription:
-                                txt = getattr(sc.output_transcription, 'text', None)
-                                if txt:
-                                    _turn_ai_parts.append(txt)
-                                    await _send_json(websocket, OutboundMessage(
-                                        type=OutboundType.TRANSCRIPT, text=txt,
-                                    ))
+
+                            # -- Turn complete: clean turn boundary ----------------
                             if sc.turn_complete:
                                 _in_model_turn = False
                                 turn_ms = tracer.end("gemini_turn")
                                 if not first_token_traced:
                                     tracer.end("gemini_first_token")
                                 session_record.turn_count += 1
-                                # Commit accumulated transcript fragments as full sentences.
                                 user_sentence = _join_transcript(_turn_user_parts)
                                 ai_sentence = _join_transcript(_turn_ai_parts)
                                 if user_sentence:
@@ -1550,29 +1577,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 logger.info(">>> turn_complete (%.0fms, audio_in=%d, turns=%d)",
                                             turn_ms, client_audio_count, session_record.turn_count)
                                 await _send_json(websocket, OutboundMessage(type=OutboundType.TURN_COMPLETE))
-                            if sc.interrupted:
-                                _in_model_turn = False
-                                logger.warning(">>> INTERRUPTED by Gemini VAD (audio_out=%d) — possible echo false-trigger",
-                                               _server_audio_chunk_count)
-                                tracer.end("gemini_turn")
-                                if not first_token_traced:
-                                    tracer.end("gemini_first_token")
-                                session_record.turn_count += 1
-                                # Commit partial transcript for this interrupted turn.
-                                user_sentence = _join_transcript(_turn_user_parts)
-                                ai_sentence = _join_transcript(_turn_ai_parts)
-                                if user_sentence:
-                                    conversation_transcript.append(user_sentence)
-                                if ai_sentence:
-                                    conversation_transcript.append(f"AI: {ai_sentence}…")
-                                _turn_user_parts.clear()
-                                _turn_ai_parts.clear()
-                                # Flush pending non-audio inputs on barge-in so
-                                # stale video frames don't contaminate the new turn.
-                                input_q.flush()
-                                logger.info(">>> interrupted from Gemini (turns=%d) — flushed pending video",
-                                            session_record.turn_count)
-                                await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
+                                break  # Clean turn boundary
 
                         # Tool / function calls
                         if response.tool_call is not None:

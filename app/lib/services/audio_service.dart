@@ -357,10 +357,10 @@ class AudioService {
       _pcmBuffer.clear();
       return;
     }
-    // During streaming, require at least ~200ms of audio (9600 bytes at
-    // 24kHz 16-bit mono). Large enough to avoid micro-WAV gaps, small
-    // enough that audio doesn't get stranded waiting for more data.
-    if (!_turnComplete && _pcmBuffer.length < 9600) {
+    // During streaming, require at least ~100ms of audio (4800 bytes at
+    // 24kHz 16-bit mono). Smaller threshold = faster audio start, while
+    // still avoiding micro-WAV gap artifacts.
+    if (!_turnComplete && _pcmBuffer.length < 4800) {
       return;
     }
     final turnSnapshot = _turnId;
@@ -591,9 +591,9 @@ class AudioService {
 
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
-    // ── Step 2: async cleanup (best-effort) ──
+    // ── Step 2: async cleanup ──
     try {
-      _player?.stop();
+      await _player?.stop();
     } catch (_) {}
     try {
       await oldPlaylist?.clear();

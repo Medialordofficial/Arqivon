@@ -942,17 +942,16 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'audio':
         if (msg.data != null) {
           // Drop trailing audio that arrives right after an interruption.
-          // These are chunks that were already in the WebSocket buffer when
-          // the server detected the barge-in. Playing them would cause the
-          // user to hear old-response audio after they interrupted.
-          // IMPORTANT: Keep this window VERY short (50ms). Gemini's new
-          // response audio arrives within 300-500ms of the interrupt.
-          // A longer window (e.g. 500ms) drops the first words of the
-          // NEW response, causing "text shows but audio doesn't match."
+          // These are stale chunks from the old response that were already
+          // in the WebSocket pipeline when the backend sent INTERRUPTED.
+          // The backend now breaks out of the turn iterator on interrupt,
+          // so very few stale chunks arrive. 500ms is safe because the
+          // new response takes 1.5s+ (user speech + Gemini processing).
+          // The gate is also cleared early by user_transcript arrival.
           if (_interruptedAt != null) {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
-            if (msSinceInterrupt < 150) {
+            if (msSinceInterrupt < 500) {
               break; // silently drop trailing chunk from old response
             }
             _interruptedAt = null; // grace window elapsed
@@ -1014,11 +1013,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       case 'user_transcript':
         if (msg.text != null && msg.text!.isNotEmpty) {
           _turnUserTexts.add(msg.text!);
-          // Record when the server confirmed user speech — used by the
-          // response watchdog to detect if Gemini heard but never replied.
+          // Record when the server confirmed user speech.
           _lastUserTranscriptAt = DateTime.now();
-          // Reset active-streaming tracker now that server acknowledged speech.
           _activeStreamingAt = null;
+          // User spoke and server acknowledged — clear the interrupt
+          // gate so audio from the AI's new response is accepted
+          // immediately instead of waiting for the 500ms timeout.
+          _interruptedAt = null;
         }
         // Show accumulated user text for a readable live bubble.
         state = AsyncData(
