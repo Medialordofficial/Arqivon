@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -12,12 +11,12 @@ import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// **Playback architecture (v8 — StreamAudioSource, continuous):**
+/// **Playback architecture (v9 — collect-then-play):**
 ///
-/// 1. PCM chunks arrive via [queueChunk].
-/// 2. They are appended directly into a single in-memory WAV stream source.
-/// 3. A **single [AudioPlayer]** plays that source continuously.
-/// 4. Barge-in closes the current stream and stops the player immediately.
+/// 1. PCM chunks arrive via [queueChunk] and accumulate in [_pcmBuffer].
+/// 2. On [flushAndPlay] (turn_complete), a complete WAV is built in memory.
+/// 3. A **single [AudioPlayer]** plays that complete WAV via a static source.
+/// 4. Barge-in stops the player immediately.
 class AudioService {
   static final _log = AppLogger('AudioService');
 
@@ -32,16 +31,13 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback — StreamAudioSource (continuous) ─────────────────────
+  // ── Playback — collect-then-play ──────────────────────────────────
   AudioPlayer? _player;
   Timer? _playbackTimeout;
-  Timer? _flushTimer;
 
   final List<int> _pcmBuffer = [];
-  LivePcmStreamSource? _liveSource;
   StreamSubscription<ProcessingState>? _processingStateSub;
   int _turnId = 0;
-  bool _flushing = false;
   bool _turnComplete = false;
   Timer? _completionDebounce;
   Timer? _staleWatchdog;
@@ -150,8 +146,7 @@ class AudioService {
       _staleWatchdog = null;
       if (!_turnComplete &&
           _player?.processingState == ProcessingState.completed &&
-          _pcmBuffer.isEmpty &&
-          !_flushing) {
+          _pcmBuffer.isEmpty) {
         _log.warning('stale-chunk watchdog fired — auto-finalizing turn');
         _turnComplete = true;
         _playbackTimeout?.cancel();
@@ -293,83 +288,56 @@ class AudioService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  PLAYBACK — StreamAudioSource, continuous (v8)
+  //  PLAYBACK — collect-then-play (v9)
   // ══════════════════════════════════════════════════════════════════
 
-  /// Queue a base64-encoded PCM chunk from the AI into the active stream.
+  /// Buffer a base64-encoded PCM chunk from the AI.
   void queueChunk(String base64Audio) {
     final bytes = base64Decode(base64Audio);
+    _turnComplete = false;
 
     // New audio arrived — cancel stale-chunk watchdog if active.
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
 
-    if (_liveSource == null) {
-      _turnComplete = false;
-      _liveSource = LivePcmStreamSource();
-      unawaited(_startStreamPlayback(_liveSource!));
-    }
-
-    _liveSource!.addPcm(bytes);
-  }
-
-  Future<void> _startStreamPlayback(LivePcmStreamSource source) async {
-    await _ensureAudioSession();
-    _ensurePlayer();
-
-    _completionDebounce?.cancel();
-    _completionDebounce = null;
-    _staleWatchdog?.cancel();
-    _staleWatchdog = null;
-
-    try {
-      await _player!.setAudioSource(source, initialPosition: Duration.zero);
-      if (!identical(_liveSource, source)) return;
-      _log.info('▶ START continuous playback stream');
-      await _player!.play();
-    } catch (e) {
-      _log.severe('setAudioSource(stream) failed: $e');
-    }
+    _pcmBuffer.addAll(bytes);
   }
 
   /// Called by the provider on `turn_complete`.
+  /// Builds a complete WAV from buffered PCM and plays it.
   Future<void> flushAndPlay() async {
-    _flushTimer?.cancel();
     _turnComplete = true;
-    _log.info('flushAndPlay — streamOpen=${_liveSource != null}');
+    final pcmLen = _pcmBuffer.length;
+    _log.info('flushAndPlay — $pcmLen PCM bytes buffered');
 
-    final source = _liveSource;
-    source?.closeTurn();
-
-    // If nothing was played this turn at all.
-    if (source == null) {
+    if (pcmLen == 0) {
       _log.info('no audio this turn');
       onPlaybackDone?.call();
       return;
     }
 
-    // If player already finished all tracks, schedule a debounced check.
-    // Uses _turnFullyDone which also checks _pendingWavCount to prevent
-    // premature finalization while WAVs are still being written/enqueued.
-    if (_player?.processingState == ProcessingState.completed) {
-      if (_turnFullyDone) {
-        _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
-          _completionDebounce = null;
-          if (_turnFullyDone &&
-              _player?.processingState == ProcessingState.completed) {
-            _log.info(
-                'player already completed + turn done → reset (debounced)');
-            _playbackTimeout?.cancel();
-            _resetForNextTurn();
-          }
-        });
-      }
+    // Build a complete WAV byte array.
+    final wavBytes = _buildCompleteWav(_pcmBuffer, sampleRate: 24000);
+    _pcmBuffer.clear();
+
+    await _ensureAudioSession();
+    _ensurePlayer();
+
+    final capturedTurnId = _turnId;
+    final source = _CompletedWavSource(wavBytes);
+
+    try {
+      await _player!.setAudioSource(source);
+      if (_turnId != capturedTurnId) return; // barge-in happened
+      _log.info('▶ playing ${wavBytes.length} byte WAV');
+      await _player!.play();
+    } catch (e) {
+      _log.severe('WAV playback failed: $e');
+      _resetForNextTurn();
+      return;
     }
 
     // Safety timeout in case playback hangs.
-    // 60s is generous for multi-sentence responses. If something is
-    // stuck, we recover instead of waiting forever.
     _playbackTimeout?.cancel();
     _playbackTimeout = Timer(const Duration(seconds: 60), () {
       _log.warning('playback TIMEOUT — force-resetting');
@@ -379,32 +347,56 @@ class AudioService {
     });
   }
 
+  /// Builds a proper WAV file with correct headers from raw PCM data.
+  static Uint8List _buildCompleteWav(List<int> pcmData,
+      {int sampleRate = 24000}) {
+    final dataSize = pcmData.length;
+    final fileSize = 36 + dataSize; // RIFF chunk size = 36 + data
+    final byteRate = sampleRate * 2; // 16-bit mono
+    final header = ByteData(44);
+
+    void w(int off, String s) {
+      for (var i = 0; i < s.length; i++) {
+        header.setUint8(off + i, s.codeUnitAt(i));
+      }
+    }
+
+    w(0, 'RIFF');
+    header.setUint32(4, fileSize, Endian.little);
+    w(8, 'WAVE');
+    w(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little); // PCM
+    header.setUint16(22, 1, Endian.little); // mono
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(28, byteRate, Endian.little);
+    header.setUint16(32, 2, Endian.little); // block align
+    header.setUint16(34, 16, Endian.little); // bits/sample
+    w(36, 'data');
+    header.setUint32(40, dataSize, Endian.little);
+
+    final wav = Uint8List(44 + dataSize);
+    wav.setAll(0, header.buffer.asUint8List());
+    wav.setAll(44, pcmData);
+    return wav;
+  }
+
   void _resetForNextTurn() {
     _playbackTimeout?.cancel();
-    _flushTimer?.cancel();
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
     _bufferStuckTimer?.cancel();
     _bufferStuckTimer = null;
     _turnComplete = false;
     _pcmBuffer.clear();
-    _liveSource = null;
 
     _log.info('turn reset — firing onPlaybackDone');
     onPlaybackDone?.call();
   }
 
   /// Stop playback immediately (barge-in).
-  ///
-  /// **Critical ordering:** All synchronous state is reset FIRST so that
-  /// any concurrent queueChunk/flush calls see the new turn immediately.
-  /// The async player.stop() and playlist.clear() happen afterwards and
-  /// are best-effort — even if they take a few ms, the turnId increment
-  /// guarantees any in-flight WAV writes are discarded.
   Future<void> stopPlayback() async {
-    // ── Step 1: synchronous state reset (runs on the event loop tick) ──
     _playbackTimeout?.cancel();
-    _flushTimer?.cancel();
     _completionDebounce?.cancel();
     _completionDebounce = null;
     _staleWatchdog?.cancel();
@@ -415,13 +407,8 @@ class AudioService {
     _turnComplete = false;
     _turnId++;
 
-    final oldSource = _liveSource;
-    _liveSource = null;
-    oldSource?.closeTurn();
-
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
-    // ── Step 2: async cleanup (with timeout to prevent hang) ──
     try {
       await _player?.stop().timeout(const Duration(milliseconds: 500));
     } catch (_) {}
@@ -459,7 +446,6 @@ class AudioService {
   void dispose() {
     _disposed = true;
     _playbackTimeout?.cancel();
-    _flushTimer?.cancel();
     _completionDebounce?.cancel();
     _staleWatchdog?.cancel();
     _bufferStuckTimer?.cancel();
@@ -474,76 +460,27 @@ class AudioService {
     _amplitudeController.close();
     _recorder.dispose();
     _player = null;
-    _liveSource?.closeTurn();
-    _liveSource = null;
   }
 }
 
-class LivePcmStreamSource extends StreamAudioSource {
-  final Queue<Uint8List> _pendingChunks = ListQueue<Uint8List>();
-  Completer<void>? _nextChunk;
-  bool _closed = false;
-
-  void addPcm(List<int> bytes) {
-    if (_closed || bytes.isEmpty) return;
-    _pendingChunks.add(Uint8List.fromList(bytes));
-    _nextChunk?.complete();
-    _nextChunk = null;
-  }
-
-  void closeTurn() {
-    _closed = true;
-    _nextChunk?.complete();
-    _nextChunk = null;
-  }
+/// A simple [StreamAudioSource] backed by a complete, immutable byte array.
+/// [request] can be called any number of times — each call serves from the
+/// same in-memory WAV data. This avoids all ExoPlayer multi-request issues.
+class _CompletedWavSource extends StreamAudioSource {
+  final Uint8List _wav;
+  _CompletedWavSource(this._wav);
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
+    start ??= 0;
+    end ??= _wav.length;
     return StreamAudioResponse(
-      rangeRequestsSupported: false,
-      sourceLength: null,
-      contentLength: null,
-      offset: 0,
+      sourceLength: _wav.length,
+      contentLength: end - start,
+      offset: start,
+      stream: Stream.value(_wav.sublist(start, end)),
       contentType: 'audio/wav',
-      stream: _streamBytes(),
     );
-  }
-
-  Stream<List<int>> _streamBytes() async* {
-    yield _wavHeader();
-    while (true) {
-      while (_pendingChunks.isNotEmpty) {
-        yield _pendingChunks.removeFirst();
-      }
-      if (_closed) break;
-      _nextChunk ??= Completer<void>();
-      await _nextChunk!.future;
-    }
-  }
-
-  Uint8List _wavHeader({int sampleRate = 24000}) {
-    final byteRate = sampleRate * 2;
-    final header = ByteData(44);
-    void writeString(int offset, String value) {
-      for (var i = 0; i < value.length; i++) {
-        header.setUint8(offset + i, value.codeUnitAt(i));
-      }
-    }
-
-    writeString(0, 'RIFF');
-    header.setUint32(4, 0x7fffffff, Endian.little);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    header.setUint32(16, 16, Endian.little);
-    header.setUint16(20, 1, Endian.little); // PCM
-    header.setUint16(22, 1, Endian.little); // 1 channel
-    header.setUint32(24, sampleRate, Endian.little);
-    header.setUint32(28, byteRate, Endian.little);
-    header.setUint16(32, 2, Endian.little); // block align
-    header.setUint16(34, 16, Endian.little); // bits per sample
-    writeString(36, 'data');
-    header.setUint32(40, 0x7fffffff, Endian.little);
-    return header.buffer.asUint8List();
   }
 }
 

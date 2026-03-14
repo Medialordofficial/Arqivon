@@ -1,0 +1,60 @@
+            _session_health_check(),
+            return_exceptions=True,
+        )
+    finally:
+        session_record.ended_at = datetime.now(timezone.utc).timestamp()
+        # Auto-title based on mode
+        mode_titles = {
+            AgentMode.TRANSLATOR: "Translation Session",
+            AgentMode.TUTOR: "Tutoring Session",
+            AgentMode.SUPPORT: "Support Session",
+        }
+        if session_record.title == "Live Session":
+            session_record.title = mode_titles.get(current_mode, "Live Session")
+
+        # Log final latency summary
+        latency_summary = tracer.summary()
+        if latency_summary:
+            logger.info("LATENCY FINAL[%s]: %s", session_id[:8], latency_summary)
+        if frame_throttle.dropped > 0:
+            logger.info("Dropped %d redundant video frames", frame_throttle.dropped)
+
+        # Only save on WS teardown if the user actually interacted
+        # AND no explicit save/discard already happened this session.
+        if not _session_already_saved and (session_record.turn_count > 0 or client_audio_count > 10):
+            # ── Generate AI summary from conversation transcript ──────
+            if conversation_transcript and len(conversation_transcript) >= 2:
+                try:
+                    transcript_text = "\n".join(conversation_transcript[-50:])
+                    summary_prompt = (
+                        "Summarize this voice conversation in 1-2 concise sentences. "
+                        "Focus on key topics discussed and any decisions or outcomes. "
+                        "Do NOT use quotes or say 'the user said'. Just state what was "
+                        "discussed.\n\n"
+                        f"Mode: {current_mode}\n"
+                        f"Conversation transcript:\n{transcript_text}"
+                    )
+                    summary_response = await genai_client.aio.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=summary_prompt,
+                    )
+                    if summary_response.text:
+                        session_record.summary = summary_response.text.strip()
+                        logger.info("AI summary generated: %s", session_record.summary[:100])
+                except Exception as summary_err:
+                    logger.warning("Failed to generate session summary: %s", summary_err)
+            # Store the conversation transcript with the session for
+            # text-based "playback" in the archive.
+            session_record.transcript = list(conversation_transcript)
+            await _save_session(user_id, session_record)
+        if live_ctx is not None:
+            try:
+                await live_ctx.__aexit__(None, None, None)
+            except Exception as exc:
+                logger.debug("Error closing Gemini context on teardown: %s", exc)
+        try:
+            await websocket.close()
+        except Exception as exc:
+            logger.debug("Error closing websocket on teardown: %s", exc)
+        logger.info("Session ended: user=%s session=%s mode=%s turns=%d",
+                     user_id, session_id, current_mode, session_record.turn_count)
