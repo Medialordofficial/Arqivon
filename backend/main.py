@@ -934,10 +934,10 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
                 # LOW start sensitivity prevents false barge-ins caused by
-                # speaker audio echoing into the mic during AI playback.
-                # The mic is always active (true bidirectional), so the VAD
-                # must be conservative about detecting "user speech" vs echo.
-                # LOW means only clear, intentional speech triggers an interrupt.
+                # speaker audio echoing into the mic. With HIGH, Gemini
+                # constantly detects echo as "speech" and NEVER produces a
+                # response (stays in permanent "user speaking" mode).
+                # Hardware AEC helps but is not perfect on all Android devices.
                 start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
@@ -945,7 +945,7 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 # be clipped.
                 prefix_padding_ms=300,
                 # 800ms silence before end-of-speech detection.
-                # Balances natural pauses with responsive turn-taking.
+                # Allows natural pauses mid-sentence without premature cutoff.
                 silence_duration_ms=800,
             )
         ),
@@ -1036,6 +1036,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # True while iterating a Gemini model turn (audio chunks flowing).
     # Used to prevent health-check reconnects during active responses.
     _in_model_turn: bool = False
+    # When the client sends end_turn during a model turn, this flag
+    # suppresses remaining audio from the dying turn so the user
+    # hears silence immediately even if Gemini hasn't detected the
+    # barge-in yet.
+    _client_interrupted: bool = False
     # Flag: set by end_session so the next set_mode always reconnects.
     _force_next_reconnect: bool = False
     # Guard against duplicate saves on WS teardown after explicit save/discard.
@@ -1208,7 +1213,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Client → queue router ──────────────────────────────────────────
 
     async def receive_from_client() -> None:
-        nonlocal current_mode, source_lang, target_lang, session_record, _session_already_saved, _force_next_reconnect
+        nonlocal current_mode, source_lang, target_lang, session_record, _session_already_saved, _force_next_reconnect, _client_interrupted
         msg_count = 0
         RATE_LIMIT = 60
         RATE_WINDOW = 10.0
@@ -1366,8 +1371,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             # Model is NOT speaking — safe to signal turn_complete
                             # so Gemini knows the user wants to talk.
                             await session.send_client_content(turns=None, turn_complete=True)
-                        # else: _client_interrupted already True — skip to avoid
-                        # double turn_complete which corrupts Gemini session.
+                        # else: _client_interrupted already True — ignore duplicate end_turn
+                        # to prevent double turn_complete which corrupts Gemini session.
 
                 # ── Explicit discard (client tapped Discard) ──────────
                 elif msg.type == InboundType.DISCARD_SESSION:
@@ -1467,7 +1472,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # ── Gemini → Client ───────────────────────────────────────────────────
 
     async def receive_from_gemini() -> None:
-        nonlocal session, live_ctx, _last_gemini_response_time, _server_audio_chunk_count, _in_model_turn
+        nonlocal session, live_ctx, _last_gemini_response_time, _server_audio_chunk_count, _in_model_turn, _client_interrupted
         max_inner_retries = 5
         inner_retry_count = 0
         try:
@@ -1488,6 +1493,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     first_token_traced = False
                     tracer.start("gemini_turn")
                     _in_model_turn = False
+                    _client_interrupted = False  # reset for new turn
                     async for response in turn:
                         # Bail out immediately on mode switch / reconnect so
                         # we re-attach to the new Gemini session without delay.
@@ -1554,13 +1560,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             if sc.model_turn and sc.model_turn.parts:
                                 for part in sc.model_turn.parts:
                                     if part.inline_data and part.inline_data.data:
+                                        _in_model_turn = True
+                                        # Skip forwarding audio if client already
+                                        # interrupted via tap (end_turn).
+                                        if _client_interrupted:
+                                            _server_audio_chunk_count += 1
+                                            continue
                                         if not first_token_traced:
                                             tracer.end("gemini_first_token")
                                             first_token_traced = True
                                         tracer.start("audio_out")
                                         audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
                                         _server_audio_chunk_count += 1
-                                        _in_model_turn = True
                                         if _server_audio_chunk_count % 20 == 1:
                                             logger.info("Audio chunk #%d -> client: %d bytes",
                                                         _server_audio_chunk_count, len(part.inline_data.data))

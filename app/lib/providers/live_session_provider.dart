@@ -477,8 +477,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // commit deferred AI text to chat, and ensure recorder is alive.
     _audio!.onPlaybackDone = () {
       _log.info('onPlaybackDone fired');
-      // Block mic for 1.2s to prevent reverberating room echo from causing false barge-ins
-      _echoIgnoreUntil = DateTime.now().add(const Duration(milliseconds: 1200));
+      // Brief echo guard after playback ends. Keep this short so normal
+      // turn-taking still feels immediate.
+      _echoIgnoreUntil = DateTime.now().add(const Duration(milliseconds: 250));
       final cur = state.valueOrNull ?? const LiveSessionState();
       final msgs = <ChatMessage>[...cur.chatMessages];
       // Commit deferred AI text now that the user has heard it.
@@ -547,21 +548,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audioChunksSent = 0;
     _audioSub = _audio!.audioStream.listen(
       (b64) {
-        // Only send audio when NOT muted and AI is NOT speaking.
+        // Only send audio when NOT muted.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
-        // ── Half-duplex: suppress mic during AI speech ────────
-        // Android's echo cancellation is imperfect — the AI's own
-        // audio leaks through the mic, causing Gemini's server-side
-        // VAD to detect false "user speech" and interrupt the response.
-        // Pausing mic forwarding while the AI speaks prevents this.
-        // The user can still tap-to-interrupt (the orb calls
-        // interruptResponse() which sets isResponding=false,
-        // immediately resuming mic forwarding).
-        if (cur != null && cur.isResponding) return;
-        
-        // Prevent mic from forwarding the last reverberant room echo
-        if (_echoIgnoreUntil != null && DateTime.now().isBefore(_echoIgnoreUntil!)) return;
+
+        // Prevent mic from forwarding the last reverberant room echo.
+        // Spoken interruptions must still flow while the AI is talking,
+        // so this stays as a very short post-playback guard only.
+        if (_echoIgnoreUntil != null &&
+            DateTime.now().isBefore(_echoIgnoreUntil!)) return;
 
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {

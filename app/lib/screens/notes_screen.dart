@@ -330,6 +330,8 @@ class _TodoTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final createdLabel =
+        DateFormat.yMMMd().add_jm().format(note.createdAt.toLocal());
 
     return Dismissible(
       key: ValueKey(note.id),
@@ -369,7 +371,7 @@ class _TodoTile extends ConsumerWidget {
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          onTap: () => ref.read(toggleNoteDoneProvider)(note.id, !note.isDone),
+          onTap: () => _showTodoActions(context, ref, createdLabel),
           leading: Checkbox(
             value: note.isDone,
             onChanged: (val) =>
@@ -406,7 +408,7 @@ class _TodoTile extends ConsumerWidget {
                   ),
                 ),
               Text(
-                DateFormat.MMMd().add_jm().format(note.createdAt.toLocal()),
+                'Created $createdLabel',
                 style: TextStyle(
                   fontSize: 11,
                   color: cs.onSurface.withValues(alpha: 0.35),
@@ -418,6 +420,55 @@ class _TodoTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showTodoActions(
+    BuildContext context,
+    WidgetRef ref,
+    String createdLabel,
+  ) async {
+    final action = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(note.title),
+                subtitle: Text('Created $createdLabel'),
+              ),
+              ListTile(
+                leading: Icon(
+                  note.isDone
+                      ? Icons.radio_button_unchecked_rounded
+                      : Icons.check_circle_rounded,
+                ),
+                title: Text(note.isDone ? 'Mark as pending' : 'Mark as done'),
+                onTap: () => Navigator.of(context).pop(!note.isDone),
+              ),
+              ListTile(
+                leading: const Icon(Icons.close_rounded),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == null || action == note.isDone) return;
+    await ref.read(toggleNoteDoneProvider)(note.id, action);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(action ? 'Todo marked done' : 'Todo marked pending'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Widget? _priorityBadge(String priority) {
