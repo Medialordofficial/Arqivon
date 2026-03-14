@@ -217,6 +217,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// Timestamp when active audio streaming began (unmuted + sending).
   /// Used to detect when Gemini never acknowledges user speech at all.
   DateTime? _activeStreamingAt;
+  DateTime? _echoIgnoreUntil;
   bool _restartInFlight = false;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
@@ -476,6 +477,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     // commit deferred AI text to chat, and ensure recorder is alive.
     _audio!.onPlaybackDone = () {
       _log.info('onPlaybackDone fired');
+      // Block mic for 1.2s to prevent reverberating room echo from causing false barge-ins
+      _echoIgnoreUntil = DateTime.now().add(const Duration(milliseconds: 1200));
       final cur = state.valueOrNull ?? const LiveSessionState();
       final msgs = <ChatMessage>[...cur.chatMessages];
       // Commit deferred AI text now that the user has heard it.
@@ -556,6 +559,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // interruptResponse() which sets isResponding=false,
         // immediately resuming mic forwarding).
         if (cur != null && cur.isResponding) return;
+        
+        // Prevent mic from forwarding the last reverberant room echo
+        if (_echoIgnoreUntil != null && DateTime.now().isBefore(_echoIgnoreUntil!)) return;
+
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
           _log.fine(

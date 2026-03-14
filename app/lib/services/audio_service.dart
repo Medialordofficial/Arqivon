@@ -80,10 +80,10 @@ class AudioService {
         avAudioSessionCategoryOptions:
             AVAudioSessionCategoryOptions.defaultToSpeaker |
                 AVAudioSessionCategoryOptions.allowBluetooth,
-        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        avAudioSessionMode: AVAudioSessionMode.voiceChat,
         androidAudioAttributes: const AndroidAudioAttributes(
           contentType: AndroidAudioContentType.speech,
-          usage: AndroidAudioUsage.media,
+          usage: AndroidAudioUsage.voiceCommunication,
         ),
         androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
         androidWillPauseWhenDucked: false,
