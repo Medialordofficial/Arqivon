@@ -218,13 +218,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// Used to detect when Gemini never acknowledges user speech at all.
   DateTime? _activeStreamingAt;
   bool _restartInFlight = false;
-
-  // ── Client-side voice interruption detection ──────────────
-  /// Consecutive high-amplitude mic samples while AI is responding.
-  int _voiceInterruptCount = 0;
-
-  /// Cooldown: prevent interrupt spam.
-  DateTime? _lastVoiceInterrupt;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
 
@@ -485,7 +478,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _log.info('onPlaybackDone fired');
       final cur = state.valueOrNull ?? const LiveSessionState();
       final msgs = <ChatMessage>[...cur.chatMessages];
-      // Commit the AI transcript now that the user has heard it.
+      // Commit deferred AI text now that the user has heard it.
       if (_pendingAiText.isNotEmpty) {
         msgs.add(ChatMessage(text: _pendingAiText));
         _pendingAiText = '';
@@ -495,13 +488,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         chatMessages: msgs,
         clearTranscript: true,
       ));
-      // ALWAYS verify recorder health after playback finishes.
-      // On some devices, audio focus shifting to the player during
-      // playback silently kills the recorder stream.  ensureRecording()
-      // checks data freshness (not just isCapturing) and restarts if stale.
-      if (cur.isStreaming) {
-        _audio?.ensureRecording();
-      }
+      // Recorder should already be alive — only restart if data
+      // has genuinely stalled (>2s no data).  Unconditional restart
+      // causes mic on/off flickering.
     };
 
     // ALWAYS send set_mode so the backend creates a Gemini session even
@@ -582,38 +571,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       },
     );
 
-    // Pipe mic amplitude to the ValueNotifier for the orb visualizer
-    // AND detect voice-based interruptions client-side.
+    // Pipe mic amplitude to the ValueNotifier for the orb visualizer.
     _ampSub?.cancel();
-    _voiceInterruptCount = 0;
     _ampSub = _audio!.amplitudeStream.listen(
       (amp) {
         final cur = state.valueOrNull;
         // Show flat line when muted.
         amplitudeNotifier.value = (cur != null && cur.isMuted) ? 0.0 : amp;
-
-        // ── Client-side voice interrupt detection ──────────────
-        // When AI is responding and mic picks up sustained loud input
-        // (echo-cancelled, so high amplitude = user actually speaking),
-        // automatically trigger interruption.  This bypasses Gemini's
-        // server-side VAD which struggles with echo/LOW sensitivity.
-        if (cur != null && cur.isResponding && !cur.isMuted && amp > 0.32) {
-          _voiceInterruptCount++;
-          // ~250ms of sustained speech (5 chunks × ~50ms each)
-          if (_voiceInterruptCount >= 5) {
-            _voiceInterruptCount = 0;
-            final now = DateTime.now();
-            if (_lastVoiceInterrupt == null ||
-                now.difference(_lastVoiceInterrupt!).inMilliseconds > 2000) {
-              _lastVoiceInterrupt = now;
-              _log.info(
-                  'client-side voice interrupt: sustained speech detected');
-              interruptResponse();
-            }
-          }
-        } else {
-          _voiceInterruptCount = 0;
-        }
       },
     );
 
@@ -744,7 +708,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _interruptedAt = null;
       _lastUserTranscriptAt = null;
       _activeStreamingAt = null;
-      _voiceInterruptCount = 0;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
 
@@ -788,7 +751,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _interruptedAt = DateTime.now();
     _lastUserTranscriptAt = null;
     _responseStaleTimer?.cancel();
-    _voiceInterruptCount = 0;
 
     // Commit partial texts
     final partialMsgs = <ChatMessage>[...current.chatMessages];
@@ -1203,7 +1165,6 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _responseStaleTimer?.cancel();
         _interruptedAt = DateTime.now();
         _lastUserTranscriptAt = null;
-        _voiceInterruptCount = 0;
         // Commit partial USER text (what they said before the interrupt).
         // Do NOT commit the AI’s full accumulated text — the user only
         // heard part of it as audio; showing the full transcript is misleading.
@@ -1228,14 +1189,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // response is killed before any new audio can be queued.
         unawaited(_audio?.stopPlayback() ?? Future.value());
 
-        // Tell Gemini to start listening for the user's new input.
-        _ws?.send(const WsInbound(type: 'end_turn'));
-
-        // Ensure recorder is alive so user speech keeps flowing.
-        if (current.isStreaming) {
-          _log.info('ensuring recorder alive after barge-in');
-          _audio?.ensureRecording();
-        }
+        // Do NOT send end_turn here. The backend already handled the
+        // interrupt by calling session.send_client_content(turn_complete=True)
+        // when it detected the barge-in. Sending a SECOND end_turn
+        // corrupts Gemini's session state and causes subsequent responses
+        // to be text-only (no audio).
 
         state = AsyncData(
           current.copyWith(
