@@ -48,6 +48,10 @@ class AudioService {
   bool _flushing = false;
   bool _reflushNeeded = false;
   bool _turnComplete = false;
+
+  /// Number of WAVs written to disk but not yet enqueued to the playlist.
+  /// Prevents premature turn finalization when async disk I/O is in-flight.
+  int _pendingWavCount = 0;
   Timer? _completionDebounce;
   Timer? _staleWatchdog;
   Timer? _bufferStuckTimer;
@@ -98,6 +102,13 @@ class AudioService {
     _log.info('persistent player created');
   }
 
+  /// Check if the turn is truly finished: all audio flushed, enqueued, and played.
+  bool get _turnFullyDone =>
+      _turnComplete &&
+      _pcmBuffer.isEmpty &&
+      !_flushing &&
+      _pendingWavCount <= 0;
+
   void _onProcessingState(ProcessingState ps) {
     // Cancel buffering-stuck timer on ANY state change.
     _bufferStuckTimer?.cancel();
@@ -107,12 +118,10 @@ class AudioService {
       if (_turnComplete) {
         // Cancel any previous debounce and start a fresh one.
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 200), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 350), () {
           _completionDebounce = null;
-          if (_turnComplete &&
-              _player?.processingState == ProcessingState.completed &&
-              _pcmBuffer.isEmpty &&
-              !_flushing) {
+          if (_turnFullyDone &&
+              _player?.processingState == ProcessingState.completed) {
             _log.info('player completed all tracks + turn complete → done');
             _playbackTimeout?.cancel();
             _resetForNextTurn();
@@ -357,10 +366,16 @@ class AudioService {
       _pcmBuffer.clear();
       return;
     }
-    // During streaming, require at least ~100ms of audio (4800 bytes at
-    // 24kHz 16-bit mono). Smaller threshold = faster audio start, while
-    // still avoiding micro-WAV gap artifacts.
-    if (!_turnComplete && _pcmBuffer.length < 4800) {
+    // During streaming, require at least ~80ms of audio (3840 bytes at
+    // 24kHz 16-bit mono). If below threshold, reschedule a flush attempt
+    // so data is NEVER stranded indefinitely in the buffer.
+    if (!_turnComplete && _pcmBuffer.length < 3840) {
+      // Reschedule: if no new chunk arrives, this timer ensures the
+      // buffer is re-checked and eventually flushed when enough data
+      // accumulates or turn_complete lowers the bar.
+      if (_flushTimer == null || !_flushTimer!.isActive) {
+        _flushTimer = Timer(const Duration(milliseconds: 120), _flush);
+      }
       return;
     }
     final turnSnapshot = _turnId;
@@ -384,11 +399,13 @@ class AudioService {
       return;
     }
     _tempFiles.add(path);
+    _pendingWavCount++;
     final audioDurationMs = (pcm.length / (24000 * 2) * 1000).round();
     _log.info('WAV flushed: #${_chunkIndex - 1}, ${pcm.length} bytes '
-        '(${audioDurationMs}ms audio)');
+        '(${audioDurationMs}ms audio), pending=$_pendingWavCount');
 
     await _enqueueWav(path, turnSnapshot);
+    _pendingWavCount--;
   }
 
   // ──────────────────────────────────────────────────────────────────
@@ -495,21 +512,16 @@ class AudioService {
       return;
     }
 
-    // If player already finished all tracks, schedule a debounced check
-    // instead of resetting immediately. This avoids a race where the player
-    // completed the last batch of tracks but a tiny final WAV hasn't been
-    // fully rendered through speakers yet, or where _onProcessingState
-    // won't fire again (state didn't change) so we need to manually trigger
-    // the same debounced completion logic.
+    // If player already finished all tracks, schedule a debounced check.
+    // Uses _turnFullyDone which also checks _pendingWavCount to prevent
+    // premature finalization while WAVs are still being written/enqueued.
     if (_player?.processingState == ProcessingState.completed) {
-      if (_pcmBuffer.isEmpty && !_flushing) {
+      if (_turnFullyDone) {
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 200), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 350), () {
           _completionDebounce = null;
-          if (_turnComplete &&
-              _player?.processingState == ProcessingState.completed &&
-              _pcmBuffer.isEmpty &&
-              !_flushing) {
+          if (_turnFullyDone &&
+              _player?.processingState == ProcessingState.completed) {
             _log.info(
                 'player already completed + turn done → reset (debounced)');
             _playbackTimeout?.cancel();
@@ -539,6 +551,7 @@ class AudioService {
     _bufferStuckTimer = null;
     _turnComplete = false;
     _chunkIndex = 0;
+    _pendingWavCount = 0;
     _playlist = null;
     // Player is NOT disposed — reused for next turn.
 
@@ -578,6 +591,7 @@ class AudioService {
     _chunkIndex = 0;
     _flushing = false;
     _reflushNeeded = false;
+    _pendingWavCount = 0;
     _turnId++;
 
     // Null out the playlist reference BEFORE the async stop so that
@@ -591,9 +605,9 @@ class AudioService {
 
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
-    // ── Step 2: async cleanup ──
+    // ── Step 2: async cleanup (with timeout to prevent hang) ──
     try {
-      await _player?.stop();
+      await _player?.stop().timeout(const Duration(milliseconds: 500));
     } catch (_) {}
     try {
       await oldPlaylist?.clear();

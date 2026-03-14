@@ -952,6 +952,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
             if (msSinceInterrupt < 500) {
+              _log.fine(
+                  'dropping stale audio chunk ${msSinceInterrupt}ms after interrupt');
               break; // silently drop trailing chunk from old response
             }
             _interruptedAt = null; // grace window elapsed
