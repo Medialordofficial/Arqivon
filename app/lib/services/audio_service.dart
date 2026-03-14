@@ -1,22 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../config/logger.dart';
 import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// **Playback architecture (v9 — collect-then-play):**
+/// **Playback architecture (v10 — file-based):**
 ///
 /// 1. PCM chunks arrive via [queueChunk] and accumulate in [_pcmBuffer].
-/// 2. On [flushAndPlay] (turn_complete), a complete WAV is built in memory.
-/// 3. A **single [AudioPlayer]** plays that complete WAV via a static source.
-/// 4. Barge-in stops the player immediately.
+/// 2. On [flushAndPlay] (turn_complete), a complete WAV file is written to disk.
+/// 3. A **single [AudioPlayer]** plays that file via [setFilePath].
+/// 4. No StreamAudioSource / HTTP proxy — ExoPlayer reads the file directly.
+/// 5. Barge-in stops the player immediately.
 class AudioService {
   static final _log = AppLogger('AudioService');
 
@@ -31,14 +34,16 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback — collect-then-play ──────────────────────────────────
+  // ── Playback — file-based (v10) ───────────────────────────────────
   AudioPlayer? _player;
   Timer? _playbackTimeout;
 
   final List<int> _pcmBuffer = [];
+  int _chunkCount = 0;
   StreamSubscription<ProcessingState>? _processingStateSub;
   int _turnId = 0;
   bool _turnComplete = false;
+  String? _currentWavPath;
   Timer? _completionDebounce;
   Timer? _staleWatchdog;
   Timer? _bufferStuckTimer;
@@ -288,51 +293,77 @@ class AudioService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  PLAYBACK — collect-then-play (v9)
+  //  PLAYBACK — file-based (v10)
   // ══════════════════════════════════════════════════════════════════
 
   /// Buffer a base64-encoded PCM chunk from the AI.
   void queueChunk(String base64Audio) {
     final bytes = base64Decode(base64Audio);
     _turnComplete = false;
+    _chunkCount++;
 
     // New audio arrived — cancel stale-chunk watchdog if active.
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
 
     _pcmBuffer.addAll(bytes);
+    if (_chunkCount % 50 == 1) {
+      _log.info(
+          'queueChunk #$_chunkCount — buffer now ${_pcmBuffer.length} bytes');
+    }
   }
 
   /// Called by the provider on `turn_complete`.
-  /// Builds a complete WAV from buffered PCM and plays it.
+  /// Writes a WAV file to the temp directory and plays it directly.
   Future<void> flushAndPlay() async {
     _turnComplete = true;
     final pcmLen = _pcmBuffer.length;
-    _log.info('flushAndPlay — $pcmLen PCM bytes buffered');
+    _log.info('flushAndPlay — $_chunkCount chunks, $pcmLen PCM bytes buffered');
+    _chunkCount = 0;
 
     if (pcmLen == 0) {
-      _log.info('no audio this turn');
+      _log.info('no audio this turn — 0 bytes buffered');
       onPlaybackDone?.call();
       return;
     }
 
-    // Build a complete WAV byte array.
+    // Build WAV byte array and write to temp file.
     final wavBytes = _buildCompleteWav(_pcmBuffer, sampleRate: 24000);
     _pcmBuffer.clear();
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final wavPath = '${tempDir.path}/arqivo_ai_${_turnId}.wav';
+      final wavFile = File(wavPath);
+      await wavFile.writeAsBytes(wavBytes, flush: true);
+      _currentWavPath = wavPath;
+      _log.info('wrote WAV file: $wavPath (${wavBytes.length} bytes)');
+    } catch (e) {
+      _log.severe('failed to write WAV file: $e');
+      _resetForNextTurn();
+      return;
+    }
 
     await _ensureAudioSession();
     _ensurePlayer();
 
     final capturedTurnId = _turnId;
-    final source = _CompletedWavSource(wavBytes);
+    final wavPath = _currentWavPath!;
 
     try {
-      await _player!.setAudioSource(source);
-      if (_turnId != capturedTurnId) return; // barge-in happened
-      _log.info('▶ playing ${wavBytes.length} byte WAV');
+      final duration = await _player!.setFilePath(wavPath);
+      _log.info('setFilePath OK — duration=$duration');
+      if (_turnId != capturedTurnId) {
+        _log.info('barge-in during setFilePath — aborting');
+        _deleteWav(wavPath);
+        return;
+      }
+      _log.info('▶ playing WAV from file: $wavPath');
       await _player!.play();
+      _log.info('play() returned — player state=${_player!.processingState}');
     } catch (e) {
-      _log.severe('WAV playback failed: $e');
+      _log.severe('file playback failed: $e');
+      _deleteWav(wavPath);
       _resetForNextTurn();
       return;
     }
@@ -345,6 +376,12 @@ class AudioService {
       _player?.stop();
       _resetForNextTurn();
     });
+  }
+
+  void _deleteWav(String path) {
+    try {
+      File(path).deleteSync();
+    } catch (_) {}
   }
 
   /// Builds a proper WAV file with correct headers from raw PCM data.
@@ -388,7 +425,14 @@ class AudioService {
     _bufferStuckTimer?.cancel();
     _bufferStuckTimer = null;
     _turnComplete = false;
+    _chunkCount = 0;
     _pcmBuffer.clear();
+
+    // Clean up the WAV file from this turn.
+    if (_currentWavPath != null) {
+      _deleteWav(_currentWavPath!);
+      _currentWavPath = null;
+    }
 
     _log.info('turn reset — firing onPlaybackDone');
     onPlaybackDone?.call();
@@ -404,8 +448,15 @@ class AudioService {
     _bufferStuckTimer?.cancel();
     _bufferStuckTimer = null;
     _pcmBuffer.clear();
+    _chunkCount = 0;
     _turnComplete = false;
     _turnId++;
+
+    // Clean up WAV file.
+    if (_currentWavPath != null) {
+      _deleteWav(_currentWavPath!);
+      _currentWavPath = null;
+    }
 
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
@@ -460,27 +511,10 @@ class AudioService {
     _amplitudeController.close();
     _recorder.dispose();
     _player = null;
-  }
-}
-
-/// A simple [StreamAudioSource] backed by a complete, immutable byte array.
-/// [request] can be called any number of times — each call serves from the
-/// same in-memory WAV data. This avoids all ExoPlayer multi-request issues.
-class _CompletedWavSource extends StreamAudioSource {
-  final Uint8List _wav;
-  _CompletedWavSource(this._wav);
-
-  @override
-  Future<StreamAudioResponse> request([int? start, int? end]) async {
-    start ??= 0;
-    end ??= _wav.length;
-    return StreamAudioResponse(
-      sourceLength: _wav.length,
-      contentLength: end - start,
-      offset: start,
-      stream: Stream.value(_wav.sublist(start, end)),
-      contentType: 'audio/wav',
-    );
+    if (_currentWavPath != null) {
+      _deleteWav(_currentWavPath!);
+      _currentWavPath = null;
+    }
   }
 }
 
