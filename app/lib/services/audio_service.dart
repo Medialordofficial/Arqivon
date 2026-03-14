@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -479,61 +480,44 @@ class AudioService {
 }
 
 class LivePcmStreamSource extends StreamAudioSource {
-  /// Cumulative byte buffer: WAV header + all PCM received so far.
-  /// Multiple `request()` calls each read from this buffer independently.
-  final List<int> _buffer = [];
-  Completer<void>? _newData;
+  final Queue<Uint8List> _pendingChunks = ListQueue<Uint8List>();
+  Completer<void>? _nextChunk;
   bool _closed = false;
-
-  LivePcmStreamSource() {
-    _buffer.addAll(_wavHeader());
-  }
 
   void addPcm(List<int> bytes) {
     if (_closed || bytes.isEmpty) return;
-    _buffer.addAll(bytes);
-    _newData?.complete();
-    _newData = null;
+    _pendingChunks.add(Uint8List.fromList(bytes));
+    _nextChunk?.complete();
+    _nextChunk = null;
   }
 
   void closeTurn() {
     _closed = true;
-    _newData?.complete();
-    _newData = null;
+    _nextChunk?.complete();
+    _nextChunk = null;
   }
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
-    final offset = start ?? 0;
     return StreamAudioResponse(
-      rangeRequestsSupported: true,
-      sourceLength: _closed ? _buffer.length : null,
-      contentLength: _closed && end != null ? end - offset : null,
-      offset: offset,
+      rangeRequestsSupported: false,
+      sourceLength: null,
+      contentLength: null,
+      offset: 0,
       contentType: 'audio/wav',
-      stream: _streamFrom(offset, end),
+      stream: _streamBytes(),
     );
   }
 
-  /// Each call gets its own independent read cursor into [_buffer].
-  Stream<List<int>> _streamFrom(int start, int? end) async* {
-    var pos = start;
+  Stream<List<int>> _streamBytes() async* {
+    yield _wavHeader();
     while (true) {
-      final limit = end ?? _buffer.length;
-      final available = limit < _buffer.length ? limit : _buffer.length;
-
-      if (pos < available) {
-        yield Uint8List.fromList(_buffer.sublist(pos, available));
-        pos = available;
-        if (end != null && pos >= end) return;
-        continue;
+      while (_pendingChunks.isNotEmpty) {
+        yield _pendingChunks.removeFirst();
       }
-
-      if (_closed) return;
-
-      // Wait for addPcm / closeTurn to signal new data.
-      _newData ??= Completer<void>();
-      await _newData!.future;
+      if (_closed) break;
+      _nextChunk ??= Completer<void>();
+      await _nextChunk!.future;
     }
   }
 
