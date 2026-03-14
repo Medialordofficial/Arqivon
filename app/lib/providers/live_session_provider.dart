@@ -544,15 +544,18 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _audioChunksSent = 0;
     _audioSub = _audio!.audioStream.listen(
       (b64) {
-        // Only send audio when NOT muted.
+        // Only send audio when NOT muted and AI is NOT speaking.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
-        // ── ALWAYS forward mic audio (true bidirectional) ─────
-        // Gemini Live API is designed for full-duplex. The mic must
-        // always flow so the user can interrupt naturally by speaking.
-        // Server-side VAD (LOW start sensitivity) prevents false
-        // barge-ins from speaker echo. Hardware AEC (voiceChat mode)
-        // further reduces echo on the device side.
+        // ── Half-duplex: suppress mic during AI speech ────────
+        // Android's echo cancellation is imperfect — the AI's own
+        // audio leaks through the mic, causing Gemini's server-side
+        // VAD to detect false "user speech" and interrupt the response.
+        // Pausing mic forwarding while the AI speaks prevents this.
+        // The user can still tap-to-interrupt (the orb calls
+        // interruptResponse() which sets isResponding=false,
+        // immediately resuming mic forwarding).
+        if (cur != null && cur.isResponding) return;
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
           _log.fine(

@@ -80,23 +80,24 @@ class AudioService {
         avAudioSessionCategoryOptions:
             AVAudioSessionCategoryOptions.defaultToSpeaker |
                 AVAudioSessionCategoryOptions.allowBluetooth,
-        avAudioSessionMode: AVAudioSessionMode.voiceChat,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
         androidAudioAttributes: const AndroidAudioAttributes(
           contentType: AndroidAudioContentType.speech,
-          usage: AndroidAudioUsage.voiceCommunication,
+          usage: AndroidAudioUsage.media,
         ),
         androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
         androidWillPauseWhenDucked: false,
       ),
     );
     _sessionConfigured = true;
-    _log.info('audio session configured (voiceCommunication)');
+    _log.info('audio session configured (media/defaultMode)');
   }
 
   /// Lazily create a single AudioPlayer that lives for the entire session.
   void _ensurePlayer() {
     if (_player != null) return;
     _player = AudioPlayer();
+    _player!.setVolume(1.0); // explicit max volume for speaker output
     _processingStateSub =
         _player!.processingStateStream.listen(_onProcessingState);
     _log.info('persistent player created');
