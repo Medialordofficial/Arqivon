@@ -479,39 +479,62 @@ class AudioService {
 }
 
 class LivePcmStreamSource extends StreamAudioSource {
-  LivePcmStreamSource() {
-    _controller = StreamController<List<int>>();
-  }
-
-  late final StreamController<List<int>> _controller;
+  /// Cumulative byte buffer: WAV header + all PCM received so far.
+  /// Multiple `request()` calls each read from this buffer independently.
+  final List<int> _buffer = [];
+  Completer<void>? _newData;
   bool _closed = false;
+
+  LivePcmStreamSource() {
+    _buffer.addAll(_wavHeader());
+  }
 
   void addPcm(List<int> bytes) {
     if (_closed || bytes.isEmpty) return;
-    _controller.add(bytes);
+    _buffer.addAll(bytes);
+    _newData?.complete();
+    _newData = null;
   }
 
   void closeTurn() {
-    if (_closed) return;
     _closed = true;
-    _controller.close();
+    _newData?.complete();
+    _newData = null;
   }
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
+    final offset = start ?? 0;
     return StreamAudioResponse(
-      rangeRequestsSupported: false,
-      sourceLength: null,
-      contentLength: null,
-      offset: 0,
+      rangeRequestsSupported: true,
+      sourceLength: _closed ? _buffer.length : null,
+      contentLength: _closed && end != null ? end - offset : null,
+      offset: offset,
       contentType: 'audio/wav',
-      stream: _streamBytes(),
+      stream: _streamFrom(offset, end),
     );
   }
 
-  Stream<List<int>> _streamBytes() async* {
-    yield _wavHeader();
-    yield* _controller.stream;
+  /// Each call gets its own independent read cursor into [_buffer].
+  Stream<List<int>> _streamFrom(int start, int? end) async* {
+    var pos = start;
+    while (true) {
+      final limit = end ?? _buffer.length;
+      final available = limit < _buffer.length ? limit : _buffer.length;
+
+      if (pos < available) {
+        yield Uint8List.fromList(_buffer.sublist(pos, available));
+        pos = available;
+        if (end != null && pos >= end) return;
+        continue;
+      }
+
+      if (_closed) return;
+
+      // Wait for addPcm / closeTurn to signal new data.
+      _newData ??= Completer<void>();
+      await _newData!.future;
+    }
   }
 
   Uint8List _wavHeader({int sampleRate = 24000}) {
@@ -524,19 +547,18 @@ class LivePcmStreamSource extends StreamAudioSource {
     }
 
     writeString(0, 'RIFF');
-    // Using 0xffffffff instead of 0x7fffffff or exact size to indicate infinite live stream
-    header.setUint32(4, 0xffffffff, Endian.little);
+    header.setUint32(4, 0x7fffffff, Endian.little);
     writeString(8, 'WAVE');
     writeString(12, 'fmt ');
     header.setUint32(16, 16, Endian.little);
     header.setUint16(20, 1, Endian.little); // PCM
     header.setUint16(22, 1, Endian.little); // 1 channel
-    header.setUint32(24, sampleRate, Endian.little); // sample rate
-    header.setUint32(28, byteRate, Endian.little); // byte rate
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(28, byteRate, Endian.little);
     header.setUint16(32, 2, Endian.little); // block align
     header.setUint16(34, 16, Endian.little); // bits per sample
     writeString(36, 'data');
-    header.setUint32(40, 0xffffffff, Endian.little); // infinite data
+    header.setUint32(40, 0x7fffffff, Endian.little);
     return header.buffer.asUint8List();
   }
 }
