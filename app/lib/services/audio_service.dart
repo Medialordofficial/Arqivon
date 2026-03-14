@@ -118,7 +118,7 @@ class AudioService {
       if (_turnComplete) {
         // Cancel any previous debounce and start a fresh one.
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 350), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
           _completionDebounce = null;
           if (_turnFullyDone &&
               _player?.processingState == ProcessingState.completed) {
@@ -158,7 +158,7 @@ class AudioService {
   /// (e.g. due to a mid-turn exception or reconnect).
   void _startStaleWatchdog() {
     _staleWatchdog?.cancel();
-    _staleWatchdog = Timer(const Duration(seconds: 3), () {
+    _staleWatchdog = Timer(const Duration(seconds: 5), () {
       _staleWatchdog = null;
       if (!_turnComplete &&
           _player?.processingState == ProcessingState.completed &&
@@ -322,13 +322,13 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First flush: 250ms to build a reasonable first WAV.
-      // Subsequent: 180ms for steady streaming.
-      // Balanced: big enough to avoid micro-WAV gaps, small enough
-      // that audio doesn't get stranded in the buffer.
+      // Sentence-level buffering: first flush waits 500ms to build a
+      // substantial initial WAV (~400ms audio). Subsequent: 300ms for
+      // smooth streaming with ~200ms segments. Larger WAVs eliminate
+      // inter-track gaps that caused audio cut-offs.
       final delay = _playlist == null
-          ? const Duration(milliseconds: 250)
-          : const Duration(milliseconds: 180);
+          ? const Duration(milliseconds: 500)
+          : const Duration(milliseconds: 300);
       _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
@@ -366,15 +366,17 @@ class AudioService {
       _pcmBuffer.clear();
       return;
     }
-    // During streaming, require at least ~80ms of audio (3840 bytes at
-    // 24kHz 16-bit mono). If below threshold, reschedule a flush attempt
-    // so data is NEVER stranded indefinitely in the buffer.
-    if (!_turnComplete && _pcmBuffer.length < 3840) {
-      // Reschedule: if no new chunk arrives, this timer ensures the
-      // buffer is re-checked and eventually flushed when enough data
-      // accumulates or turn_complete lowers the bar.
+    // Sentence-level buffering: require enough audio for a substantial
+    // WAV segment. First flush: 19200 bytes (~400ms at 24kHz 16-bit mono)
+    // for a solid initial segment. Subsequent: 9600 bytes (~200ms) for
+    // smooth streaming. Larger segments eliminate inter-track gaps.
+    final minFlush = _playlist == null ? 19200 : 9600;
+    if (!_turnComplete && _pcmBuffer.length < minFlush) {
+      // Reschedule: ensures data is never stranded. When enough
+      // accumulates or turn_complete arrives (lowering bar to 480
+      // bytes), the flush proceeds.
       if (_flushTimer == null || !_flushTimer!.isActive) {
-        _flushTimer = Timer(const Duration(milliseconds: 120), _flush);
+        _flushTimer = Timer(const Duration(milliseconds: 200), _flush);
       }
       return;
     }
@@ -489,10 +491,10 @@ class AudioService {
 
     if (_pcmBuffer.isNotEmpty) await _flush();
 
-    // Wait for any in-progress flush to finish (up to 500ms).
+    // Wait for any in-progress flush to finish (up to 800ms).
     // Disk writes on slower devices can take 100-300ms.
     int waitMs = 0;
-    while ((_flushing || _reflushNeeded) && waitMs < 500) {
+    while ((_flushing || _reflushNeeded) && waitMs < 800) {
       await Future.delayed(const Duration(milliseconds: 15));
       waitMs += 15;
     }
@@ -500,7 +502,7 @@ class AudioService {
 
     // Second wait: the reflush from the first flush may have started.
     waitMs = 0;
-    while (_flushing && waitMs < 300) {
+    while (_flushing && waitMs < 500) {
       await Future.delayed(const Duration(milliseconds: 15));
       waitMs += 15;
     }
@@ -518,7 +520,7 @@ class AudioService {
     if (_player?.processingState == ProcessingState.completed) {
       if (_turnFullyDone) {
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 350), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
           _completionDebounce = null;
           if (_turnFullyDone &&
               _player?.processingState == ProcessingState.completed) {
@@ -532,10 +534,10 @@ class AudioService {
     }
 
     // Safety timeout in case playback hangs.
-    // 30s is generous for 1-3 sentence responses. If something is
-    // stuck, we recover quickly instead of waiting 2 minutes.
+    // 60s is generous for multi-sentence responses. If something is
+    // stuck, we recover instead of waiting forever.
     _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 30), () {
+    _playbackTimeout = Timer(const Duration(seconds: 60), () {
       _log.warning('playback TIMEOUT — force-resetting');
       _turnId++;
       _player?.stop();
