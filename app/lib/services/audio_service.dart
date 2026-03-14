@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -480,45 +479,69 @@ class AudioService {
 }
 
 class LivePcmStreamSource extends StreamAudioSource {
-  final Queue<Uint8List> _pendingChunks = ListQueue<Uint8List>();
-  Completer<void>? _nextChunk;
+  LivePcmStreamSource() {
+    _buffer.addAll(_wavHeader());
+  }
+
+  final List<int> _buffer = [];
+  final List<Completer<void>> _waiters = [];
   bool _closed = false;
 
   void addPcm(List<int> bytes) {
     if (_closed || bytes.isEmpty) return;
-    _pendingChunks.add(Uint8List.fromList(bytes));
-    _nextChunk?.complete();
-    _nextChunk = null;
+    _buffer.addAll(bytes);
+    _releaseWaiters();
   }
 
   void closeTurn() {
     _closed = true;
-    _nextChunk?.complete();
-    _nextChunk = null;
+    _releaseWaiters();
   }
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
+    final offset = start ?? 0;
     return StreamAudioResponse(
       rangeRequestsSupported: false,
-      sourceLength: null,
-      contentLength: null,
-      offset: 0,
+      sourceLength: _closed ? _buffer.length : null,
+      contentLength: end != null ? end - offset : null,
+      offset: offset,
       contentType: 'audio/wav',
-      stream: _streamBytes(),
+      stream: _streamBytes(offset, end),
     );
   }
 
-  Stream<List<int>> _streamBytes() async* {
-    yield _wavHeader();
+  Stream<List<int>> _streamBytes(int start, int? end) async* {
+    var position = start;
     while (true) {
-      while (_pendingChunks.isNotEmpty) {
-        yield _pendingChunks.removeFirst();
+      final availableEnd = end == null
+          ? _buffer.length
+          : (end < _buffer.length ? end : _buffer.length);
+
+      if (position < availableEnd) {
+        yield Uint8List.fromList(_buffer.sublist(position, availableEnd));
+        position = availableEnd;
+        if (end != null && position >= end) {
+          return;
+        }
+        continue;
       }
+
       if (_closed) break;
-      _nextChunk ??= Completer<void>();
-      await _nextChunk!.future;
+
+      final waiter = Completer<void>();
+      _waiters.add(waiter);
+      await waiter.future;
     }
+  }
+
+  void _releaseWaiters() {
+    for (final waiter in _waiters) {
+      if (!waiter.isCompleted) {
+        waiter.complete();
+      }
+    }
+    _waiters.clear();
   }
 
   Uint8List _wavHeader({int sampleRate = 24000}) {
