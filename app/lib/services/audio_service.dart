@@ -322,13 +322,13 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // Sentence-level buffering: first flush waits 500ms to build a
-      // substantial initial WAV (~400ms audio). Subsequent: 300ms for
-      // smooth streaming with ~200ms segments. Larger WAVs eliminate
-      // inter-track gaps that caused audio cut-offs.
+      // Balanced flush timers: first flush waits 350ms to build a
+      // meaningful initial WAV (~200ms audio). Subsequent: 200ms for
+      // smooth streaming. Large enough to avoid micro-WAV gaps, small
+      // enough that audio starts promptly.
       final delay = _playlist == null
-          ? const Duration(milliseconds: 500)
-          : const Duration(milliseconds: 300);
+          ? const Duration(milliseconds: 350)
+          : const Duration(milliseconds: 200);
       _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
@@ -366,17 +366,17 @@ class AudioService {
       _pcmBuffer.clear();
       return;
     }
-    // Sentence-level buffering: require enough audio for a substantial
-    // WAV segment. First flush: 19200 bytes (~400ms at 24kHz 16-bit mono)
-    // for a solid initial segment. Subsequent: 9600 bytes (~200ms) for
-    // smooth streaming. Larger segments eliminate inter-track gaps.
-    final minFlush = _playlist == null ? 19200 : 9600;
+    // Balanced threshold: first flush needs 9600 bytes (~200ms at
+    // 24kHz 16-bit mono) for a solid initial segment. Subsequent
+    // flushes need 4800 bytes (~100ms) for smooth streaming without
+    // micro-WAV gaps.
+    final minFlush = _playlist == null ? 9600 : 4800;
     if (!_turnComplete && _pcmBuffer.length < minFlush) {
       // Reschedule: ensures data is never stranded. When enough
       // accumulates or turn_complete arrives (lowering bar to 480
       // bytes), the flush proceeds.
       if (_flushTimer == null || !_flushTimer!.isActive) {
-        _flushTimer = Timer(const Duration(milliseconds: 200), _flush);
+        _flushTimer = Timer(const Duration(milliseconds: 150), _flush);
       }
       return;
     }

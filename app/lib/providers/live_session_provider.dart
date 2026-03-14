@@ -218,6 +218,13 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// Used to detect when Gemini never acknowledges user speech at all.
   DateTime? _activeStreamingAt;
   bool _restartInFlight = false;
+
+  // ── Client-side voice interruption detection ──────────────
+  /// Consecutive high-amplitude mic samples while AI is responding.
+  int _voiceInterruptCount = 0;
+
+  /// Cooldown: prevent interrupt spam.
+  DateTime? _lastVoiceInterrupt;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
 
@@ -575,13 +582,38 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       },
     );
 
-    // Pipe mic amplitude to the ValueNotifier for the orb visualizer.
+    // Pipe mic amplitude to the ValueNotifier for the orb visualizer
+    // AND detect voice-based interruptions client-side.
     _ampSub?.cancel();
+    _voiceInterruptCount = 0;
     _ampSub = _audio!.amplitudeStream.listen(
       (amp) {
         final cur = state.valueOrNull;
         // Show flat line when muted.
         amplitudeNotifier.value = (cur != null && cur.isMuted) ? 0.0 : amp;
+
+        // ── Client-side voice interrupt detection ──────────────
+        // When AI is responding and mic picks up sustained loud input
+        // (echo-cancelled, so high amplitude = user actually speaking),
+        // automatically trigger interruption.  This bypasses Gemini's
+        // server-side VAD which struggles with echo/LOW sensitivity.
+        if (cur != null && cur.isResponding && !cur.isMuted && amp > 0.32) {
+          _voiceInterruptCount++;
+          // ~250ms of sustained speech (5 chunks × ~50ms each)
+          if (_voiceInterruptCount >= 5) {
+            _voiceInterruptCount = 0;
+            final now = DateTime.now();
+            if (_lastVoiceInterrupt == null ||
+                now.difference(_lastVoiceInterrupt!).inMilliseconds > 2000) {
+              _lastVoiceInterrupt = now;
+              _log.info(
+                  'client-side voice interrupt: sustained speech detected');
+              interruptResponse();
+            }
+          }
+        } else {
+          _voiceInterruptCount = 0;
+        }
       },
     );
 
@@ -712,6 +744,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _interruptedAt = null;
       _lastUserTranscriptAt = null;
       _activeStreamingAt = null;
+      _voiceInterruptCount = 0;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
 
@@ -755,6 +788,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     _interruptedAt = DateTime.now();
     _lastUserTranscriptAt = null;
     _responseStaleTimer?.cancel();
+    _voiceInterruptCount = 0;
 
     // Commit partial texts
     final partialMsgs = <ChatMessage>[...current.chatMessages];
@@ -1169,6 +1203,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _responseStaleTimer?.cancel();
         _interruptedAt = DateTime.now();
         _lastUserTranscriptAt = null;
+        _voiceInterruptCount = 0;
         // Commit partial USER text (what they said before the interrupt).
         // Do NOT commit the AI’s full accumulated text — the user only
         // heard part of it as audio; showing the full transcript is misleading.
