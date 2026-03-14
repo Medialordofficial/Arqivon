@@ -102,7 +102,7 @@ class AudioService {
       if (_turnComplete) {
         // Cancel any previous debounce and start a fresh one.
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 200), () {
           _completionDebounce = null;
           if (_turnComplete &&
               _player?.processingState == ProcessingState.completed &&
@@ -128,7 +128,7 @@ class AudioService {
   /// (e.g. due to a mid-turn exception or reconnect).
   void _startStaleWatchdog() {
     _staleWatchdog?.cancel();
-    _staleWatchdog = Timer(const Duration(seconds: 5), () {
+    _staleWatchdog = Timer(const Duration(seconds: 3), () {
       _staleWatchdog = null;
       if (!_turnComplete &&
           _player?.processingState == ProcessingState.completed &&
@@ -292,13 +292,14 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First flush of a turn: wait 600ms to accumulate a substantial
-      // first WAV (~600ms of audio). This prevents the player from
-      // completing a tiny first track before the next is ready.
-      // Subsequent flushes: 400ms for smooth streaming.
+      // First flush of a turn: wait 200ms to accumulate a small first
+      // WAV. Shorter delay = faster time-to-first-audio. The playlist
+      // resume logic handles the case where the player finishes a short
+      // track before the next is ready.
+      // Subsequent flushes: 150ms for low-latency streaming.
       final delay = _playlist == null
-          ? const Duration(milliseconds: 600)
-          : const Duration(milliseconds: 400);
+          ? const Duration(milliseconds: 200)
+          : const Duration(milliseconds: 150);
       _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
@@ -478,7 +479,7 @@ class AudioService {
     if (_player?.processingState == ProcessingState.completed) {
       if (_pcmBuffer.isEmpty && !_flushing) {
         _completionDebounce?.cancel();
-        _completionDebounce = Timer(const Duration(milliseconds: 500), () {
+        _completionDebounce = Timer(const Duration(milliseconds: 200), () {
           _completionDebounce = null;
           if (_turnComplete &&
               _player?.processingState == ProcessingState.completed &&

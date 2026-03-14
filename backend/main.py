@@ -790,24 +790,19 @@ def _backoff(attempt: int, base: float = 0.5, cap: float = 30.0) -> float:
 
 REALTIME_CONVERSATION_POLICY = (
     "\n\nREAL-TIME CONVERSATION POLICY (MANDATORY):\n"
-    "• You are optimized for live voice conversation.\n"
-    "• If the user interrupts, stop your current response immediately.\n"
-    "• Analyze the interruption and classify it internally as one of: clarification, "
-    "additional information, correction, continuation, or topic shift.\n"
-    "• If interruption contributes to unfinished reasoning, integrate it smoothly and continue naturally.\n"
-    "• If interruption changes topic, pivot immediately and drop prior reasoning.\n"
-    "• Never continue old response without evaluating new input.\n"
-    "• Never repeat previously spoken content unless necessary.\n"
+    "• You are in a live voice conversation. Be responsive and natural.\n"
+    "• If the user interrupts, stop immediately and address their new input.\n"
+    "• Never repeat what you already said unless the user asks.\n"
     "\nSTYLE (MANDATORY):\n"
-    "• Speak naturally and completely — finish your thought, but keep it conversational.\n"
-    "• Aim for 30-60 seconds of speech. Cover the key points, then invite follow-up.\n"
-    "• Do NOT monologue for over a minute. Long answers bore the user and can cause "
-    "audio playback issues. Be substantive but concise, like a smart friend talking.\n"
-    "• Sound natural, fluid, and unscripted.\n"
+    "• Keep responses SHORT and punchy — 10-30 seconds of speech MAX.\n"
+    "• Answer the question directly, then stop. Don't pad with filler.\n"
+    "• If the topic needs depth, give the key point first, then ask if they want more.\n"
+    "• Sound natural enough that you'd fit in on a phone call.\n"
+    "• NEVER monologue. Short exchanges are better than long lectures.\n"
     "\nLATENCY (TARGET):\n"
-    "• Start responding as quickly as possible (target near-immediate first tokens).\n"
-    "• Do not wait to compose a full answer before starting.\n"
-    "• Think and answer incrementally while preserving correctness.\n"
+    "• Start your response IMMEDIATELY — first words within 1 second.\n"
+    "• Think and speak incrementally. Don't compose a full answer before starting.\n"
+    "• Speed is more important than perfection. Correct course if needed.\n"
 )
 
 
@@ -927,25 +922,20 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # UNSPECIFIED start sensitivity = server picks a balanced default.
-                # HIGH was causing false barge-ins — background noise or audio
-                # playback feedback would trigger 'interrupted' events, killing
-                # AI audio mid-sentence.  The user would see the full text
-                # transcript (already received) but hear only partial audio.
-                # UNSPECIFIED lets the server choose an appropriate threshold
-                # that detects intentional speech without false-firing on noise.
-                # NOTE: LOW was too conservative (Gemini never detected speech).
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_UNSPECIFIED,
+                # LOW start sensitivity prevents false barge-ins caused by
+                # speaker audio echoing into the mic during AI playback.
+                # The mic is always active (true bidirectional), so the VAD
+                # must be conservative about detecting "user speech" vs echo.
+                # LOW means only clear, intentional speech triggers an interrupt.
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                 # 300ms prefix captures word beginnings that would otherwise
-                # be clipped.  500ms is more generous and prevents the first
-                # word from being cut on slower VAD detection.
-                prefix_padding_ms=500,
-                # 1000ms silence before end-of-speech detection.
-                # Allows natural mid-sentence pauses without premature cutoff,
-                # making conversation flow more human-like.
-                silence_duration_ms=1000,
+                # be clipped.
+                prefix_padding_ms=300,
+                # 800ms silence before end-of-speech detection.
+                # Balances natural pauses with responsive turn-taking.
+                silence_duration_ms=800,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),

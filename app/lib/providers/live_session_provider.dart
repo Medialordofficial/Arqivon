@@ -538,13 +538,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Only send audio when NOT muted.
         final cur = state.valueOrNull;
         if (cur != null && cur.isMuted) return;
-        // ── Echo suppression ──────────────────────────────────
-        // Do NOT forward mic audio while the AI is actively responding.
-        // Even with echoCancel:true, speaker audio leaks into the mic on
-        // many devices, causing Gemini's VAD to fire 'interrupted' events
-        // that kill the AI's response mid-sentence. The user can still
-        // interrupt by tapping the orb (tap-to-interrupt).
-        if (cur != null && cur.isResponding) return;
+        // ── ALWAYS forward mic audio (true bidirectional) ─────
+        // Gemini Live API is designed for full-duplex. The mic must
+        // always flow so the user can interrupt naturally by speaking.
+        // Server-side VAD (LOW start sensitivity) prevents false
+        // barge-ins from speaker echo. Hardware AEC (voiceChat mode)
+        // further reduces echo on the device side.
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
           _log.fine(
@@ -940,10 +939,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             );
           }
           // Reset the response stale timer. If no new audio chunk arrives
-          // within 15 seconds, auto-finalize the turn to prevent the client
+          // within 8 seconds, auto-finalize the turn to prevent the client
           // from being stuck in isResponding=true forever.
           _responseStaleTimer?.cancel();
-          _responseStaleTimer = Timer(const Duration(seconds: 15), () {
+          _responseStaleTimer = Timer(const Duration(seconds: 8), () {
             _responseStaleTimer = null;
             final cur = state.valueOrNull;
             if (cur != null && cur.isResponding) {
