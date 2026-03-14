@@ -938,15 +938,15 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
                 # constantly detects echo as "speech" and NEVER produces a
                 # response (stays in permanent "user speaking" mode).
                 # Hardware AEC helps but is not perfect on all Android devices.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_UNSPECIFIED,
+                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                 # LOW end = allows natural pauses without premature cutoff.
-                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_UNSPECIFIED,
-                # 300ms prefix captures word beginnings that would otherwise
-                # be clipped.
-                prefix_padding_ms=300,
-                # 800ms silence before end-of-speech detection.
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                # 500ms prefix captures word beginnings that would otherwise
+                # be clipped — more generous than 300ms.
+                prefix_padding_ms=500,
+                # 1200ms silence before end-of-speech detection.
                 # Allows natural pauses mid-sentence without premature cutoff.
-                silence_duration_ms=800,
+                silence_duration_ms=1200,
             )
         ),
         input_audio_transcription=types.AudioTranscriptionConfig(),

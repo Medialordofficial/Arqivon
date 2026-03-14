@@ -903,10 +903,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void _scheduleTurnCompleteFinalize() {
     _turnCompleteTimer?.cancel();
-    // Reduced to 80ms: just enough to catch any final audio chunk that
-    // arrives in the same event-loop cycle as turn_complete, without
-    // adding noticeable latency before the final flush plays.
-    _turnCompleteTimer = Timer(const Duration(milliseconds: 80), () {
+    // 250ms debounce: catch trailing audio chunks that arrive after
+    // turn_complete but before the final flush.
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 250), () {
       final current = state.valueOrNull ?? const LiveSessionState();
       _log.info('finalizing turn_complete (debounced)');
       _audio?.flushAndPlay();

@@ -13,13 +13,15 @@ import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// **Playback architecture (v10 — file-based):**
+/// **Playback architecture (v11 — segmented file-based):**
 ///
 /// 1. PCM chunks arrive via [queueChunk] and accumulate in [_pcmBuffer].
-/// 2. On [flushAndPlay] (turn_complete), a complete WAV file is written to disk.
-/// 3. A **single [AudioPlayer]** plays that file via [setFilePath].
-/// 4. No StreamAudioSource / HTTP proxy — ExoPlayer reads the file directly.
-/// 5. Barge-in stops the player immediately.
+/// 2. Every ~500ms of audio data, a WAV segment file is written and
+///    appended to a [ConcatenatingAudioSource].
+/// 3. Playback starts as soon as the first segment is ready (~300ms).
+/// 4. On [flushAndPlay] (turn_complete), remaining buffer is flushed
+///    as a final segment.
+/// 5. No StreamAudioSource / HTTP proxy — ExoPlayer reads files directly.
 class AudioService {
   static final _log = AppLogger('AudioService');
 
@@ -34,7 +36,7 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback — file-based (v10) ───────────────────────────────────
+  // ── Playback — segmented file-based (v11) ─────────────────────────
   AudioPlayer? _player;
   Timer? _playbackTimeout;
 
@@ -43,10 +45,17 @@ class AudioService {
   StreamSubscription<ProcessingState>? _processingStateSub;
   int _turnId = 0;
   bool _turnComplete = false;
-  String? _currentWavPath;
+  bool _playbackStarted = false;
+  int _segmentIndex = 0;
+  final List<String> _segmentPaths = [];
+  ConcatenatingAudioSource? _playlist;
+  Timer? _segmentFlushTimer;
   Timer? _completionDebounce;
   Timer? _staleWatchdog;
   Timer? _bufferStuckTimer;
+
+  /// Minimum PCM bytes before writing a segment (≈0.5s of 24kHz 16-bit mono).
+  static const int _segmentThreshold = 24000; // 0.5s × 24000 Hz × 2 bytes
 
   /// Called when the AI turn's playback finishes (all tracks played).
   VoidCallback? onPlaybackDone;
@@ -293,7 +302,7 @@ class AudioService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  PLAYBACK — file-based (v10)
+  //  PLAYBACK — segmented file-based (v11)
   // ══════════════════════════════════════════════════════════════════
 
   /// Buffer a base64-encoded PCM chunk from the AI.
@@ -307,70 +316,125 @@ class AudioService {
     _staleWatchdog = null;
 
     _pcmBuffer.addAll(bytes);
-    if (_chunkCount % 50 == 1) {
-      _log.info(
-          'queueChunk #$_chunkCount — buffer now ${_pcmBuffer.length} bytes');
+
+    // Start segment flush timer on first chunk.
+    if (_chunkCount == 1) {
+      _log.info('first audio chunk — starting segment pipeline');
+      _startSegmentTimer();
+    }
+
+    // If buffer exceeds threshold, write a segment immediately.
+    if (_pcmBuffer.length >= _segmentThreshold) {
+      _flushSegment();
+    }
+  }
+
+  /// Periodically flush accumulated PCM as a WAV segment.
+  void _startSegmentTimer() {
+    _segmentFlushTimer?.cancel();
+    _segmentFlushTimer = Timer.periodic(
+      const Duration(milliseconds: 400),
+      (_) {
+        if (_pcmBuffer.isNotEmpty) {
+          _flushSegment();
+        }
+      },
+    );
+  }
+
+  /// Write current buffer as a WAV file and add to playlist.
+  void _flushSegment() {
+    if (_pcmBuffer.isEmpty) return;
+
+    final pcmData = Uint8List.fromList(_pcmBuffer);
+    _pcmBuffer.clear();
+    final segIdx = _segmentIndex++;
+    final capturedTurnId = _turnId;
+
+    // Fire and forget the async write+enqueue.
+    unawaited(_writeAndEnqueueSegment(pcmData, segIdx, capturedTurnId));
+  }
+
+  Future<void> _writeAndEnqueueSegment(
+      Uint8List pcmData, int segIdx, int capturedTurnId) async {
+    if (_turnId != capturedTurnId) return; // barge-in
+
+    final wavBytes = _buildCompleteWav(pcmData, sampleRate: 24000);
+    final tempDir = await getTemporaryDirectory();
+    final wavPath = '${tempDir.path}/arqivo_seg_${capturedTurnId}_$segIdx.wav';
+
+    try {
+      await File(wavPath).writeAsBytes(wavBytes, flush: true);
+    } catch (e) {
+      _log.severe('failed to write segment $segIdx: $e');
+      return;
+    }
+
+    if (_turnId != capturedTurnId) {
+      _deleteWav(wavPath);
+      return;
+    }
+
+    _segmentPaths.add(wavPath);
+    _log.info('segment $segIdx written: ${wavBytes.length} bytes → $wavPath');
+
+    // Add to playlist.
+    _playlist ??= ConcatenatingAudioSource(children: []);
+    await _playlist!.add(AudioSource.file(wavPath));
+
+    // Start playback on first segment.
+    if (!_playbackStarted) {
+      _playbackStarted = true;
+      await _startPlayback(capturedTurnId);
+    }
+  }
+
+  Future<void> _startPlayback(int capturedTurnId) async {
+    await _ensureAudioSession();
+    _ensurePlayer();
+
+    try {
+      await _player!.setAudioSource(_playlist!,
+          initialIndex: 0, initialPosition: Duration.zero);
+      if (_turnId != capturedTurnId) return;
+      _log.info('▶ starting segmented playback');
+      await _player!.play();
+    } catch (e) {
+      _log.severe('segmented playback failed: $e');
+      _resetForNextTurn();
     }
   }
 
   /// Called by the provider on `turn_complete`.
-  /// Writes a WAV file to the temp directory and plays it directly.
   Future<void> flushAndPlay() async {
+    _segmentFlushTimer?.cancel();
+    _segmentFlushTimer = null;
     _turnComplete = true;
-    final pcmLen = _pcmBuffer.length;
-    _log.info('flushAndPlay — $_chunkCount chunks, $pcmLen PCM bytes buffered');
+    _log.info('flushAndPlay — $_chunkCount chunks total, '
+        '${_pcmBuffer.length} bytes remaining in buffer');
     _chunkCount = 0;
 
-    if (pcmLen == 0) {
-      _log.info('no audio this turn — 0 bytes buffered');
+    // Flush any remaining PCM as a final segment.
+    if (_pcmBuffer.isNotEmpty) {
+      final pcmData = Uint8List.fromList(_pcmBuffer);
+      _pcmBuffer.clear();
+      final segIdx = _segmentIndex++;
+      await _writeAndEnqueueSegment(pcmData, segIdx, _turnId);
+    }
+
+    // If no audio was received at all this turn.
+    if (!_playbackStarted) {
+      _log.info('no audio this turn');
       onPlaybackDone?.call();
       return;
     }
 
-    // Build WAV byte array and write to temp file.
-    final wavBytes = _buildCompleteWav(_pcmBuffer, sampleRate: 24000);
-    _pcmBuffer.clear();
+    _log.info('all ${_segmentPaths.length} segments queued — '
+        'waiting for player to finish');
 
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final wavPath = '${tempDir.path}/arqivo_ai_${_turnId}.wav';
-      final wavFile = File(wavPath);
-      await wavFile.writeAsBytes(wavBytes, flush: true);
-      _currentWavPath = wavPath;
-      _log.info('wrote WAV file: $wavPath (${wavBytes.length} bytes)');
-    } catch (e) {
-      _log.severe('failed to write WAV file: $e');
-      _resetForNextTurn();
-      return;
-    }
-
-    await _ensureAudioSession();
-    _ensurePlayer();
-
-    final capturedTurnId = _turnId;
-    final wavPath = _currentWavPath!;
-
-    try {
-      final duration = await _player!.setFilePath(wavPath);
-      _log.info('setFilePath OK — duration=$duration');
-      if (_turnId != capturedTurnId) {
-        _log.info('barge-in during setFilePath — aborting');
-        _deleteWav(wavPath);
-        return;
-      }
-      _log.info('▶ playing WAV from file: $wavPath');
-      await _player!.play();
-      _log.info('play() returned — player state=${_player!.processingState}');
-    } catch (e) {
-      _log.severe('file playback failed: $e');
-      _deleteWav(wavPath);
-      _resetForNextTurn();
-      return;
-    }
-
-    // Safety timeout in case playback hangs.
+    // Safety timeout.
     _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 60), () {
+    _playbackTimeout = Timer(const Duration(seconds: 90), () {
       _log.warning('playback TIMEOUT — force-resetting');
       _turnId++;
       _player?.stop();
@@ -420,19 +484,24 @@ class AudioService {
 
   void _resetForNextTurn() {
     _playbackTimeout?.cancel();
+    _segmentFlushTimer?.cancel();
+    _segmentFlushTimer = null;
     _staleWatchdog?.cancel();
     _staleWatchdog = null;
     _bufferStuckTimer?.cancel();
     _bufferStuckTimer = null;
     _turnComplete = false;
+    _playbackStarted = false;
     _chunkCount = 0;
+    _segmentIndex = 0;
     _pcmBuffer.clear();
 
-    // Clean up the WAV file from this turn.
-    if (_currentWavPath != null) {
-      _deleteWav(_currentWavPath!);
-      _currentWavPath = null;
+    // Clean up WAV segment files.
+    for (final path in _segmentPaths) {
+      _deleteWav(path);
     }
+    _segmentPaths.clear();
+    _playlist = null;
 
     _log.info('turn reset — firing onPlaybackDone');
     onPlaybackDone?.call();
@@ -441,6 +510,8 @@ class AudioService {
   /// Stop playback immediately (barge-in).
   Future<void> stopPlayback() async {
     _playbackTimeout?.cancel();
+    _segmentFlushTimer?.cancel();
+    _segmentFlushTimer = null;
     _completionDebounce?.cancel();
     _completionDebounce = null;
     _staleWatchdog?.cancel();
@@ -449,14 +520,17 @@ class AudioService {
     _bufferStuckTimer = null;
     _pcmBuffer.clear();
     _chunkCount = 0;
+    _segmentIndex = 0;
     _turnComplete = false;
+    _playbackStarted = false;
     _turnId++;
 
-    // Clean up WAV file.
-    if (_currentWavPath != null) {
-      _deleteWav(_currentWavPath!);
-      _currentWavPath = null;
+    // Clean up WAV segment files.
+    for (final path in _segmentPaths) {
+      _deleteWav(path);
     }
+    _segmentPaths.clear();
+    _playlist = null;
 
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
@@ -497,6 +571,7 @@ class AudioService {
   void dispose() {
     _disposed = true;
     _playbackTimeout?.cancel();
+    _segmentFlushTimer?.cancel();
     _completionDebounce?.cancel();
     _staleWatchdog?.cancel();
     _bufferStuckTimer?.cancel();
@@ -511,10 +586,11 @@ class AudioService {
     _amplitudeController.close();
     _recorder.dispose();
     _player = null;
-    if (_currentWavPath != null) {
-      _deleteWav(_currentWavPath!);
-      _currentWavPath = null;
+    for (final path in _segmentPaths) {
+      _deleteWav(path);
     }
+    _segmentPaths.clear();
+    _playlist = null;
   }
 }
 
