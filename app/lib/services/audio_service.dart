@@ -313,12 +313,13 @@ class AudioService {
       _flushTimer?.cancel();
       _flushTimer = Timer(const Duration(milliseconds: 15), _flush);
     } else if (_flushTimer == null || !_flushTimer!.isActive) {
-      // First flush: 300ms to build a solid first WAV (~300ms audio).
-      // Subsequent: 200ms for steady streaming.
-      // Bigger WAVs = fewer playlist transitions = fewer audio gaps.
+      // First flush: 250ms to build a reasonable first WAV.
+      // Subsequent: 180ms for steady streaming.
+      // Balanced: big enough to avoid micro-WAV gaps, small enough
+      // that audio doesn't get stranded in the buffer.
       final delay = _playlist == null
-          ? const Duration(milliseconds: 300)
-          : const Duration(milliseconds: 200);
+          ? const Duration(milliseconds: 250)
+          : const Duration(milliseconds: 180);
       _flushTimer = Timer(delay, _flush);
     }
     // Hard cap: ~2s of audio at 24kHz 16-bit mono.
@@ -356,10 +357,10 @@ class AudioService {
       _pcmBuffer.clear();
       return;
     }
-    // During streaming, require at least ~150ms of audio (7200 bytes at
-    // 24kHz 16-bit mono). Bigger WAVs = fewer playlist transitions =
-    // far fewer opportunities for audio gaps/skipping.
-    if (!_turnComplete && _pcmBuffer.length < 7200) {
+    // During streaming, require at least ~200ms of audio (9600 bytes at
+    // 24kHz 16-bit mono). Large enough to avoid micro-WAV gaps, small
+    // enough that audio doesn't get stranded waiting for more data.
+    if (!_turnComplete && _pcmBuffer.length < 9600) {
       return;
     }
     final turnSnapshot = _turnId;
@@ -556,7 +557,14 @@ class AudioService {
   }
 
   /// Stop playback immediately (barge-in).
+  ///
+  /// **Critical ordering:** All synchronous state is reset FIRST so that
+  /// any concurrent queueChunk/flush calls see the new turn immediately.
+  /// The async player.stop() and playlist.clear() happen afterwards and
+  /// are best-effort — even if they take a few ms, the turnId increment
+  /// guarantees any in-flight WAV writes are discarded.
   Future<void> stopPlayback() async {
+    // ── Step 1: synchronous state reset (runs on the event loop tick) ──
     _playbackTimeout?.cancel();
     _flushTimer?.cancel();
     _completionDebounce?.cancel();
@@ -572,17 +580,25 @@ class AudioService {
     _reflushNeeded = false;
     _turnId++;
 
-    try {
-      await _player?.stop();
-    } catch (_) {}
-    // Clear the playlist so player doesn't auto-advance.
-    try {
-      await _playlist?.clear();
-    } catch (_) {}
+    // Null out the playlist reference BEFORE the async stop so that
+    // any concurrent _enqueueWav call creates a fresh playlist for the
+    // new response instead of adding to the dying one.
+    final oldPlaylist = _playlist;
     _playlist = null;
 
     final files = List<String>.from(_tempFiles);
     _tempFiles.clear();
+
+    _log.info('playback stopped (barge-in, turnId=$_turnId)');
+
+    // ── Step 2: async cleanup (best-effort) ──
+    try {
+      _player?.stop();
+    } catch (_) {}
+    try {
+      await oldPlaylist?.clear();
+    } catch (_) {}
+
     unawaited(Future(() async {
       for (final p in files) {
         try {
@@ -590,7 +606,6 @@ class AudioService {
         } catch (_) {}
       }
     }));
-    _log.info('playback stopped (barge-in)');
   }
 
   // ── WAV builder ───────────────────────────────────────────────────

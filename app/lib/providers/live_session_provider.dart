@@ -213,6 +213,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   /// Detects when no new audio chunks arrive during AI response.
   Timer? _responseStaleTimer;
+
+  /// Timestamp when active audio streaming began (unmuted + sending).
+  /// Used to detect when Gemini never acknowledges user speech at all.
+  DateTime? _activeStreamingAt;
   bool _restartInFlight = false;
   bool _wsWasReconnecting = false;
   Timer? _turnCompleteTimer;
@@ -226,6 +230,15 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
   /// Saved as ChatMessages on turn_complete.
   final List<String> _turnUserTexts = [];
   final List<String> _turnAiTexts = [];
+
+  /// Joins transcript fragments without adding extra spaces.
+  /// Gemini transcription fragments already include their own spacing;
+  /// using join(' ') inserts spurious spaces between sub-word fragments
+  /// producing garbled text like "ho w a re you".
+  static String _joinTranscript(List<String> parts) {
+    if (parts.isEmpty) return '';
+    return parts.join('').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
 
   /// AI text deferred until playback finishes so it doesn't spoil the audio.
   String _pendingAiText = '';
@@ -572,6 +585,10 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       },
     );
 
+    // Track when active streaming began so the response watchdog
+    // can detect "user speaking but Gemini completely dead" scenarios.
+    _activeStreamingAt = DateTime.now();
+
     state = AsyncData(
       current.copyWith(
         isStreaming: true,
@@ -633,6 +650,24 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           return;
         }
       }
+      // CRITICAL: detect "stuck in listening" — user is sending audio
+      // but the server NEVER acknowledged any speech at all. This happens
+      // when the Gemini session died silently on the backend.
+      if (_activeStreamingAt != null &&
+          _lastUserTranscriptAt == null &&
+          !cur.isResponding) {
+        final sinceActive =
+            DateTime.now().difference(_activeStreamingAt!).inSeconds;
+        if (sinceActive >= 15) {
+          _log.warning(
+            'No server acknowledgment in ${sinceActive}s of active streaming '
+            '— Gemini likely dead, forcing restart',
+          );
+          _activeStreamingAt = DateTime.now(); // prevent spam
+          _forceSessionRestart();
+          return;
+        }
+      }
     });
   }
 
@@ -676,6 +711,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
       _pendingAiText = '';
       _interruptedAt = null;
       _lastUserTranscriptAt = null;
+      _activeStreamingAt = null;
       // Force _lastSentMode to null so startSession() sends a fresh set_mode.
       _lastSentMode = null;
 
@@ -698,6 +734,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     if (!current.isStreaming) return;
     final newMuted = !current.isMuted;
     _log.info('toggleMute: isMuted=$newMuted');
+    // Reset active-streaming tracker when unmuting so the watchdog
+    // gets a fresh 15s window to detect a dead Gemini session.
+    if (!newMuted) {
+      _activeStreamingAt = DateTime.now();
+    }
     state = AsyncData(current.copyWith(isMuted: newMuted));
   }
 
@@ -717,11 +758,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
     // Commit partial texts
     final partialMsgs = <ChatMessage>[...current.chatMessages];
-    final partialUser = _turnUserTexts.join(' ').trim();
+    final partialUser = _joinTranscript(_turnUserTexts);
     if (partialUser.isNotEmpty) {
       partialMsgs.add(ChatMessage(text: partialUser, isUser: true));
     }
-    final partialAi = _turnAiTexts.join(' ').trim();
+    final partialAi = _joinTranscript(_turnAiTexts);
     if (partialAi.isNotEmpty) {
       final heard = partialAi.length > 80
           ? '${partialAi.substring(0, 80)}…'
@@ -869,7 +910,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       final newMessages = <ChatMessage>[...current.chatMessages];
       // Commit user text immediately — the user already said it.
-      final userText = _turnUserTexts.join(' ').trim();
+      final userText = _joinTranscript(_turnUserTexts);
       if (userText.isNotEmpty) {
         newMessages.add(ChatMessage(text: userText, isUser: true));
       }
@@ -877,7 +918,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
       // Defer AI text until playback finishes so the text doesn't
       // spoil the audio. Store it for onPlaybackDone to commit.
-      _pendingAiText = _turnAiTexts.join(' ').trim();
+      _pendingAiText = _joinTranscript(_turnAiTexts);
       _turnAiTexts.clear();
 
       state = AsyncData(
@@ -911,8 +952,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           if (_interruptedAt != null) {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
-            if (msSinceInterrupt < 50) {
-              break; // silently drop trailing chunk
+            if (msSinceInterrupt < 150) {
+              break; // silently drop trailing chunk from old response
             }
             _interruptedAt = null; // grace window elapsed
           }
@@ -964,7 +1005,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // committed to chat history in onPlaybackDone.
           state = AsyncData(
             current.copyWith(
-              transcript: _turnAiTexts.join(' '),
+              transcript: _joinTranscript(_turnAiTexts),
             ),
           );
         }
@@ -976,10 +1017,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // Record when the server confirmed user speech — used by the
           // response watchdog to detect if Gemini heard but never replied.
           _lastUserTranscriptAt = DateTime.now();
+          // Reset active-streaming tracker now that server acknowledged speech.
+          _activeStreamingAt = null;
         }
         // Show accumulated user text for a readable live bubble.
         state = AsyncData(
-          current.copyWith(userTranscript: _turnUserTexts.join(' ')),
+          current.copyWith(userTranscript: _joinTranscript(_turnUserTexts)),
         );
         break;
 
@@ -1127,12 +1170,12 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         // Do NOT commit the AI’s full accumulated text — the user only
         // heard part of it as audio; showing the full transcript is misleading.
         final partialMsgs = <ChatMessage>[...current.chatMessages];
-        final partialUser = _turnUserTexts.join(' ').trim();
+        final partialUser = _joinTranscript(_turnUserTexts);
         if (partialUser.isNotEmpty) {
           partialMsgs.add(ChatMessage(text: partialUser, isUser: true));
         }
         // Only show a truncated version of what the user actually heard.
-        final partialAi = _turnAiTexts.join(' ').trim();
+        final partialAi = _joinTranscript(_turnAiTexts);
         if (partialAi.isNotEmpty) {
           final heard = partialAi.length > 80
               ? '${partialAi.substring(0, 80)}…'
@@ -1143,13 +1186,14 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         _turnAiTexts.clear();
         _pendingAiText = '';
 
-        // Fire-and-forget playback stop — don’t block on it.
+        // Synchronous state reset in stopPlayback ensures the old
+        // response is killed before any new audio can be queued.
         unawaited(_audio?.stopPlayback() ?? Future.value());
 
-        // IMMEDIATELY restart recorder so Gemini keeps receiving audio.
-        // With single-player architecture, audio focus stays stable —
-        // no delay needed. The recorder should still be alive since we
-        // never dispose it, but verify just in case.
+        // Tell Gemini to start listening for the user's new input.
+        _ws?.send(const WsInbound(type: 'end_turn'));
+
+        // Ensure recorder is alive so user speech keeps flowing.
         if (current.isStreaming) {
           _log.info('ensuring recorder alive after barge-in');
           _audio?.ensureRecording();

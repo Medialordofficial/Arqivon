@@ -369,6 +369,7 @@ class _TodoTile extends ConsumerWidget {
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          onTap: () => ref.read(toggleNoteDoneProvider)(note.id, !note.isDone),
           leading: Checkbox(
             value: note.isDone,
             onChanged: (val) =>
@@ -388,17 +389,31 @@ class _TodoTile extends ConsumerWidget {
                   : cs.onSurface,
             ),
           ),
-          subtitle: note.content.isNotEmpty
-              ? Text(
-                  note.content,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurface.withValues(alpha: 0.5),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (note.content.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    note.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
                   ),
-                )
-              : null,
+                ),
+              Text(
+                DateFormat.MMMd().add_jm().format(note.createdAt.toLocal()),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurface.withValues(alpha: 0.35),
+                ),
+              ),
+            ],
+          ),
           trailing: _priorityBadge(note.priority),
         ),
       ),

@@ -18,6 +18,7 @@ import base64
 import json
 import logging
 import random
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -1001,6 +1002,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     _turn_user_parts: list[str] = []
     _turn_ai_parts: list[str] = []
 
+    def _join_transcript(parts: list[str]) -> str:
+        """Join transcript fragments without spurious spaces.
+
+        Gemini transcription fragments already include their own whitespace.
+        Using ' '.join() inserts extra spaces between sub-word fragments,
+        producing garbled text like 'ho w a re you'.
+        """
+        return re.sub(r'\s+', ' ', ''.join(parts)).strip()
+
     session_record = SessionRecord(
         session_id=session_id,
         user_id=user_id,
@@ -1529,8 +1539,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     tracer.end("gemini_first_token")
                                 session_record.turn_count += 1
                                 # Commit accumulated transcript fragments as full sentences.
-                                user_sentence = ' '.join(_turn_user_parts).strip()
-                                ai_sentence = ' '.join(_turn_ai_parts).strip()
+                                user_sentence = _join_transcript(_turn_user_parts)
+                                ai_sentence = _join_transcript(_turn_ai_parts)
                                 if user_sentence:
                                     conversation_transcript.append(user_sentence)
                                 if ai_sentence:
@@ -1549,8 +1559,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                     tracer.end("gemini_first_token")
                                 session_record.turn_count += 1
                                 # Commit partial transcript for this interrupted turn.
-                                user_sentence = ' '.join(_turn_user_parts).strip()
-                                ai_sentence = ' '.join(_turn_ai_parts).strip()
+                                user_sentence = _join_transcript(_turn_user_parts)
+                                ai_sentence = _join_transcript(_turn_ai_parts)
                                 if user_sentence:
                                     conversation_transcript.append(user_sentence)
                                 if ai_sentence:
