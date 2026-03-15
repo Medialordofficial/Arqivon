@@ -139,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor:
-          isDark ? const Color(0xFF121218) : const Color(0xFFF8F7FC),
+          isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF),
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
@@ -148,13 +148,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF121218),
-                    Color(0xFF1C1C28),
+                    Color(0xFF0F172A),
+                    Color(0xFF1E293B),
                     Color(0xFF2A1F15)
                   ],
                 )
               : null,
-          color: isDark ? null : const Color(0xFFF8F7FC),
+          color: isDark ? null : const Color(0xFFFFFFFF),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
@@ -178,13 +178,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               gradient: const LinearGradient(
-                                colors: [Color(0xFF7C74A8), Color(0xFF9389C4)],
+                                colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF7C74A8)
+                                  color: const Color(0xFF2563EB)
                                       .withValues(alpha: 0.4),
                                   blurRadius: 24,
                                   offset: const Offset(0, 8),
@@ -358,9 +358,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: FilledButton(
                         onPressed: _loading ? null : _submitEmail,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF7C74A8),
+                          backgroundColor: const Color(0xFF2563EB),
                           disabledBackgroundColor: isDark
-                              ? const Color(0xFF2E2E42)
+                              ? const Color(0xFF475569)
                               : const Color(0xFFD8D4E8),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
@@ -514,9 +514,9 @@ class _DarkField extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
     final fillColor =
-        isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
+        isDark ? const Color(0xFF334155) : const Color(0xFFDBEAFE);
     final borderColor =
-        isDark ? const Color(0xFF3A3850) : const Color(0xFFE4E1EF);
+        isDark ? const Color(0xFF334155) : const Color(0xFFDCE5F0);
     final hintColor = cs.onSurface.withValues(alpha: 0.5);
 
     return TextFormField(
@@ -590,9 +590,9 @@ class _SocialBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
-    final bgColor = isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
+    final bgColor = isDark ? const Color(0xFF334155) : const Color(0xFFDBEAFE);
     final borderColor =
-        isDark ? const Color(0xFF3A3850) : const Color(0xFFE4E1EF);
+        isDark ? const Color(0xFF334155) : const Color(0xFFDCE5F0);
 
     return GestureDetector(
       onTap: onTap,
@@ -631,7 +631,7 @@ class _GoogleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final centerColor =
-        isDark ? const Color(0xFF252535) : const Color(0xFFEEECF5);
+        isDark ? const Color(0xFF334155) : const Color(0xFFDBEAFE);
     return SizedBox(
         width: 22,
         height: 22,

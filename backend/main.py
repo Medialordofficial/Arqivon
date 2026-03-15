@@ -933,12 +933,11 @@ async def _connect_gemini(mode: str, source_lang: str, target_lang: str, voice: 
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                # LOW start sensitivity prevents false barge-ins caused by
-                # speaker audio echoing into the mic. With HIGH, Gemini
-                # constantly detects echo as "speech" and NEVER produces a
-                # response (stays in permanent "user speaking" mode).
-                # Hardware AEC helps but is not perfect on all Android devices.
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                # Use SDK defaults for start sensitivity (unspecified).
+                # HIGH caused permanent "user speaking" from echo.
+                # LOW was too strict and missed quiet speech.
+                # Default gives balanced detection.
+
                 # LOW end = allows natural pauses without premature cutoff.
                 end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                 # 500ms prefix captures word beginnings that would otherwise
@@ -1079,10 +1078,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 _turn_ai_parts.clear()
                 # Close old (if exists — None on first call)
                 if live_ctx:
+                    # Null out `session` BEFORE closing so that
+                    # receive_from_gemini sees session=None and waits for
+                    # the new session instead of racing on the stale one.
+                    session = None
                     try:
                         await live_ctx.__aexit__(None, None, None)
                     except Exception as exc:
                         logger.debug("Error closing old Gemini context: %s", exc)
+                    # Brief delay lets the SDK/server fully tear down the
+                    # old WebSocket before we open a new one.  Without this
+                    # Gemini sometimes silently drops the new session.
+                    await asyncio.sleep(0.5)
                 # Open new
                 # Auto-inject current conversation as continuation context
                 # so the AI retains memory across reconnects (health check,
@@ -1478,7 +1485,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         try:
             while not cancel_event.is_set():
                 # Wait for Gemini session to be established (lazy connect).
-                if session is None:
+                if session is None or _switching.is_set():
                     try:
                         await asyncio.wait_for(_mode_switch_event.wait(), timeout=1.0)
                         _mode_switch_event.clear()
@@ -1812,10 +1819,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         break
                     # If a mode switch just happened, the old session was
                     # intentionally torn down — treat it as expected and
-                    # immediately re-attach to the new session.
-                    if _mode_switch_event.is_set():
+                    # wait for the reconnect to fully complete before
+                    # re-attaching to the new session.
+                    if _mode_switch_event.is_set() or _switching.is_set():
                         _mode_switch_event.clear()
                         inner_retry_count = 0
+                        # Wait until _reconnect_session finishes (clears
+                        # _switching) so we attach to the NEW session,
+                        # not the stale closed one.
+                        while _switching.is_set() and not cancel_event.is_set():
+                            await asyncio.sleep(0.05)
                         logger.info("Mode switch detected — re-attaching to new Gemini session")
                         continue
                     inner_retry_count += 1

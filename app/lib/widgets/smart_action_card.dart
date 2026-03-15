@@ -47,28 +47,28 @@ class SmartActionCard extends StatelessWidget {
   Color _colorForType(String type) {
     switch (type) {
       case 'add_calendar':
-        return const Color(0xFF6E6E8A); // cool gray
+        return const Color(0xFF64748B); // cool gray
       case 'save_contact':
         return const Color(0xFF6B9F5B); // sage
       case 'translate':
       case 'translation_card':
-        return const Color(0xFF9389C4); // soft purple
+        return const Color(0xFF3B82F6); // soft purple
       case 'open_url':
-        return const Color(0xFF7C74A8); // purple
+        return const Color(0xFF2563EB); // purple
       case 'save_note':
-        return const Color(0xFF8A7DB8); // lavender
+        return const Color(0xFF6366F1); // lavender
       case 'add_reminder':
         return const Color(0xFFCC5544); // warm red
       case 'share':
-        return const Color(0xFF9389C4); // soft purple
+        return const Color(0xFF3B82F6); // soft purple
       case 'escalate_case':
         return const Color(0xFFCC5544); // warm red
       case 'log_resolution':
         return const Color(0xFF6B9F5B); // sage
       case 'support_card':
-        return const Color(0xFF6E6E8A); // cool gray
+        return const Color(0xFF64748B); // cool gray
       default:
-        return const Color(0xFF5B5488);
+        return const Color(0xFF1D4ED8);
     }
   }
 

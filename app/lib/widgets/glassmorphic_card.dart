@@ -33,7 +33,7 @@ class GlassmorphicCard extends StatelessWidget {
         color: isDark ? ArqivonTheme.darkCard : ArqivonTheme.white,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: isDark ? const Color(0xFF2E2E42) : const Color(0xFFE4E1EF),
+          color: isDark ? const Color(0xFF475569) : const Color(0xFFDCE5F0),
         ),
         boxShadow: isDark
             ? const []

@@ -396,6 +396,104 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
     _textController.clear();
   }
 
+  void _showModeSwitcher(
+      BuildContext context, WidgetRef ref, AgentMode currentMode) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+        return Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Switch Mode',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...AgentMode.values.map((mode) {
+                  final isSelected = mode == currentMode;
+                  return ListTile(
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? mode.color.withValues(alpha: 0.15)
+                            : theme.colorScheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(mode.icon, color: mode.color, size: 20),
+                    ),
+                    title: Text(
+                      mode.label,
+                      style: TextStyle(
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected
+                            ? mode.color
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    subtitle: Text(
+                      mode.description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check_circle_rounded,
+                            color: mode.color, size: 24)
+                        : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      if (mode != currentMode) {
+                        HapticFeedback.mediumImpact();
+                        ref.read(liveSessionProvider.notifier).setMode(mode);
+                      }
+                    },
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// Capture a high-resolution photo and save it to the device.
   Future<void> _captureHighResPhoto(String description) async {
     // Clear the pending request so it doesn't re-trigger.
@@ -600,30 +698,30 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: Container(
-        color: theme.scaffoldBackgroundColor,
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              // ══════════════════════════════════════════════════════
-              // TOP BAR: connection + mode badge
-              // ══════════════════════════════════════════════════════
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(
-                  children: [
-                    ConnectionIndicator(state: connectionState),
-                    const Spacer(),
-                    if (isStreaming)
-                      Container(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // ══════════════════════════════════════════════════════
+            // TOP BAR: connection + mode badge
+            // ══════════════════════════════════════════════════════
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: [
+                  ConnectionIndicator(state: connectionState),
+                  const Spacer(),
+                  if (isStreaming)
+                    GestureDetector(
+                      onTap: () => _showModeSwitcher(context, ref, mode),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.85),
+                          color: mode.color.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -641,324 +739,306 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
                                 letterSpacing: 0.5,
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.swap_horiz_rounded,
+                                size: 14, color: Colors.white),
                           ],
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
+            ),
 
-              // ══════════════════════════════════════════════════════
-              // MODE SELECTOR STRIP
-              // ══════════════════════════════════════════════════════
-              ModeSelectorStrip(
-                selectedMode: mode,
-                isStreaming: isStreaming,
-                onModeSelected: (m) {
-                  ref.read(liveSessionProvider.notifier).setMode(m);
-                },
-              ),
+            // ══════════════════════════════════════════════════════
+            // MODE SELECTOR STRIP
+            // ══════════════════════════════════════════════════════
+            ModeSelectorStrip(
+              selectedMode: mode,
+              isStreaming: isStreaming,
+              onModeSelected: (m) {
+                ref.read(liveSessionProvider.notifier).setMode(m);
+              },
+            ),
 
-              const SizedBox(height: 4),
+            const SizedBox(height: 4),
 
-              // ══════════════════════════════════════════════════════
-              // MAIN CONTENT: chat + overlays + orb
-              // ══════════════════════════════════════════════════════
-              Expanded(
-                child: !isStreaming && chatMessages.isEmpty
-                    ? _buildSessionPicker(theme, mode, bottomPad)
-                    : Stack(
-                        children: [
-                          // ── Camera preview background (A/V mode) ─────────
-                          if (_inputMode == _LiveInputMode.audioVideo &&
-                              _cameraReady &&
-                              _cameraController != null) ...[
-                            // ── Camera flip button ────────────────────────
-                            if (_cameras.length >= 2)
-                              Positioned(
-                                top: 12,
-                                right: 12,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    HapticFeedback.mediumImpact();
-                                    _flipCamera();
-                                  },
-                                  child: Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
+            // ══════════════════════════════════════════════════════
+            // MAIN CONTENT: chat + overlays + orb
+            // ══════════════════════════════════════════════════════
+            Expanded(
+              child: !isStreaming && chatMessages.isEmpty
+                  ? _buildSessionPicker(theme, mode, bottomPad)
+                  : Stack(
+                      children: [
+                        // ── Camera preview background (A/V mode) ─────────
+                        if (_inputMode == _LiveInputMode.audioVideo &&
+                            _cameraReady &&
+                            _cameraController != null) ...[
+                          // ── Camera flip button ────────────────────────
+                          if (_cameras.length >= 2)
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  _flipCamera();
+                                },
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
                                       color:
-                                          Colors.black.withValues(alpha: 0.45),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.25),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.flip_camera_ios_rounded,
-                                      color: Colors.white,
-                                      size: 20,
+                                          Colors.white.withValues(alpha: 0.25),
+                                      width: 1,
                                     ),
                                   ),
-                                ),
-                              ),
-                            Positioned.fill(
-                              child: ClipRRect(
-                                  child: CameraPreview(_cameraController!)),
-                            ),
-                            Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.40),
-                                      Colors.transparent,
-                                      Colors.transparent,
-                                      Colors.black.withValues(alpha: 0.75),
-                                    ],
-                                    stops: const [0, 0.15, 0.6, 1.0],
+                                  child: const Icon(
+                                    Icons.flip_camera_ios_rounded,
+                                    color: Colors.white,
+                                    size: 20,
                                   ),
                                 ),
                               ),
                             ),
-                          ],
+                          Positioned.fill(
+                            child: ClipRRect(
+                                child: CameraPreview(_cameraController!)),
+                          ),
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.40),
+                                    Colors.transparent,
+                                    Colors.transparent,
+                                    Colors.black.withValues(alpha: 0.75),
+                                  ],
+                                  stops: const [0, 0.15, 0.6, 1.0],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
 
-                          // ── Chat + bottom controls column ──────────────────
-                          Column(
-                            children: [
-                              // ── Chat area ──────────────────────────────────
-                              Expanded(
-                                child: chatMessages.isEmpty && !isStreaming
-                                    ? _buildEmptyState(theme, mode)
-                                    : _buildChatList(
-                                        theme,
-                                        chatMessages,
-                                        transcript,
-                                        userTranscript,
-                                        isResponding,
-                                        isStreaming,
-                                      ),
+                        // ── Chat + bottom controls column ──────────────────
+                        Column(
+                          children: [
+                            // ── Chat area ──────────────────────────────────
+                            Expanded(
+                              child: chatMessages.isEmpty && !isStreaming
+                                  ? _buildEmptyState(theme, mode)
+                                  : _buildChatList(
+                                      theme,
+                                      chatMessages,
+                                      transcript,
+                                      userTranscript,
+                                      isResponding,
+                                      isStreaming,
+                                    ),
+                            ),
+
+                            // ── Mode-specific overlays ────────────────────
+                            // ── Post-session insights card ────────────────
+                            if (sessionInsights != null && !isStreaming)
+                              SessionInsightsCard(
+                                insights: sessionInsights,
+                                onDismiss: () => ref
+                                    .read(liveSessionProvider.notifier)
+                                    .dismissSessionInsights(),
+                                onViewDetails: () {
+                                  ref
+                                      .read(liveSessionProvider.notifier)
+                                      .dismissSessionInsights();
+                                  // Navigate to archive tab to view session
+                                  ref.read(activeTabProvider.notifier).state =
+                                      3;
+                                },
                               ),
 
-                              // ── Mode-specific overlays ────────────────────
-                              // ── Post-session insights card ────────────────
-                              if (sessionInsights != null && !isStreaming)
-                                SessionInsightsCard(
-                                  insights: sessionInsights,
+                            if (mode == AgentMode.translator &&
+                                currentTranslation != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: TranslationOverlayWidget(
+                                    overlay: currentTranslation),
+                              ),
+
+                            if (mode == AgentMode.support &&
+                                currentSupportTopic != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: SupportTopicTracker(
+                                  currentTopic: currentSupportTopic,
+                                  allTopics: supportTopics,
+                                ),
+                              ),
+
+                            // ── Action / tutor / export cards ─────────────
+                            if (currentAction != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: SmartActionCard(
+                                  action: currentAction,
                                   onDismiss: () => ref
                                       .read(liveSessionProvider.notifier)
-                                      .dismissSessionInsights(),
-                                  onViewDetails: () {
+                                      .dismissAction(),
+                                  onPrimaryAction: () async {
+                                    HapticFeedback.mediumImpact();
                                     ref
                                         .read(liveSessionProvider.notifier)
-                                        .dismissSessionInsights();
-                                    // Navigate to archive tab to view session
-                                    ref.read(activeTabProvider.notifier).state =
-                                        3;
+                                        .dismissAction();
+                                    final result =
+                                        await ActionHandlerService.execute(
+                                      currentAction,
+                                      context,
+                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(result),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
                                   },
                                 ),
+                              ),
 
-                              if (mode == AgentMode.translator &&
-                                  currentTranslation != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: TranslationOverlayWidget(
-                                      overlay: currentTranslation),
+                            if (mode == AgentMode.tutor &&
+                                currentTutorStep != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: TutorGuidanceCard(
+                                  step: currentTutorStep,
+                                  onDismiss: () => ref
+                                      .read(liveSessionProvider.notifier)
+                                      .dismissTutorStep(),
+                                  onRequestHint: () {
+                                    ref.read(liveSessionProvider.notifier).sendText(
+                                        'Can you give me a hint for the current step?');
+                                  },
                                 ),
+                              ),
 
-                              if (mode == AgentMode.support &&
-                                  currentSupportTopic != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: SupportTopicTracker(
-                                    currentTopic: currentSupportTopic,
-                                    allTopics: supportTopics,
-                                  ),
+                            if (pendingExport != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: ExportDocumentCard(
+                                  doc: pendingExport,
+                                  onDismiss: () => ref
+                                      .read(liveSessionProvider.notifier)
+                                      .dismissExport(),
                                 ),
+                              ),
 
-                              // ── Action / tutor / export cards ─────────────
-                              if (currentAction != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: SmartActionCard(
-                                    action: currentAction,
-                                    onDismiss: () => ref
+                            // ══════════════════════════════════════════════
+                            // BOTTOM: Orb with action ring + status + input
+                            // ══════════════════════════════════════════════
+                            Padding(
+                              padding: EdgeInsets.only(bottom: bottomPad + 4),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // ── Orb with action ring ────────────
+                                  _OrbWithControls(
+                                    orbSize: orbSize,
+                                    isStreaming: isStreaming,
+                                    isResponding: isResponding,
+                                    isMuted: isMuted,
+                                    mode: mode,
+                                    inputMode: _inputMode,
+                                    amplitudeNotifier: ref
                                         .read(liveSessionProvider.notifier)
-                                        .dismissAction(),
-                                    onPrimaryAction: () async {
+                                        .amplitudeNotifier,
+                                    onMicTap: () {
+                                      HapticFeedback.heavyImpact();
+                                      // If AI is responding, tap interrupts
+                                      // the response instead of toggling
+                                      // the session.
+                                      if (isResponding) {
+                                        ref
+                                            .read(liveSessionProvider.notifier)
+                                            .interruptResponse();
+                                      } else {
+                                        _toggleSession();
+                                      }
+                                    },
+                                    onMuteTap: () {
                                       HapticFeedback.mediumImpact();
                                       ref
                                           .read(liveSessionProvider.notifier)
-                                          .dismissAction();
-                                      final result =
-                                          await ActionHandlerService.execute(
-                                        currentAction,
-                                        context,
-                                      );
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(result),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
+                                          .toggleMute();
+                                    },
+                                    onVideoTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setState(() {
+                                        _inputMode = _inputMode ==
+                                                _LiveInputMode.audioOnly
+                                            ? _LiveInputMode.audioVideo
+                                            : _LiveInputMode.audioOnly;
+                                      });
+                                      if (_inputMode ==
+                                              _LiveInputMode.audioVideo &&
+                                          !_cameraReady) {
+                                        _initCamera();
+                                      }
+                                      if (_inputMode ==
+                                              _LiveInputMode.audioOnly &&
+                                          isStreaming) {
+                                        _stopFrameCapture();
+                                      } else if (_inputMode ==
+                                              _LiveInputMode.audioVideo &&
+                                          isStreaming) {
+                                        _startFrameCapture();
                                       }
                                     },
-                                  ),
-                                ),
-
-                              if (mode == AgentMode.tutor &&
-                                  currentTutorStep != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: TutorGuidanceCard(
-                                    step: currentTutorStep,
-                                    onDismiss: () => ref
-                                        .read(liveSessionProvider.notifier)
-                                        .dismissTutorStep(),
-                                    onRequestHint: () {
-                                      ref
-                                          .read(liveSessionProvider.notifier)
-                                          .sendText(
-                                              'Can you give me a hint for the current step?');
+                                    onKeyboardTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setState(() =>
+                                          _showTextInput = !_showTextInput);
                                     },
                                   ),
-                                ),
 
-                              if (pendingExport != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: ExportDocumentCard(
-                                    doc: pendingExport,
-                                    onDismiss: () => ref
-                                        .read(liveSessionProvider.notifier)
-                                        .dismissExport(),
+                                  // ── Status text ─────────────────────
+                                  _StatusText(
+                                    isStreaming: isStreaming,
+                                    isResponding: isResponding,
+                                    isMuted: isMuted,
+                                    connectionState: connectionState,
+                                    mode: mode,
                                   ),
-                                ),
 
-                              // ══════════════════════════════════════════════
-                              // BOTTOM: Orb with action ring + status + input
-                              // ══════════════════════════════════════════════
-                              Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      theme.scaffoldBackgroundColor
-                                          .withValues(alpha: 0.0),
-                                      theme.scaffoldBackgroundColor,
-                                    ],
-                                    stops: const [0.0, 0.3],
+                                  // ── Text input ──────────────────────
+                                  AnimatedCrossFade(
+                                    firstChild: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          20, 6, 20, 4),
+                                      child: _buildTextInput(theme, mode),
+                                    ),
+                                    secondChild: const SizedBox.shrink(),
+                                    crossFadeState: _showTextInput
+                                        ? CrossFadeState.showFirst
+                                        : CrossFadeState.showSecond,
+                                    duration: const Duration(milliseconds: 200),
                                   ),
-                                ),
-                                child: Padding(
-                                  padding:
-                                      EdgeInsets.only(bottom: bottomPad + 4),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // ── Orb with action ring ────────────
-                                      _OrbWithControls(
-                                        orbSize: orbSize,
-                                        isStreaming: isStreaming,
-                                        isResponding: isResponding,
-                                        isMuted: isMuted,
-                                        mode: mode,
-                                        inputMode: _inputMode,
-                                        amplitudeNotifier: ref
-                                            .read(liveSessionProvider.notifier)
-                                            .amplitudeNotifier,
-                                        onMicTap: () {
-                                          HapticFeedback.heavyImpact();
-                                          // If AI is responding, tap interrupts
-                                          // the response instead of toggling
-                                          // the session.
-                                          if (isResponding) {
-                                            ref
-                                                .read(liveSessionProvider
-                                                    .notifier)
-                                                .interruptResponse();
-                                          } else {
-                                            _toggleSession();
-                                          }
-                                        },
-                                        onMuteTap: () {
-                                          HapticFeedback.mediumImpact();
-                                          ref
-                                              .read(
-                                                  liveSessionProvider.notifier)
-                                              .toggleMute();
-                                        },
-                                        onVideoTap: () {
-                                          HapticFeedback.lightImpact();
-                                          setState(() {
-                                            _inputMode = _inputMode ==
-                                                    _LiveInputMode.audioOnly
-                                                ? _LiveInputMode.audioVideo
-                                                : _LiveInputMode.audioOnly;
-                                          });
-                                          if (_inputMode ==
-                                                  _LiveInputMode.audioVideo &&
-                                              !_cameraReady) {
-                                            _initCamera();
-                                          }
-                                          if (_inputMode ==
-                                                  _LiveInputMode.audioOnly &&
-                                              isStreaming) {
-                                            _stopFrameCapture();
-                                          } else if (_inputMode ==
-                                                  _LiveInputMode.audioVideo &&
-                                              isStreaming) {
-                                            _startFrameCapture();
-                                          }
-                                        },
-                                        onKeyboardTap: () {
-                                          HapticFeedback.lightImpact();
-                                          setState(() =>
-                                              _showTextInput = !_showTextInput);
-                                        },
-                                      ),
-
-                                      // ── Status text ─────────────────────
-                                      _StatusText(
-                                        isStreaming: isStreaming,
-                                        isResponding: isResponding,
-                                        isMuted: isMuted,
-                                        connectionState: connectionState,
-                                        mode: mode,
-                                      ),
-
-                                      // ── Text input ──────────────────────
-                                      AnimatedCrossFade(
-                                        firstChild: Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                              20, 6, 20, 4),
-                                          child: _buildTextInput(theme, mode),
-                                        ),
-                                        secondChild: const SizedBox.shrink(),
-                                        crossFadeState: _showTextInput
-                                            ? CrossFadeState.showFirst
-                                            : CrossFadeState.showSecond,
-                                        duration:
-                                            const Duration(milliseconds: 200),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -1044,8 +1124,8 @@ class _LiveScreenState extends ConsumerState<LiveScreen>
               subtitle: 'Voice + camera for visual context',
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFF7C74A8),
-                  Color(0xFF9389C4),
+                  Color(0xFF1D4ED8),
+                  Color(0xFF3B82F6),
                 ],
               ),
               onTap: () {

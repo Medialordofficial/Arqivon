@@ -96,7 +96,7 @@ class ArqivonApp extends ConsumerWidget {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarColor:
-            isDark ? const Color(0xFF121218) : Colors.white,
+            isDark ? const Color(0xFF0F172A) : Colors.white,
         systemNavigationBarIconBrightness:
             isDark ? Brightness.light : Brightness.dark,
       ),
@@ -297,8 +297,8 @@ class _SplashScreenState extends State<_SplashScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: isDark
-                    ? [const Color(0xFF121218), const Color(0xFF1C1C28)]
-                    : [const Color(0xFFF8F7FC), const Color(0xFFF0EEF6)],
+                    ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                    : [const Color(0xFFFFFFFF), const Color(0xFFE8EEF5)],
               ),
             ),
             child: Column(
@@ -338,7 +338,7 @@ class _SplashScreenState extends State<_SplashScreen>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF7C74A8).withValues(
+                                  color: const Color(0xFF2563EB).withValues(
                                       alpha: 0.35 + 0.2 * _pulseCtrl.value),
                                   blurRadius:
                                       _glowRadius.value + 8 * _pulseCtrl.value,
@@ -387,7 +387,7 @@ class _SplashScreenState extends State<_SplashScreen>
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF7C74A8).withValues(alpha: 0.85),
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.85),
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -402,7 +402,7 @@ class _SplashScreenState extends State<_SplashScreen>
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        const Color(0xFF7C74A8).withValues(alpha: 0.4),
+                        const Color(0xFF2563EB).withValues(alpha: 0.4),
                       ),
                     ),
                   ),
@@ -423,7 +423,7 @@ class _SplashScreenState extends State<_SplashScreen>
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [Color(0xFF7C74A8), Color(0xFF9389C4)],
+          colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -461,10 +461,10 @@ class _OrbitalRingPainter extends CustomPainter {
         startAngle: 0,
         endAngle: math.pi * 1.5,
         colors: [
-          const Color(0xFF7C74A8).withValues(alpha: 0.0),
-          const Color(0xFF7C74A8).withValues(alpha: 0.6 + 0.2 * pulseValue),
-          const Color(0xFF9389C4).withValues(alpha: 0.8),
-          const Color(0xFF7C74A8).withValues(alpha: 0.0),
+          const Color(0xFF2563EB).withValues(alpha: 0.0),
+          const Color(0xFF2563EB).withValues(alpha: 0.6 + 0.2 * pulseValue),
+          const Color(0xFF3B82F6).withValues(alpha: 0.8),
+          const Color(0xFF2563EB).withValues(alpha: 0.0),
         ],
         stops: const [0.0, 0.3, 0.7, 1.0],
       ).createShader(rect);
@@ -478,7 +478,7 @@ class _OrbitalRingPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(dotX, dotY),
       dotRadius,
-      Paint()..color = const Color(0xFF9389C4),
+      Paint()..color = const Color(0xFF3B82F6),
     );
 
     // Second smaller dot at ~90° behind
@@ -490,7 +490,7 @@ class _OrbitalRingPainter extends CustomPainter {
       2.0 + 0.5 * pulseValue,
       Paint()
         ..color =
-            const Color(0xFF7C74A8).withValues(alpha: 0.5 + 0.2 * pulseValue),
+            const Color(0xFF2563EB).withValues(alpha: 0.5 + 0.2 * pulseValue),
     );
 
     // Third tiny dot at ~200°
@@ -500,7 +500,7 @@ class _OrbitalRingPainter extends CustomPainter {
     canvas.drawCircle(
       Offset(dot3X, dot3Y),
       1.5,
-      Paint()..color = const Color(0xFF7C74A8).withValues(alpha: 0.3),
+      Paint()..color = const Color(0xFF2563EB).withValues(alpha: 0.3),
     );
   }
 

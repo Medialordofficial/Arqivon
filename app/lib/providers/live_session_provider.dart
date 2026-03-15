@@ -562,8 +562,8 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
         _audioChunksSent++;
         if (_audioChunksSent % 50 == 1) {
-          _log.fine(
-            'audio chunk #$_audioChunksSent → WS (state=${_ws?.state})',
+          _log.info(
+            '🎤 mic chunk #$_audioChunksSent → WS (state=${_ws?.state})',
           );
         }
         _ws?.send(WsInbound(type: 'audio', data: b64));
@@ -661,7 +661,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           !cur.isResponding) {
         final sinceActive =
             DateTime.now().difference(_activeStreamingAt!).inSeconds;
-        if (sinceActive >= 15) {
+        if (sinceActive >= 30) {
           _log.warning(
             'No server acknowledgment in ${sinceActive}s of active streaming '
             '— Gemini likely dead, forcing restart',
@@ -903,11 +903,11 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   void _scheduleTurnCompleteFinalize() {
     _turnCompleteTimer?.cancel();
-    // 250ms debounce: catch trailing audio chunks that arrive after
-    // turn_complete but before the final flush.
-    _turnCompleteTimer = Timer(const Duration(milliseconds: 250), () {
+    // 50ms micro-debounce: catches any trailing audio chunk that arrives in
+    // the same WebSocket batch as turn_complete.
+    _turnCompleteTimer = Timer(const Duration(milliseconds: 50), () {
       final current = state.valueOrNull ?? const LiveSessionState();
-      _log.info('finalizing turn_complete (debounced)');
+      _log.info('finalizing turn_complete');
       _audio?.flushAndPlay();
 
       final newMessages = <ChatMessage>[...current.chatMessages];
@@ -934,7 +934,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
   // ── Message handling ──────────────────────────────────────────────────
 
-  void _handleServerMessage(WsOutbound msg) {
+  void _handleServerMessage(WsOutbound msg) async {
     final current = state.valueOrNull ?? const LiveSessionState();
     _trackLatency(msg);
     // Track liveness of any non-pong message.
@@ -946,28 +946,19 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // Drop trailing audio that arrives right after an interruption.
           // These are stale chunks from the old response that were already
           // in the WebSocket pipeline when the backend sent INTERRUPTED.
-          // The backend now breaks out of the turn iterator on interrupt,
-          // so very few stale chunks arrive. 500ms is safe because the
-          // new response takes 1.5s+ (user speech + Gemini processing).
-          // The gate is also cleared early by user_transcript arrival.
+          // 50ms is enough to catch in-flight chunks without blocking
+          // the new response.
           if (_interruptedAt != null) {
             final msSinceInterrupt =
                 DateTime.now().difference(_interruptedAt!).inMilliseconds;
-            if (msSinceInterrupt < 500) {
-              _log.fine(
-                  'dropping stale audio chunk ${msSinceInterrupt}ms after interrupt');
+            if (msSinceInterrupt < 50) {
+              _log.info(
+                  '⚠️ dropping stale audio chunk ${msSinceInterrupt}ms after interrupt');
               break; // silently drop trailing chunk from old response
             }
             _interruptedAt = null; // grace window elapsed
           }
-          // If turn_complete just arrived, allow this trailing audio to be
-          // included before finalizing playback.
-          if (_turnCompleteTimer != null && _turnCompleteTimer!.isActive) {
-            _scheduleTurnCompleteFinalize();
-          }
-          // Late chunks after turn_complete timer already fired:
-          // just queue them. The audio_service playback loop's
-          // demand-flush handles them automatically.
+          _log.info('🔊 queueChunk (${msg.data!.length} b64 chars)');
           _audio?.queueChunk(msg.data!);
           // Mark as responding for UI.
           // Mic audio always flows (true bidirectional). The user
@@ -1158,7 +1149,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
         break;
 
       case 'turn_complete':
-        _log.info('turn_complete received from backend (debounced)');
+        _log.info('✅ turn_complete received from backend');
         _lastUserTranscriptAt = null;
         _responseStaleTimer?.cancel();
         _scheduleTurnCompleteFinalize();
@@ -1199,7 +1190,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
 
         // Synchronous state reset in stopPlayback ensures the old
         // response is killed before any new audio can be queued.
-        unawaited(_audio?.stopPlayback() ?? Future.value());
+        // Await so the player hardware buffer is flushed before we
+        // accept new chunks.
+        await _audio?.stopPlayback();
 
         // Do NOT send end_turn here. The backend already handled the
         // interrupt by calling session.send_client_content(turn_complete=True)

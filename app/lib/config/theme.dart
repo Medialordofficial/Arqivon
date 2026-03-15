@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Arqivon — Clean White × Soft Purple design system.
+/// Arqivon — Clean White × Blue design system.
 class ArqivonTheme {
   ArqivonTheme._();
 
   // ── Core brand palette ────────────────────────────────────────────────
 
-  /// Primary: soft purple.
-  static const Color primary = Color(0xFF7C74A8);
-  static const Color primaryDark = Color(0xFF5B5488);
-  static const Color primaryLight = Color(0xFFEEECF5);
+  /// Primary: blue.
+  static const Color primary = Color(0xFF2563EB);
+  static const Color primaryDark = Color(0xFF1D4ED8);
+  static const Color primaryLight = Color(0xFFDBEAFE);
 
-  /// Accent: brighter purple.
-  static const Color accent = Color(0xFF9389C4);
-  static const Color accentLight = Color(0xFFF3F1FA);
+  /// Accent: lighter blue.
+  static const Color accent = Color(0xFF3B82F6);
+  static const Color accentLight = Color(0xFFEFF6FF);
 
   /// Teal/green accent.
   static const Color teal = Color(0xFF6B9F5B);
@@ -31,29 +31,29 @@ class ArqivonTheme {
   // ── Light surfaces ───────────────────────────────────────────────────
 
   static const Color white = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFF8F7FC);
+  static const Color background = Color(0xFFFFFFFF);
   static const Color cardBg = Color(0xFFFFFFFF);
-  static const Color borderColor = Color(0xFFE4E1EF);
-  static const Color divider = Color(0xFFF0EEF6);
+  static const Color borderColor = Color(0xFFDCE5F0);
+  static const Color divider = Color(0xFFE8EEF5);
 
   // ── Text ──────────────────────────────────────────────────────────────
 
   static const Color textPrimary = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF6E6E8A);
+  static const Color textSecondary = Color(0xFF64748B);
 
   // ── Dark palette ─────────────────────────────────────────────────────
 
-  static const Color darkBg = Color(0xFF121218);
-  static const Color darkSurface = Color(0xFF1C1C28);
-  static const Color darkCard = Color(0xFF252535);
-  static const Color darkText = Color(0xFFF0EEF6);
-  static const Color darkSubtext = Color(0xFF9090A8);
+  static const Color darkBg = Color(0xFF0F172A);
+  static const Color darkSurface = Color(0xFF1E293B);
+  static const Color darkCard = Color(0xFF334155);
+  static const Color darkText = Color(0xFFF1F5F9);
+  static const Color darkSubtext = Color(0xFF94A3B8);
 
   // ── Mode colors ───────────────────────────────────────────────────────
-  static const Color modeGeneral = Color(0xFF7C74A8);
-  static const Color modeTranslator = Color(0xFF9389C4);
+  static const Color modeGeneral = Color(0xFF2563EB);
+  static const Color modeTranslator = Color(0xFF3B82F6);
   static const Color modeTutor = Color(0xFF6B9F5B);
-  static const Color modeSupport = Color(0xFF8A7DB8);
+  static const Color modeSupport = Color(0xFF6366F1);
 
   // ── Light theme ───────────────────────────────────────────────────────
 
@@ -221,17 +221,17 @@ class ArqivonTheme {
     brightness: Brightness.dark,
     useMaterial3: true,
     colorScheme: const ColorScheme.dark(
-      primary: Color(0xFFADA4D4),
+      primary: Color(0xFF60A5FA),
       onPrimary: darkBg,
-      primaryContainer: Color(0xFF3A3558),
-      onPrimaryContainer: Color(0xFFE0DCEF),
-      secondary: Color(0xFFB5ADE0),
+      primaryContainer: Color(0xFF1E3A5F),
+      onPrimaryContainer: Color(0xFFDBEAFE),
+      secondary: Color(0xFF93C5FD),
       onSecondary: darkBg,
       tertiary: Color(0xFF8BC17A),
       surface: darkCard,
       onSurface: darkText,
       surfaceContainerHighest: darkSurface,
-      outline: Color(0xFF3A3850),
+      outline: Color(0xFF334155),
       error: Color(0xFFFF9B9B),
       onError: darkBg,
     ),
@@ -257,7 +257,7 @@ class ArqivonTheme {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFF2E2E42)),
+        side: const BorderSide(color: Color(0xFF475569)),
       ),
       margin: EdgeInsets.zero,
     ),
@@ -266,15 +266,15 @@ class ArqivonTheme {
       fillColor: darkCard,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF3A3850)),
+        borderSide: const BorderSide(color: Color(0xFF334155)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF3A3850)),
+        borderSide: const BorderSide(color: Color(0xFF334155)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFADA4D4), width: 2),
+        borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -290,7 +290,7 @@ class ArqivonTheme {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: const Color(0xFFADA4D4),
+        backgroundColor: const Color(0xFF60A5FA),
         foregroundColor: darkBg,
         minimumSize: const Size.fromHeight(50),
         shape: RoundedRectangleBorder(
@@ -305,8 +305,8 @@ class ArqivonTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFFADA4D4),
-        side: const BorderSide(color: Color(0xFFADA4D4)),
+        foregroundColor: const Color(0xFF60A5FA),
+        side: const BorderSide(color: Color(0xFF60A5FA)),
         minimumSize: const Size.fromHeight(50),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -319,7 +319,7 @@ class ArqivonTheme {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFFADA4D4),
+        foregroundColor: const Color(0xFF60A5FA),
         textStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
@@ -327,29 +327,29 @@ class ArqivonTheme {
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFF3A3558),
-      selectedColor: const Color(0xFFADA4D4),
-      labelStyle: const TextStyle(color: Color(0xFFE0DCEF), fontSize: 13),
+      backgroundColor: const Color(0xFF1E3A5F),
+      selectedColor: const Color(0xFF60A5FA),
+      labelStyle: const TextStyle(color: Color(0xFFDBEAFE), fontSize: 13),
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: darkSurface,
-      indicatorColor: const Color(0xFF3A3558),
+      indicatorColor: const Color(0xFF1E3A5F),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const IconThemeData(color: Color(0xFFADA4D4));
+          return const IconThemeData(color: Color(0xFF60A5FA));
         }
         return const IconThemeData(color: darkSubtext);
       }),
     ),
     dividerTheme: const DividerThemeData(
-      color: Color(0xFF2E2E42),
+      color: Color(0xFF334155),
       space: 1,
       thickness: 1,
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: Color(0xFFADA4D4),
+      color: Color(0xFF60A5FA),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: darkText,
