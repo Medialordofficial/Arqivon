@@ -938,7 +938,9 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
     final current = state.valueOrNull ?? const LiveSessionState();
     _trackLatency(msg);
     // Track liveness of any non-pong message.
-    if (msg.type != 'pong') {}
+    if (msg.type != 'pong' && msg.type != 'audio') {
+      _log.info('📩 handling msg type=${msg.type}');
+    }
 
     switch (msg.type) {
       case 'audio':
@@ -958,8 +960,7 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
             }
             _interruptedAt = null; // grace window elapsed
           }
-          _log.info('🔊 queueChunk (${msg.data!.length} b64 chars)');
-          _audio?.queueChunk(msg.data!);
+          await _audio?.queueChunk(msg.data!);
           // Mark as responding for UI.
           // Mic audio always flows (true bidirectional). The user
           // can also tap the orb to interrupt.
@@ -1015,6 +1016,38 @@ class LiveSessionNotifier extends AutoDisposeAsyncNotifier<LiveSessionState> {
           // gate so audio from the AI's new response is accepted
           // immediately instead of waiting for the 500ms timeout.
           _interruptedAt = null;
+
+          // LOCAL INTERRUPTION: If the player is actively playing AI
+          // audio, stop it immediately. Since we use buffer-and-play,
+          // Gemini has already finished its turn by the time the user
+          // hears the audio, so Gemini won't send `interrupted`.
+          // Instead we handle it locally.
+          if (_audio != null && _audio!.isPlaying) {
+            _log.info('🛑 user spoke during playback — local interrupt');
+            _responseStaleTimer?.cancel();
+            _turnCompleteTimer?.cancel();
+            await _audio!.stopPlayback();
+            // Commit partial texts.
+            final iMsgs = <ChatMessage>[...current.chatMessages];
+            final partialAi = _pendingAiText.isNotEmpty
+                ? _pendingAiText
+                : _joinTranscript(_turnAiTexts);
+            if (partialAi.isNotEmpty) {
+              final heard = partialAi.length > 80
+                  ? '${partialAi.substring(0, 80)}…'
+                  : '$partialAi…';
+              iMsgs.add(ChatMessage(text: heard));
+            }
+            _pendingAiText = '';
+            _turnAiTexts.clear();
+            state = AsyncData(
+              current.copyWith(
+                isResponding: false,
+                clearTranscript: true,
+                chatMessages: iMsgs,
+              ),
+            );
+          }
         }
         // Show accumulated user text for a readable live bubble.
         final latest = state.valueOrNull ?? current;

@@ -1373,11 +1373,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             _client_interrupted = True
                             logger.info("end_turn during model turn — suppressing audio, sending INTERRUPTED")
                             await _send_json(websocket, OutboundMessage(type=OutboundType.INTERRUPTED))
-                            await session.send_client_content(turns=None, turn_complete=True)
                         elif not _in_model_turn:
-                            # Model is NOT speaking — safe to signal turn_complete
-                            # so Gemini knows the user wants to talk.
-                            await session.send_client_content(turns=None, turn_complete=True)
+                            # With VAD enabled, Gemini manages turn-taking
+                            # automatically — no need to send turn_complete.
+                            logger.info("end_turn while model idle — ignored (VAD handles turns)")
                         # else: _client_interrupted already True — ignore duplicate end_turn
                         # to prevent double turn_complete which corrupts Gemini session.
 

@@ -1,29 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 import '../config/logger.dart';
 import 'package:record/record.dart';
 
 /// Handles microphone capture (outbound) and AI response playback (inbound).
 ///
-/// **Playback architecture (v15 — buffer-and-play):**
+/// **Playback architecture (v16 — streaming AudioTrack):**
 ///
-/// 1. PCM chunks from Gemini are buffered in memory via [queueChunk].
-/// 2. On `turn_complete`, [flushAndPlay] builds ONE complete WAV file
-///    (24 kHz, 16-bit, mono) and plays it with a [_MemoryAudioSource].
-/// 3. ExoPlayer receives a complete, valid WAV with correct
-///    `Content-Length` — guaranteed zero errors.
-/// 4. `ProcessingState.completed` triggers [onPlaybackDone].
-/// 5. On barge-in, [stopPlayback] stops the player immediately.
+/// 1. PCM chunks from Gemini are written directly to Android's AudioTrack
+///    via a platform channel — audio plays immediately, no buffering.
+/// 2. Each chunk is heard within ~20ms of arriving from the server.
+/// 3. Interruption is instant: AudioTrack.pause() + flush().
+/// 4. No WAV files, no ExoPlayer, no just_audio overhead.
 class AudioService {
   static final _log = AppLogger('AudioService');
+  static const _channel = MethodChannel('com.notanovice.arqivon/audio_track');
 
   // ── Recording ──────────────────────────────────────────────────────
   final AudioRecorder _recorder = AudioRecorder();
@@ -36,20 +33,18 @@ class AudioService {
   static const int _chunkTargetBytes = 1600; // 50 ms @ 16 kHz, 16-bit mono
   final List<int> _recordRing = [];
 
-  // ── Playback — buffer-and-play (v15) ──────────────────────────────
-  AudioPlayer? _player;
-  Timer? _playbackTimeout;
-
+  // ── Playback — streaming AudioTrack (v16) ─────────────────────────
+  bool _trackCreated = false;
   int _chunkCount = 0;
-  StreamSubscription<ProcessingState>? _processingStateSub;
   int _turnId = 0;
-  bool _turnComplete = false;
-  bool _playbackStarted = false;
-  Timer? _staleWatchdog;
-  List<int> _pcmBuffer = [];
+  bool _isStreamingPlayback = false;
+  Timer? _silenceTimer; // fires when no audio for X seconds → turn done
 
-  /// Called when the AI turn's playback finishes (all tracks played).
+  /// Called when the AI turn's playback finishes (silence detected after audio).
   VoidCallback? onPlaybackDone;
+
+  /// Whether the AI is actively streaming audio right now.
+  bool get isPlaying => _isStreamingPlayback;
 
   bool _sessionConfigured = false;
 
@@ -85,36 +80,17 @@ class AudioService {
     _log.info('audio session configured (voiceCommunication/voiceChat)');
   }
 
-  /// Lazily create a single AudioPlayer that lives for the entire session.
-  void _ensurePlayer() {
-    if (_player != null) return;
-    _player = AudioPlayer(handleInterruptions: false);
-    _player!.setVolume(1.0);
-    _processingStateSub =
-        _player!.processingStateStream.listen(_onProcessingState);
-    _log.info('persistent player created');
-  }
-
-  void _onProcessingState(ProcessingState ps) {
-    _log.info('▍ processingState → $ps (turnComplete=$_turnComplete)');
-    if (ps == ProcessingState.completed && _turnComplete) {
-      _log.info(
-          '▍ player COMPLETED + turn complete → calling _resetForNextTurn');
-      _playbackTimeout?.cancel();
-      _resetForNextTurn();
+  /// Create the AudioTrack on the native side.
+  Future<void> _ensureTrack() async {
+    if (_trackCreated) return;
+    try {
+      final bufSize =
+          await _channel.invokeMethod('create', {'sampleRate': 24000});
+      _trackCreated = true;
+      _log.info('AudioTrack created (bufSize=$bufSize)');
+    } catch (e) {
+      _log.severe('AudioTrack create failed', e);
     }
-  }
-
-  /// Safety watchdog: auto-finalizes if turn_complete never arrives.
-  void _startStaleWatchdog() {
-    _staleWatchdog?.cancel();
-    _staleWatchdog = Timer(const Duration(seconds: 10), () {
-      _staleWatchdog = null;
-      if (!_turnComplete && _playbackStarted) {
-        _log.warning('stale watchdog fired — auto-finalizing turn');
-        flushAndPlay();
-      }
-    });
   }
 
   // ── Recording ─────────────────────────────────────────────────────
@@ -250,132 +226,96 @@ class AudioService {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  PLAYBACK — buffer-and-play (v15)
+  //  PLAYBACK — streaming AudioTrack (v16)
   // ══════════════════════════════════════════════════════════════════
 
-  /// Push a base64-encoded PCM chunk from the AI into the buffer.
-  void queueChunk(String base64Audio) {
+  /// Write a base64-encoded PCM chunk directly to AudioTrack for instant playback.
+  Future<void> queueChunk(String base64Audio) async {
     final bytes = base64Decode(base64Audio);
-    _turnComplete = false;
     _chunkCount++;
-    _playbackStarted = true;
+    _isStreamingPlayback = true;
 
-    // Buffer raw PCM bytes in memory.
-    _pcmBuffer.addAll(bytes);
-
-    // Reset stale watchdog on each chunk.
-    _staleWatchdog?.cancel();
-    _startStaleWatchdog();
+    // Reset silence timer on each chunk — after last chunk + turn_complete,
+    // the silence timer fires to signal playback done.
+    _silenceTimer?.cancel();
 
     if (_chunkCount == 1) {
-      _log.info('▍ FIRST audio chunk (${bytes.length} B) — buffering');
-    } else if (_chunkCount % 10 == 0) {
-      _log.info('▍ chunk #$_chunkCount, buffer=${_pcmBuffer.length} B');
+      _log.info(
+          '▍ FIRST audio chunk (${bytes.length} B) — streaming to AudioTrack');
+      await _ensureAudioSession();
+      await _ensureTrack();
+    }
+
+    if (_chunkCount % 20 == 0) {
+      _log.info('▍ chunk #$_chunkCount streamed');
+    }
+
+    // Write PCM directly to AudioTrack — plays immediately.
+    try {
+      await _channel.invokeMethod('write', {'data': Uint8List.fromList(bytes)});
+    } catch (e) {
+      _log.severe('AudioTrack write failed', e);
     }
   }
 
-  /// Called by the provider on `turn_complete`.
-  /// Builds a complete WAV from buffered PCM and plays it.
-  Future<void> flushAndPlay() async {
-    _turnComplete = true;
-    _staleWatchdog?.cancel();
-    _staleWatchdog = null;
-    _log.info(
-        '▍▍ flushAndPlay — $_chunkCount chunks, ${_pcmBuffer.length} PCM bytes');
-    _chunkCount = 0;
+  /// Called on turn_complete. With streaming, audio is already playing.
+  /// Just start the silence timer to detect when playback finishes.
+  void flushAndPlay() {
+    _log.info('▍▍ flushAndPlay — $_chunkCount chunks streamed');
 
-    // No audio data buffered this turn.
-    if (_pcmBuffer.isEmpty || !_playbackStarted) {
-      _log.info('▍▍ NO audio this turn (empty=${_pcmBuffer.isEmpty}, '
-          'started=$_playbackStarted) — skipping');
-      _pcmBuffer.clear();
-      _playbackStarted = false;
-      onPlaybackDone?.call();
+    if (_chunkCount == 0) {
+      _log.info('▍▍ no audio this turn — skipping');
+      if (!_isStreamingPlayback) {
+        onPlaybackDone?.call();
+      }
       return;
     }
 
-    // Build a complete WAV file from buffered PCM.
-    final pcmLen = _pcmBuffer.length;
-    final wav = _buildWav(_pcmBuffer);
-    _pcmBuffer = []; // release buffer memory
-    final durationMs = (pcmLen / (24000 * 2) * 1000).round();
-    _log.info('▍▍ WAV built: ${wav.length} bytes, ~${durationMs}ms audio');
+    // Audio is already playing via AudioTrack streaming.
+    // Estimate remaining playback time based on chunks written.
+    // Each chunk is ~1920 bytes = 40ms at 24kHz 16-bit mono.
+    // Use a generous timer to detect when the AudioTrack buffer drains.
+    _startSilenceTimer();
+  }
 
-    // Write WAV to temp file — bypasses just_audio's HTTP proxy entirely.
-    // This is the most reliable playback path on Android.
-    final tempDir = await getTemporaryDirectory();
-    final wavFile = File('${tempDir.path}/arqivo_ai_response.wav');
-    await wavFile.writeAsBytes(wav, flush: true);
-    _log.info('▍▍ WAV written to ${wavFile.path}');
-
-    await _ensureAudioSession();
-    _ensurePlayer();
-
-    final capturedTurnId = _turnId;
-    try {
-      _log.info('▍▍ player.stop() before setFilePath');
-      await _player!.stop();
-      _log.info('▍▍ setFilePath(${wavFile.path})');
-      await _player!.setFilePath(wavFile.path);
-      if (_turnId != capturedTurnId) {
-        _log.warning('▍▍ turnId changed during setFilePath — aborting');
-        return;
-      }
-      final dur = _player!.duration;
-      _log.info('▍▍ source loaded, player duration=$dur, '
-          'processingState=${_player!.processingState}');
-      _log.info('▶▶ PLAY');
-      await _player!.play();
-      _log.info('▍▍ play() returned (playback finished or stopped)');
-    } catch (e, st) {
-      _log.severe('▍▍ PLAYBACK FAILED: $e', e, st);
-      if (_turnId == capturedTurnId) {
+  void _startSilenceTimer() {
+    _silenceTimer?.cancel();
+    // Wait 1.5s after last chunk — AudioTrack buffer should be drained by then.
+    _silenceTimer = Timer(const Duration(milliseconds: 1500), () {
+      _silenceTimer = null;
+      if (_isStreamingPlayback) {
+        _log.info('▍▍ silence timer fired — playback done');
         _resetForNextTurn();
       }
-    }
-
-    // Safety timeout.
-    _playbackTimeout?.cancel();
-    _playbackTimeout = Timer(const Duration(seconds: 60), () {
-      _log.warning('playback TIMEOUT — force-resetting');
-      _turnId++;
-      try {
-        _player?.stop();
-      } catch (_) {}
-      _resetForNextTurn();
     });
   }
 
   void _resetForNextTurn() {
-    _playbackTimeout?.cancel();
-    _staleWatchdog?.cancel();
-    _staleWatchdog = null;
-    _turnComplete = false;
-    _playbackStarted = false;
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
+    _isStreamingPlayback = false;
     _chunkCount = 0;
-    _pcmBuffer = [];
-
-    _log.info(
-        '▍▍ turn RESET — firing onPlaybackDone (callback=${onPlaybackDone != null})');
+    _log.info('▍▍ turn RESET — firing onPlaybackDone');
     onPlaybackDone?.call();
   }
 
   /// Stop playback immediately (barge-in).
   Future<void> stopPlayback() async {
-    _playbackTimeout?.cancel();
-    _staleWatchdog?.cancel();
-    _staleWatchdog = null;
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
     _chunkCount = 0;
-    _turnComplete = false;
-    _playbackStarted = false;
-    _pcmBuffer = [];
+    _isStreamingPlayback = false;
     _turnId++;
 
     _log.info('playback stopped (barge-in, turnId=$_turnId)');
 
     try {
-      await _player?.stop().timeout(const Duration(milliseconds: 200));
-    } catch (_) {}
+      await _channel.invokeMethod('stop');
+      // Re-create the track so it's ready for the next response.
+      _trackCreated = false;
+    } catch (e) {
+      _log.severe('AudioTrack stop failed', e);
+    }
   }
 
   // ── Amplitude calculation ───────────────────────────────────────
@@ -409,66 +349,16 @@ class AudioService {
 
   void dispose() {
     _disposed = true;
-    _playbackTimeout?.cancel();
-    _staleWatchdog?.cancel();
+    _silenceTimer?.cancel();
     _recordSub?.cancel();
-    _processingStateSub?.cancel();
     _turnId++;
-    _pcmBuffer = [];
     try {
-      _player?.stop();
+      _channel.invokeMethod('release');
     } catch (_) {}
-    _player?.dispose();
+    _trackCreated = false;
     _audioController.close();
     _amplitudeController.close();
     _recorder.dispose();
-    _player = null;
-  }
-
-  /// Build a complete WAV file from raw PCM data (24 kHz, 16-bit, mono).
-  static Uint8List _buildWav(List<int> pcm) {
-    const sr = 24000;
-    const bits = 16;
-    const ch = 1;
-    const byteRate = sr * ch * (bits ~/ 8);
-    const blockAlign = ch * (bits ~/ 8);
-    final dataSize = pcm.length;
-    final fileSize = 36 + dataSize;
-
-    final out = ByteData(44 + dataSize);
-    // RIFF header
-    out.setUint8(0, 0x52); // R
-    out.setUint8(1, 0x49); // I
-    out.setUint8(2, 0x46); // F
-    out.setUint8(3, 0x46); // F
-    out.setUint32(4, fileSize, Endian.little);
-    out.setUint8(8, 0x57); // W
-    out.setUint8(9, 0x41); // A
-    out.setUint8(10, 0x56); // V
-    out.setUint8(11, 0x45); // E
-    // fmt sub-chunk
-    out.setUint8(12, 0x66); // f
-    out.setUint8(13, 0x6D); // m
-    out.setUint8(14, 0x74); // t
-    out.setUint8(15, 0x20); // (space)
-    out.setUint32(16, 16, Endian.little); // fmt chunk size
-    out.setUint16(20, 1, Endian.little); // PCM format
-    out.setUint16(22, ch, Endian.little);
-    out.setUint32(24, sr, Endian.little);
-    out.setUint32(28, byteRate, Endian.little);
-    out.setUint16(32, blockAlign, Endian.little);
-    out.setUint16(34, bits, Endian.little);
-    // data sub-chunk
-    out.setUint8(36, 0x64); // d
-    out.setUint8(37, 0x61); // a
-    out.setUint8(38, 0x74); // t
-    out.setUint8(39, 0x61); // a
-    out.setUint32(40, dataSize, Endian.little);
-    // PCM data
-    for (var i = 0; i < dataSize; i++) {
-      out.setUint8(44 + i, pcm[i]);
-    }
-    return out.buffer.asUint8List();
   }
 }
 

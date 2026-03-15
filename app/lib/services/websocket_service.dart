@@ -143,12 +143,14 @@ class WebSocketService {
 
   // ── Internal ─────────────────────────────────────────────────────────
 
+  int _rawFrameCount = 0;
+
   void _listenToMessages() {
-    // Cancel any previous subscription to prevent duplicate onDone
-    // callbacks from firing parallel reconnect cycles.
     _channelSub?.cancel();
+    _rawFrameCount = 0;
     _channelSub = _channel?.stream.listen(
       (raw) {
+        _rawFrameCount++;
         try {
           if (raw is! String) {
             _log.warning('Ignoring non-text WebSocket frame');
@@ -156,17 +158,21 @@ class WebSocketService {
           }
           final json = jsonDecode(raw) as Map<String, dynamic>;
           final msg = WsOutbound.fromJson(json);
+          // Only log non-audio, non-pong messages to avoid spam.
+          if (msg.type != 'pong' && msg.type != 'audio') {
+            _log.info('WS ← ${msg.type}');
+          }
           _messageController.add(msg);
         } catch (e) {
-          _log.severe('Parse error', e);
+          _log.severe('Parse error on frame #$_rawFrameCount', e);
         }
       },
       onDone: () {
-        _log.info('WebSocket stream closed');
+        _log.info('WebSocket stream closed (after $_rawFrameCount frames)');
         if (!_intentionalClose) _scheduleReconnect();
       },
       onError: (e) {
-        _log.severe('Stream error', e);
+        _log.severe('Stream error (after $_rawFrameCount frames)', e);
         if (!_intentionalClose) _scheduleReconnect();
       },
     );
