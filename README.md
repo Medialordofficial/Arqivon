@@ -7,6 +7,39 @@
 
 ---
 
+## 🧪 Testing Instructions for Judges
+
+> **You can test Arqivon in under 2 minutes — no setup or build required.**
+
+### Quick Start (Android APK)
+
+1. **Download the APK:** [arqivon-release.apk](https://arqivon-inc.web.app/assets/arqivon-release.apk) (38 MB)
+2. **Install** on any Android device (Android 7+). You may need to allow "Install from unknown sources."
+3. **Sign in with a Gmail account** — Arqivon uses Google Sign-In via Firebase Auth. Any standard `@gmail.com` account will work.
+4. **Grant permissions** when prompted — microphone and camera access are required for live sessions.
+
+### What to Test
+
+| Step | What to do | What you'll see |
+|------|-----------|-----------------|
+| **1. Assistant Mode** | Tap **Start Video Live Session** → point camera at any object and ask "What is this?" | Real-time voice response + Smart Action Cards |
+| **2. Translator Mode** | Swipe to **Translator** tab → speak or point camera at text in another language | Live translation subtitle overlay |
+| **3. Tutor Mode** | Swipe to **Tutor** tab → point camera at a math problem or textbook page → ask "Solve this" | Step-by-step solution cards with final answer |
+| **4. Support Mode** | Swipe to **Support** tab → describe any technical issue verbally | Topic tracking + resolution logging |
+| **5. Audio-Only** | Tap **Start Audio Live Session** instead → have a voice-only conversation | Works without camera, pure voice agent |
+| **6. PDF Export** | In any mode, say "Export this as a PDF" after getting a response | PDF generated → native share sheet opens |
+| **7. Mode Switch** | Switch between modes mid-session using the top mode selector | Agent persona, voice, and tools change instantly |
+
+### Important Notes
+
+- **Use a Gmail account** (`@gmail.com`) to sign in. Firebase Auth is configured for Google Sign-In.
+- **Allow microphone + camera** permissions — the agent needs both for multimodal input.
+- The backend is **always running** on Google Cloud Run (min 1 instance, zero cold start). No warm-up needed.
+- Backend URL: `wss://arqivon-backend-653546103163.us-central1.run.app/ws`
+- If the first connection takes a moment, it's the Gemini Live API session initializing (~2-3 seconds).
+
+---
+
 ## The Problem
 
 Current AI assistants are trapped behind a text box. You type, wait, read. But real life doesn't pause for you to type — you're holding groceries while reading a foreign menu, staring at a math problem on a whiteboard, or troubleshooting a device with both hands full. The world is **multimodal**; your AI assistant should be too.
